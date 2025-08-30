@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+Activation.sim
+RunTestHeaven.inc1.id1.sim.gz
+RunTestSky.inc1.id1.sim.gz
