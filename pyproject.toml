@@ -1,0 +1,10 @@
+[project]
+name = "trial"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "logging>=0.4.9.6",
+    "matplotlib>=3.10.6",
+]
