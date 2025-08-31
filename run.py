@@ -1,5 +1,4 @@
 import ROOT as M
-import math
 import matplotlib.pyplot as plt
 import logging
 
@@ -30,7 +29,6 @@ def evaluate_annihilation_detector(geometry_file: str, sim_file: str,
         dict: Results containing TP, FP, TN, FN, precision, and recall
     """
 
-    # Load MEGAlib
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
     G = M.MGlobal()
     G.Initialize()
@@ -95,30 +93,33 @@ def evaluate_annihilation_detector(geometry_file: str, sim_file: str,
         logging.info(f"{k}: {v}")
 
     if make_plots:
-        plt.figure(figsize=(8,4))
-        plt.hist(all_sums, bins=100, range=(0,1000), histtype='step', color='blue')
-        plt.axvline(energy, color='red', linestyle='--', label=f"{energy} keV")
-        plt.xlabel("Energy sum [keV]")
-        plt.ylabel("Number of pairs")
-        plt.title("HT pair energy sums")
-        plt.legend()
-        plt.savefig("plots/ht_pair_e_sum.png")
-
-        precisions, recalls, tolerances = [], [], list(range(2,20,2))
-        for tol in tolerances:
-            res = evaluate_annihilation_detector(geometry_file, sim_file, energy, tol, make_plots=False)
-            precisions.append(res["precision"])
-            recalls.append(res["recall"])
-        
-        plt.figure(figsize=(6,6))
-        plt.plot(recalls, precisions, marker='o')
-        for i, tol in enumerate(tolerances):
-            plt.text(recalls[i], precisions[i], str(tol))
-        plt.xlabel("Recall")
-        plt.ylabel("Precision")
-        plt.title("Precision-Recall curve vs tolerance")
-        plt.grid(True)
-        plt.savefig("plots/precision_recall.png")
+        create_plots(geometry_file, sim_file, energy, make_plots, all_sums)
 
     return results
 
+
+def create_plots(geometry_file: str, sim_file: str, energy: float, all_sums: list):
+    plt.figure(figsize=(8,4))
+    plt.hist(all_sums, bins=100, range=(0,1000), histtype='step', color='blue')
+    plt.axvline(energy, color='red', linestyle='--', label=f"{energy} keV")
+    plt.xlabel("Energy sum [keV]")
+    plt.ylabel("Number of pairs")
+    plt.title("HT pair energy sums")
+    plt.legend()
+    plt.savefig("plots/ht_pair_e_sum.png")
+
+    precisions, recalls, tolerances = [], [], list(range(2,20,2))
+    for tol in tolerances:
+        res = evaluate_annihilation_detector(geometry_file, sim_file, energy, tol, make_plots=False)
+        precisions.append(res["precision"])
+        recalls.append(res["recall"])
+        
+    plt.figure(figsize=(6,6))
+    plt.plot(recalls, precisions, marker='o')
+    for i, tol in enumerate(tolerances):
+        plt.text(recalls[i], precisions[i], str(tol))
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall curve vs tolerance")
+    plt.grid(True)
+    plt.savefig("plots/precision_recall.png")

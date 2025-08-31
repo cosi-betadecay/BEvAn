@@ -16,7 +16,7 @@ FileName = "Activation.sim"
 
 # Load geometry:
 Geometry = M.MDGeometryQuest()
-if Geometry.ScanSetupFile(M.MString(GeometryName)) == True:
+if Geometry.ScanSetupFile(M.MString(GeometryName)):
   print("Geometry " + GeometryName + " loaded!")
 else:
   print("Unable to load geometry " + GeometryName + " - Aborting!")
@@ -24,7 +24,7 @@ else:
     
 
 Reader = M.MFileEventsSim(Geometry)
-if Reader.Open(M.MString(FileName)) == False:
+if not Reader.Open(M.MString(FileName)):
   print("Unable to open file " + FileName + ". Aborting!")
   quit()
 
@@ -53,7 +53,7 @@ while True:
         for SID in SecondaryIDs:
           if Event.GetHTAt(h).IsOrigin(SID):
             TotalEnergy += Event.GetHTAt(h).GetEnergy()
-            break;
+            break
       if math.fabs(TotalEnergy - 511) < 5:
         #print(f"Good annihilation event {TotalEnergy}")
         NumberGoodEvents += 1
