@@ -292,3 +292,41 @@
 2025-08-31 05:10:28,467 [INFO] FN: 10463
 2025-08-31 05:10:28,467 [INFO] precision: 0.697
 2025-08-31 05:10:28,467 [INFO] recall: 0.16656045881790665
+2025-09-03 07:36:41,520 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:36:44,626 [INFO] Number good 511 events: 3347
+2025-09-03 07:36:44,627 [INFO] Number background events: 40378
+2025-09-03 07:37:49,870 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:37:52,922 [INFO] Number good 511 events: 3347
+2025-09-03 07:37:52,922 [INFO] Number background events: 40378
+2025-09-03 07:38:03,197 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:38:06,285 [INFO] Number good 511 events: 3188
+2025-09-03 07:38:06,285 [INFO] Number background events: 40378
+2025-09-03 07:38:18,744 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:38:21,742 [INFO] Number good 511 events: 1597
+2025-09-03 07:38:21,742 [INFO] Number background events: 40378
+2025-09-03 07:50:14,221 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:50:17,399 [INFO] TP: 40, FP: 11, FN: 12514, TN: 40367
+2025-09-03 07:50:17,399 [INFO] Precision: 0.784
+2025-09-03 07:50:17,399 [INFO] Recall: 0.003
+2025-09-03 07:50:17,399 [INFO] False Positive Rate: 0.000
+2025-09-03 07:50:17,399 [INFO] Number good 511 events: 1597
+2025-09-03 07:50:17,399 [INFO] Number background events: 40378
+2025-09-03 07:52:14,229 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:52:17,332 [INFO] TP: 110, FP: 150, FN: 12444, TN: 40228
+2025-09-03 07:52:17,332 [INFO] Precision: 0.423
+2025-09-03 07:52:17,332 [INFO] Recall: 0.009
+2025-09-03 07:52:17,332 [INFO] False Positive Rate: 0.004
+2025-09-03 07:52:17,332 [INFO] Number good 511 events: 3347
+2025-09-03 07:52:17,332 [INFO] Number background events: 40378
+2025-09-03 07:55:53,544 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:55:53,719 [INFO] Simulation file Activation.sim opened!
+2025-09-03 07:55:57,025 [INFO] TP: 17, FP: 1, FN: 12537, TN: 40377
+2025-09-03 07:55:57,025 [INFO] Precision: 0.944
+2025-09-03 07:55:57,025 [INFO] Recall: 0.001
+2025-09-03 07:55:57,025 [INFO] False Positive Rate: 0.000
+2025-09-03 07:57:22,314 [INFO] Geometry $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup loaded!
+2025-09-03 07:57:22,452 [INFO] Simulation file Activation.sim opened!
+2025-09-03 07:57:25,360 [INFO] TP: 225, FP: 130, FN: 12329, TN: 40248
+2025-09-03 07:57:25,360 [INFO] Precision: 0.634
+2025-09-03 07:57:25,360 [INFO] Recall: 0.018
+2025-09-03 07:57:25,360 [INFO] False Positive Rate: 0.003
