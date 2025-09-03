@@ -108,10 +108,7 @@ def annihilation_extractor(geometry_file: str, sim_file: str,
 
 ###############################################################################
 
-
-def annihilation_extractor_v2(geometry_file: str, sim_file: str,
-                            energy: int = 511, tolerance: float = 6.0):
-
+def get_reader(geometry_file: str, sim_file: str):
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
     G = M.MGlobal()
     G.Initialize()
@@ -127,6 +124,15 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
         raise RuntimeError(f"Could not open simulation file {sim_file}")
     else:
         logging.info(f"Simulation file {sim_file} opened!")
+        
+    return Reader
+
+
+
+def annihilation_extractor_v2(geometry_file: str, sim_file: str,
+                            energy: int = 511, tolerance: float = 6.0):
+
+    Reader = get_reader(geometry_file, sim_file)
 
     TP, FP, FN, TN = 0, 0, 0, 0
 
@@ -136,12 +142,15 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
             break
         M.SetOwnership(Event, True)
 
+        # Find something better..
         NumberANNI = 0
         for i in range(0, Event.GetNIAs()):
             if Event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
                 NumberANNI += 1
+                logging.info(NumberANNI)
         is_annihilation = (NumberANNI > 0)
 
+        # Find smarter method this sucks
         detected_511 = False
         n_hits = Event.GetNHTs()
         for i in range(n_hits):
@@ -175,3 +184,19 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
     logging.info(f"False Positive Rate: {fpr:.3f}")
 
     return TP, FP, FN, TN, precision, recall, fpr
+
+""""
+Plan:
+1:
+Start from each annihilation-photon (IA in MEGAlib).
+Follow whole Compton-chain: all HTs that shares same OriginID.
+Sum all energies for this chain → we get estimated gamma-energy.
+
+2:
+Create a probability distribution from these results
+Classify based on the results of the distribtion
+Start with Gaussian, then go over to more "complex" if needed
+
+3:
+Create some plots of the results, etc.
+"""
