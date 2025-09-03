@@ -189,7 +189,7 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
 Plan:
 1:
 Start from each annihilation-photon (IA in MEGAlib).
-Follow whole Compton-chain: all HTs that shares same OriginID.
+Follow whole Compton-chain: all HTs that shares same OriginID. (Think of a three from algorithms and data structures?)
 Sum all energies for this chain → we get estimated gamma-energy.
 
 2:
