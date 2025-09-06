@@ -2,6 +2,8 @@ import ROOT as M
 import matplotlib.pyplot as plt
 import logging
 import math
+import itertools
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +34,7 @@ def get_reader(geometry_file: str, sim_file: str):
     return Reader
 
 
-def process(Event, ref_energy=511, tolerance=5.0):
+def process(Event, ref_energy, tolerance):
     NumberGoodEvents = 0
 
     for i in range(Event.GetNIAs()):
@@ -56,29 +58,19 @@ def process(Event, ref_energy=511, tolerance=5.0):
 
     return NumberGoodEvents
 
-
-
 def detected_511_event(ref_energy, tolerance, Event):
-    energy_sums = {}
-
     n_hits = Event.GetNHTs()
-    for i in range(n_hits):
-        energy = Event.GetHTAt(i).GetEnergy()
+    energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
 
-        for j in range(Event.GetHTAt(i).GetNOrigins()):
-            origin_id = Event.GetHTAt(i).GetOriginAt(j)
-            if origin_id not in energy_sums:
-                energy_sums[origin_id] = 0.0
-            energy_sums[origin_id] += energy
-
-    for total in energy_sums.values():
-        if abs(total - ref_energy) < tolerance:
-            return True
+    for r in range(1, n_hits+1):
+        for combo in itertools.combinations(energies, r):
+            if abs(sum(combo) - ref_energy) < tolerance:
+                return True
 
     return False
 
 def annihilation_extractor_v2(geometry_file: str, sim_file: str,
-                            ref_energy: int = 511, tolerance: float = 6.0):
+                            ref_energy: int = 511, tolerance: float = 1.0):
 
     Reader = get_reader(geometry_file, sim_file)
 
@@ -115,20 +107,3 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
     logging.info(f"False Positive Rate: {fpr:.3f}")
 
     return TP, FP, FN, TN, precision, recall, fpr
-
-
-""""
-Plan:
-1:
-Start from each annihilation-photon (IA in MEGAlib).
-Follow whole Compton-chain: all HTs that shares same OriginID. (Think of a three from algorithms and data structures?)
-Sum all energies for this chain → we get estimated gamma-energy.
-
-2:
-Create a probability distribution from these results
-Classify based on the results of the distribtion
-Start with Gaussian, then go over to more "complex" if needed
-
-3:
-Create some plots of the results, etc.
-"""
