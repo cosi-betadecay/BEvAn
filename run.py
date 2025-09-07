@@ -1,9 +1,8 @@
 import ROOT as M
-import matplotlib.pyplot as plt
 import logging
-import math
 import itertools
-
+from utils import get_reader
+import numpy as np
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,26 +12,6 @@ logging.basicConfig(
         logging.FileHandler("logs/run.log")
     ]
 )
-
-def get_reader(geometry_file: str, sim_file: str):
-    M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
-    G = M.MGlobal()
-    G.Initialize()
-
-    Geometry = M.MDGeometryQuest()
-    if not Geometry.ScanSetupFile(M.MString(geometry_file)):
-        raise RuntimeError(f"Could not load geometry {geometry_file}")
-    else:
-        logging.info(f"Geometry {geometry_file} loaded!")
-
-    Reader = M.MFileEventsSim(Geometry)
-    if not Reader.Open(M.MString(sim_file)):
-        raise RuntimeError(f"Could not open simulation file {sim_file}")
-    else:
-        logging.info(f"Simulation file {sim_file} opened!")
-        
-    return Reader
-
 
 def process(Event, ref_energy, tolerance):
     NumberGoodEvents = 0
@@ -57,20 +36,33 @@ def process(Event, ref_energy, tolerance):
                 NumberGoodEvents += 1
 
     return NumberGoodEvents
+ 
 
-def detected_511_event(ref_energy, tolerance, Event):
+def detected_511_event(ref_energy, Event, tolerance):
     n_hits = Event.GetNHTs()
+
     energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
 
+    if energies == []:
+        return False
+
+    positions = [(Event.GetHTAt(i).GetPosition().X(),
+                  Event.GetHTAt(i).GetPosition().Y(),
+                  Event.GetHTAt(i).GetPosition().Z())
+                 for i in range(n_hits)]
+        
     for r in range(1, n_hits+1):
         for combo in itertools.combinations(energies, r):
             if abs(sum(combo) - ref_energy) < tolerance:
                 return True
 
+    logging.info(energies)
+
     return False
 
+
 def annihilation_extractor_v2(geometry_file: str, sim_file: str,
-                            ref_energy: int = 511, tolerance: float = 1.0):
+                            ref_energy: int = 511, tolerance: float = 6.0):
 
     Reader = get_reader(geometry_file, sim_file)
 
@@ -84,7 +76,7 @@ def annihilation_extractor_v2(geometry_file: str, sim_file: str,
 
         NumberGoodEvents = process(Event, ref_energy, tolerance)
         is_annihilation = (NumberGoodEvents > 0)
-        detected_511 = detected_511_event(ref_energy, tolerance, Event)
+        detected_511 = detected_511_event(ref_energy, Event, tolerance)
 
         if is_annihilation:
             if detected_511:

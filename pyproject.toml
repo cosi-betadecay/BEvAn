@@ -8,4 +8,5 @@ dependencies = [
     "logging>=0.4.9.6",
     "matplotlib>=3.10.6",
     "ruff>=0.12.11",
+    "seaborn>=0.13.2",
 ]

@@ -1,0 +1,17 @@
+import ROOT as M
+
+def get_reader(geometry_file: str, sim_file: str):
+    M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
+    G = M.MGlobal()
+    G.Initialize()
+
+    Geometry = M.MDGeometryQuest()
+    if not Geometry.ScanSetupFile(M.MString(geometry_file)):
+        raise RuntimeError(f"Could not load geometry {geometry_file}")
+
+    Reader = M.MFileEventsSim(Geometry)
+    if not Reader.Open(M.MString(sim_file)):
+        raise RuntimeError(f"Could not open simulation file {sim_file}")
+        
+    return Reader
+
