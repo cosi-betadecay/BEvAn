@@ -1,6 +1,22 @@
 import ROOT as M
+from typing import Any
 
-def get_reader(geometry_file: str, sim_file: str):
+def get_reader(geometry_file: str, sim_file: str) -> Any:
+    """Initialize a MEGAlib simulation file reader with the specified geometry.
+
+    Args:
+        geometry_file (str): Path to the MEGAlib geometry setup file.
+        sim_file (str): Path to the MEGAlib simulation file.
+
+    Raises:
+        RuntimeError: If the geometry file cannot be loaded.
+        RuntimeError: If the simulation file cannot be opened.
+
+    Returns:
+        Any: A MEGAlib simulation reader initialized with the
+        given geometry and simulation file.
+    """
+
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
     G = M.MGlobal()
     G.Initialize()

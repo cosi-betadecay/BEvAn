@@ -3,6 +3,9 @@ import logging
 import itertools
 from utils import get_reader
 import numpy as np
+from typing import Any
+from typing import Tuple
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,7 +16,18 @@ logging.basicConfig(
     ]
 )
 
-def process(Event, ref_energy, tolerance):
+def process(Event: Any, ref_energy: float, tolerance: float) -> int:
+    """Count annihilation events matching a reference energy within tolerance.
+
+    Args:
+        Event (Any): MEGAlib event object containing interactions and hits.
+        ref_energy (float): Reference energy to compare against (e.g., 511 keV).
+        tolerance (float): Allowed energy deviation from the reference.
+
+    Returns:
+        int: Number of events that match the annihilation criteria.
+    """
+
     NumberGoodEvents = 0
 
     for i in range(Event.GetNIAs()):
@@ -38,31 +52,48 @@ def process(Event, ref_energy, tolerance):
     return NumberGoodEvents
  
 
-def detected_511_event(ref_energy, Event, tolerance):
+def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
+    """Check if event contains a hit combination summing to the reference energy.
+
+    Args:
+        ref_energy (float): Reference energy to compare against (e.g., 511 keV).
+        Event (Any): MEGAlib event object with detector hits.
+        tolerance (float): Allowed energy deviation from the reference.
+
+    Returns:
+        bool: True if a hit combination matches the reference energy, else False.
+    """
+
     n_hits = Event.GetNHTs()
 
     energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
 
     if energies == []:
         return False
-
-    positions = [(Event.GetHTAt(i).GetPosition().X(),
-                  Event.GetHTAt(i).GetPosition().Y(),
-                  Event.GetHTAt(i).GetPosition().Z())
-                 for i in range(n_hits)]
         
     for r in range(1, n_hits+1):
         for combo in itertools.combinations(energies, r):
             if abs(sum(combo) - ref_energy) < tolerance:
                 return True
 
-    logging.info(energies)
-
     return False
 
 
-def annihilation_extractor_v2(geometry_file: str, sim_file: str,
-                            ref_energy: int = 511, tolerance: float = 6.0):
+def annihilation_extractor(geometry_file: str, sim_file: str,
+                            ref_energy: int = 511, tolerance: float = 6.0) -> (
+                            Tuple[int, int, int, int, float, float, float]):
+    """Extract annihilation events and compute detection performance metrics.
+
+    Args:
+        geometry_file (str): Path to the detector geometry setup file (XML).
+        sim_file (str): Path to the MEGAlib simulation file (.sim).
+        ref_energy (float): Reference energy to compare against (default 511 keV).
+        tolerance (float): Allowed energy deviation from the reference.
+
+    Returns:
+        Tuple[int, int, int, int, float, float, float]: Evaluation results as
+            (TP, FP, FN, TN, precision, recall, false positive rate).
+    """
 
     Reader = get_reader(geometry_file, sim_file)
 
