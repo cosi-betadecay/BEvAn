@@ -5,6 +5,7 @@ from utils import get_reader
 import numpy as np
 from typing import Any
 from typing import Tuple
+from filters import validate_energies_compton_v3
 
 
 logging.basicConfig(
@@ -67,10 +68,19 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     n_hits = Event.GetNHTs()
 
     energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
+    positions = [(Event.GetHTAt(i).GetPosition().X(),
+                  Event.GetHTAt(i).GetPosition().Y(),
+                  Event.GetHTAt(i).GetPosition().Z())
+                 for i in range(n_hits)]
 
     if energies == []:
         return False
-        
+    
+    #if len(energies) >= 2:
+    #    filter_compton = validate_energies_compton_v3(energies, positions)
+    #    if not filter_compton:
+    #        return False
+
     for r in range(1, n_hits+1):
         for combo in itertools.combinations(energies, r):
             if abs(sum(combo) - ref_energy) < tolerance:
