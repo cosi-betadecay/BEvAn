@@ -2,10 +2,8 @@ import ROOT as M
 import logging
 import itertools
 from utils import get_reader
-import numpy as np
 from typing import Any
 from typing import Tuple
-from filters import validate_energies_compton_v3
 
 
 logging.basicConfig(
@@ -68,18 +66,9 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     n_hits = Event.GetNHTs()
 
     energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
-    positions = [(Event.GetHTAt(i).GetPosition().X(),
-                  Event.GetHTAt(i).GetPosition().Y(),
-                  Event.GetHTAt(i).GetPosition().Z())
-                 for i in range(n_hits)]
-
+        
     if energies == []:
         return False
-    
-    #if len(energies) >= 2:
-    #    filter_compton = validate_energies_compton_v3(energies, positions)
-    #    if not filter_compton:
-    #        return False
 
     for r in range(1, n_hits+1):
         for combo in itertools.combinations(energies, r):
@@ -88,9 +77,8 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
 
     return False
 
-
 def annihilation_extractor(geometry_file: str, sim_file: str,
-                            ref_energy: int = 511, tolerance: float = 6.0) -> (
+                            ref_energy: int = 511, tolerance: float = 1.5) -> (
                             Tuple[int, int, int, int, float, float, float]):
     """Extract annihilation events and compute detection performance metrics.
 
@@ -133,10 +121,13 @@ def annihilation_extractor(geometry_file: str, sim_file: str,
     precision = TP / (TP + FP) if (TP + FP) > 0 else 0
     recall    = TP / (TP + FN) if (TP + FN) > 0 else 0
     fpr       = FP / (FP + TN) if (FP + TN) > 0 else 0
+    f1_score  = (2 * precision * recall / (precision + recall)
+                 if (precision + recall) > 0 else 0)
 
     logging.info(f"TP: {TP}, FP: {FP}, FN: {FN}, TN: {TN}")
     logging.info(f"Precision: {precision:.3f}")
     logging.info(f"Recall: {recall:.3f}")
     logging.info(f"False Positive Rate: {fpr:.3f}")
+    logging.info(f"F1-score: {f1_score:.3f}")
 
-    return TP, FP, FN, TN, precision, recall, fpr
+    return TP, FP, FN, TN, precision, recall, fpr, f1_score

@@ -23,3 +23,21 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
     plt.title("Confusion Matrix")
     plt.savefig(f"plots/cm/cm_{now:%Y-%m-%d %H:%M:%S}")
     plt.show()
+
+def plot_metrics(tolerances, precision_scores, recall_scores, fpr_scores, f1_scores):
+    now = datetime.now()
+    plt.figure(figsize=(10, 6))
+
+    plt.plot(tolerances, precision_scores, marker='o', label="Precision")
+    plt.plot(tolerances, recall_scores,    marker='s', label="Recall")
+    plt.plot(tolerances, fpr_scores,       marker='^', label="False Positive Rate")
+    plt.plot(tolerances, f1_scores,        marker='d', label="F1-score")
+
+    plt.xlabel("Tolerance (keV)")
+    plt.ylabel("Score")
+    plt.title("Performance metrics vs. energy tolerance")
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"plots/metrics/metrics_{now:%Y-%m-%d %H:%M:%S}")
+    plt.show()

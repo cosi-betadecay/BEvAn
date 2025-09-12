@@ -1,61 +1,62 @@
 import numpy as np
 import logging
+from collections import defaultdict
 
 def validate_energies_compton(energies: list, positions: list,
                             ref_energy: float = 511.0, tolerance: float =6.0) -> bool:
-    m_e_c2 = 511.0
 
-    E_current = ref_energy
+    r1, r2, r3 = np.array(positions[0]), np.array(positions[1]), np.array(positions[2])
 
-    for i in range(len(energies)-1):
-        E_meas = energies[i+1]
-        r1, r2 = np.array(positions[i]), np.array(positions[i+1])
+    v1 = r2 - r1
+    v2 = r3 - r1
 
-        v1 = r1 / np.linalg.norm(r1)
-        v2 = (r2 - r1) / np.linalg.norm(r2 - r1)
+    dot = np.dot(v1, v2)
+    norms = np.linalg.norm(v1) * np.linalg.norm(v2)
 
-        cos_theta = np.dot(v1, v2)
+    tetta = np.arccos(dot)/(norms)
 
-        E_pred = E_current / (1 + (E_current/m_e_c2)*(1 - cos_theta))
-
-        if abs(E_meas - E_pred) > tolerance:
-            return False
-
-        E_current = E_meas
+    if np.isnan(tetta):
+        return False
 
     return True
 
-def validate_energies_compton_v2(energies: list, positions: list,
-                            ref_energy: float = 511.0, tolerance: float =6.0,
-                            source=np.array([0.0, 0.0, 0.0])) -> bool:
-    m_e_c2 = 511.0
 
-    e0, e1 = energies[0], energies[1]
-    p0, p1 = np.array(positions[0]), np.array(positions[1])
+# Pixel sizes (from .geo.setup)
+PIXEL_SIZE_X = 0.2     # cm
+PIXEL_SIZE_Y = 0.2     # cm
+PIXEL_SIZE_Z = 0.0375  # cm
 
-    v_in = (p0 - source) / np.linalg.norm(p0 - source)
-    v_out = (p1 - p0) / np.linalg.norm(p1 - p0)
+def get_pixel_indices(pos):
+    x, y, z = pos
+    return (int(x / PIXEL_SIZE_X),
+            int(y / PIXEL_SIZE_Y),
+            int(z / PIXEL_SIZE_Z))
 
-    cos_theta = np.dot(v_in, v_out)
-    cos_theta = np.clip(cos_theta, -1.0, 1.0)
+def cluster_hits(positions, energies):
+    clusters = defaultdict(list)
+    
+    for pos, E in zip(positions, energies):
+        pix = get_pixel_indices(pos)
+        clusters[pix].append((pos, E))
+    
+    clustered_positions = []
+    clustered_energies = []
+    
+    for pix, hits in clusters.items():
+        total_E = sum(h[1] for h in hits)
+        clustered_energies.append(total_E)
+        
+        weights = np.array([h[1] for h in hits])
+        coords = np.array([h[0] for h in hits])
+        avg_pos = np.average(coords, axis=0, weights=weights)
+        clustered_positions.append(tuple(avg_pos))
+    
+    return clustered_positions, clustered_energies
+    
+    
 
-    e_pred = e0 / (1 + (e0 / m_e_c2) * (1 - cos_theta))
 
-    return abs(e1 - e_pred) <= tolerance
-
-def validate_energies_compton_v3(energies: list, positions: list,
-                            ref_energy: float = 511.0, tolerance: float =6.0) -> bool:
-    m_e_c2 = 511.0
-
-    e0, e1 = energies[0], energies[1]
-    p0, p1 = np.array(positions[0]), np.array(positions[1])
-
-    v_in = (p0) / np.linalg.norm(p0)
-    v_out = (p1 - p0) / np.linalg.norm(p1 - p0)
-
-    cos_theta = np.dot(v_in, v_out)
-    cos_theta = np.clip(cos_theta, -1.0, 1.0)
-
-    e_pred = e0 / (1 + (e0 / m_e_c2) * (1 - cos_theta))
-
-    return abs(e1 - e_pred) <= tolerance
+"""
+1) compton cone check?
+2) Klein-Nishina?
+"""
