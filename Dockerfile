@@ -28,7 +28,10 @@ RUN apt-get update && \
     apt-get update && \
     apt-get install -y python3.11 python3.11-dev python3.11-venv && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2 && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2 && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python3 && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------
 # Add COSI user (required for correct install & permissions)
@@ -42,26 +45,36 @@ RUN groupadd -g 1111 cosi && \
 USER cosi
 WORKDIR /home/cosi
 
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cositools/cosi-setup/main/setup.sh)" && \
-    echo ". /home/cosi/COSItools/source.sh" >> ~/.bashrc
+#RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cositools/cosi-setup/main/setup.sh)" && \
+#    echo ". /home/cosi/COSItools/source.sh" >> ~/.bashrc
 
 # ------------------------------------------------------------
-# Install UV + Python Environment + Clone Project
-# ------------------------------------------------------------
 # Install UV (still as user cosi)
+# ------------------------------------------------------------
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
 ENV PATH="/home/cosi/.local/bin:${PATH}"
 
-# Copy local 'code' directory into the image and set ownership to cosi
-COPY --chown=1111:1111 ../ /home/cosi/code/
-WORKDIR /home/cosi/code
+# ------------------------------------------------------------
+# Copy project into image
+# ------------------------------------------------------------
+# IMPORTANT: This now puts everything into /home/cosi/code/cosi-initial
+COPY --chown=1111:1111 . /home/cosi/code/cosi-initial
 
-# Create UV venv and install dependencies
 WORKDIR /home/cosi/code/cosi-initial
+
+# ------------------------------------------------------------
+# Create UV env + install deps
+# ------------------------------------------------------------
 RUN rm -f .python-version
 RUN uv venv && uv sync
+
+# ------------------------------------------------------------
+# Install torch (GPU or CPU depending on env)
+# ------------------------------------------------------------
+RUN chmod +x /home/cosi/code/cosi-initial/install_torch.sh && \
+    /bin/bash /home/cosi/code/cosi-initial/install_torch.sh
 
 # ------------------------------------------------------------
 # Create external exchange directory
