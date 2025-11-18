@@ -2,6 +2,8 @@ import numpy as np
 import logging
 from collections import defaultdict
 
+
+
 def validate_energies_compton(energies: list, positions: list,
                             ref_energy: float = 511.0, tolerance: float =6.0) -> bool:
 
