@@ -45,8 +45,8 @@ RUN groupadd -g 1111 cosi && \
 USER cosi
 WORKDIR /home/cosi
 
-#RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cositools/cosi-setup/main/setup.sh)" && \
-#    echo ". /home/cosi/COSItools/source.sh" >> ~/.bashrc
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cositools/cosi-setup/main/setup.sh)" && \
+    echo ". /home/cosi/COSItools/source.sh" >> ~/.bashrc
 
 # ------------------------------------------------------------
 # Install UV (still as user cosi)
