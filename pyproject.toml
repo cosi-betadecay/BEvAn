@@ -5,13 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = [
-    "matplotlib>=3.10.6",
+    "logging>=0.4.9.6",
+    "numpy>=2.3.5",
     "ruff>=0.12.11",
-    "seaborn>=0.13.2",
-]
-
-[project_optional_dependencies]
-gpu = [
     "torch==2.5.1",
     "torchvision==0.20.1",
     "torchaudio==2.5.1",

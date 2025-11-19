@@ -71,10 +71,9 @@ RUN rm -f .python-version
 RUN uv venv && uv sync
 
 # ------------------------------------------------------------
-# Install torch (GPU or CPU depending on env)
+# Install torch (GPU version)
 # ------------------------------------------------------------
-RUN chmod +x /home/cosi/code/cosi-initial/install_torch.sh && \
-    /bin/bash /home/cosi/code/cosi-initial/install_torch.sh
+RUN uv sync --extra-index-url https://download.pytorch.org/whl/cu121
 
 # ------------------------------------------------------------
 # Create external exchange directory
