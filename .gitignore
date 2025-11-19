@@ -13,4 +13,5 @@ RunTestHeaven.inc1.id1.sim.gz
 RunTestSky.inc1.id1.sim.gz
 
 # Logs
-logs
+/logs
+/plots
