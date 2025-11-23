@@ -2,6 +2,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+import wandb
 
 def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
     """Plot and save a confusion matrix heatmap.
@@ -21,8 +22,8 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
     sns.heatmap(cm, annot=True, fmt="d", cmap="crest",
                 xticklabels=labels, yticklabels=labels, cbar=False)
     plt.title("Confusion Matrix")
-    plt.savefig(f"plots/cm/cm_{now:%Y-%m-%d %H:%M:%S}")
     plt.show()
+    wandb.log({"confusion_matrix": wandb.Image(plt)})
 
 def plot_metrics(tolerances, precision_scores, recall_scores, fpr_scores, f1_scores):
     now = datetime.now()
@@ -39,5 +40,5 @@ def plot_metrics(tolerances, precision_scores, recall_scores, fpr_scores, f1_sco
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"plots/metrics/metrics_{now:%Y-%m-%d %H:%M:%S}")
     plt.show()
+    wandb.log({"performance_metrics": wandb.Image(plt)})

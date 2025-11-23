@@ -1,19 +1,9 @@
 import ROOT as M
-import logging
 import itertools
 from utils import get_reader
 from typing import Any
 from typing import Tuple
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(),     
-        logging.FileHandler("logs/run.log")
-    ]
-)
+import wandb
 
 def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.
@@ -124,10 +114,10 @@ def annihilation_extractor(geometry_file: str, sim_file: str,
     f1_score  = (2 * precision * recall / (precision + recall)
                  if (precision + recall) > 0 else 0)
 
-    logging.info(f"TP: {TP}, FP: {FP}, FN: {FN}, TN: {TN}")
-    logging.info(f"Precision: {precision:.3f}")
-    logging.info(f"Recall: {recall:.3f}")
-    logging.info(f"False Positive Rate: {fpr:.3f}")
-    logging.info(f"F1-score: {f1_score:.3f}")
+    wandb.log({
+        "TP": TP, "FP": FP, "FN": FN, "TN": TN,
+        "precision": precision, "recall": recall,
+        "false_positive_rate": fpr, "f1_score": f1_score
+    })
 
     return TP, FP, FN, TN, precision, recall, fpr, f1_score

@@ -1,2 +1,9 @@
 /plots
 /logs
+
+# environment variables
+.env
+.env.*
+
+# virtual environments
+venv/
