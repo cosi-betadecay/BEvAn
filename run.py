@@ -56,6 +56,7 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     n_hits = Event.GetNHTs()
 
     energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
+    positions = [Event.GetHTAt(i).GetPosition() for i in range(n_hits)]
         
     if energies == []:
         return False
