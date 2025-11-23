@@ -15,3 +15,7 @@ RunTestSky.inc1.id1.sim.gz
 # Logs
 /logs
 /plots
+
+# environment variables
+.env
+.env.*

@@ -96,3 +96,5 @@ RUN cd /usr/local/bin \
 
 # Default working directory
 WORKDIR /home/cosi/COSIDockerData
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
