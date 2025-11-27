@@ -1,9 +1,10 @@
 import itertools
+
 import numpy as np
-from typing import Any
+
 
 def compton_cone_filter(energies: list, positions: list) -> bool:
-    """Apply Compton cone filter to determine if hit combinations are consistent with annihilation event.
+    """Return True if any hit pair passes the Compton cone annihilation filter.
 
     Args:
         energies (list): List of energy values for each hit.
@@ -36,7 +37,6 @@ def compton_cone_filter(energies: list, positions: list) -> bool:
             continue
         unit_vec = vec / distance
 
-        cone_axis = unit_vec
         cone_angle = theta
 
         if abs(cone_angle - np.pi / 2) < 0.1:

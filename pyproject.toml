@@ -18,3 +18,22 @@ dependencies = [
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F/W: pycodestyle/pyflakes warnings; D: pydocstyle for docstrings; I: isort import order.
+select = ["E", "F", "W", "D", "I"]
+# Relax module/package docstring requirements; adjust as needed.
+ignore = ["D100", "D104"]
+per-file-ignores = { "tests/*" = ["D"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["beta_decay", "physics", "utils"]
+lines-after-imports = 1
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

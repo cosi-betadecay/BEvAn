@@ -1,5 +1,6 @@
-import ROOT as M
 from typing import Any
+
+import ROOT as M
 
 def get_reader(geometry_file: str, sim_file: str) -> Any:
     """Initialize a MEGAlib simulation file reader with the specified geometry.
@@ -16,7 +17,6 @@ def get_reader(geometry_file: str, sim_file: str) -> Any:
         Any: A MEGAlib simulation reader initialized with the
         given geometry and simulation file.
     """
-
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
     G = M.MGlobal()
     G.Initialize()
@@ -28,6 +28,5 @@ def get_reader(geometry_file: str, sim_file: str) -> Any:
     Reader = M.MFileEventsSim(Geometry)
     if not Reader.Open(M.MString(sim_file)):
         raise RuntimeError(f"Could not open simulation file {sim_file}")
-        
-    return Reader
 
+    return Reader

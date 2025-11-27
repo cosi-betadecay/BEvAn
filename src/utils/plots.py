@@ -1,7 +1,8 @@
-import seaborn as sns
+from datetime import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+import seaborn as sns
 import wandb
 
 def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
@@ -13,8 +14,6 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
         FN (int): Number of false negative events.
         TN (int): Number of true negative events.
     """
-    now = datetime.now()
-
     cm = np.array([[TP, FN],
                    [FP, TN]])
     labels = ["Positive", "Negative"]
@@ -25,8 +24,9 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> None:
     plt.show()
     wandb.log({"confusion_matrix": wandb.Image(plt)})
 
+
 def plot_metrics(tolerances, precision_scores, recall_scores, fpr_scores, f1_scores):
-    now = datetime.now()
+    """Plot and log precision, recall, FPR, and F1 across tolerances."""
     plt.figure(figsize=(10, 6))
 
     plt.plot(tolerances, precision_scores, marker='o', label="Precision")
