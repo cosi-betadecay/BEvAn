@@ -19,3 +19,8 @@ RunTestSky.inc1.id1.sim.gz
 # environment variables
 .env
 .env.*
+
+# pytest
+.pytest_cache/
+.pytest_cache/*
+.coverage

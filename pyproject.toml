@@ -15,4 +15,6 @@ dependencies = [
     "weave>=0.52.17",
     "seaborn>=0.13.2",
     "matplotlib>=3.10.7",
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
 ]

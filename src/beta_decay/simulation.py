@@ -1,9 +1,12 @@
 import numpy as np
-from beta_decay.annihilation_detection import annihilation_extractor
+from beta_decay.physics.annihilation_detection import annihilation_extractor
 from src.utils.plots import plot_metrics
 import wandb
 
-if __name__ == "__main__":
+def simulation() -> None:
+    """
+    Run the annihilation event simulation and evaluate detection performance.
+    """
     wandb.init(project="cosi-betadecay")
 
     tolerances = np.array([10, 9, 8, 6, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1])
@@ -29,3 +32,6 @@ if __name__ == "__main__":
     plot_metrics(tolerances, precision_scores, recall_scores, fpr_scores, f1_scores)
 
     wandb.finish()
+    
+if __name__ == "__main__":
+    simulation()
