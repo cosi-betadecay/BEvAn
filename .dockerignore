@@ -7,3 +7,16 @@
 
 # virtual environments
 venv/
+
+# pytest
+.pytest_cache/
+.pytest_cache/*
+.coverage
+
+# cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
