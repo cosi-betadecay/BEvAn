@@ -1,6 +1,6 @@
 import ROOT as M
 import itertools
-from utils import get_reader
+from utils.reader_extraction import get_reader
 from typing import Any
 from typing import Tuple
 import wandb

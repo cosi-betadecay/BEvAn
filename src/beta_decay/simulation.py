@@ -1,6 +1,6 @@
 import numpy as np
-from run import annihilation_extractor
-from plots import plot_metrics
+from beta_decay.annihilation_detection import annihilation_extractor
+from src.utils.plots import plot_metrics
 import wandb
 
 if __name__ == "__main__":
