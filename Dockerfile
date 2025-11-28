@@ -12,7 +12,7 @@ RUN apt-get update && \
     libxext-dev libssl-dev libpcre3-dev libglu1-mesa-dev libglew-dev \
     libftgl-dev libmysqlclient-dev libfftw3-dev libgraphviz-dev \
     libavahi-compat-libdnssd-dev libldap2-dev python3 python3-pip \
-    python3-dev python3-tk python3-venv libxml2-dev libkrb5-dev \
+    python3-dev python3-tk python3-venv libxml2-dev libkrb5-dev sudo \
     libgsl-dev cmake libxmu-dev curl doxygen libblas-dev liblapack-dev \
     expect dos2unix libncurses5-dev libboost-all-dev libcfitsio-dev \
     libxerces-c-dev libhealpix-cxx-dev bc libhdf5-dev python3-matplotlib \
@@ -37,7 +37,10 @@ RUN apt-get update && \
 # Add COSI user (required for correct install & permissions)
 # ------------------------------------------------------------
 RUN groupadd -g 1111 cosi && \
-    useradd -u 1111 -g 1111 -ms /bin/bash cosi
+    useradd -u 1111 -g 1111 -ms /bin/bash cosi && \
+    usermod -aG sudo cosi && \
+    echo 'cosi ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cosi && \
+    chmod 440 /etc/sudoers.d/cosi
 
 # ------------------------------------------------------------
 # Switch to non-root user and install COSItools
@@ -55,25 +58,6 @@ RUN curl -fsSL https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
 ENV PATH="/home/cosi/.local/bin:${PATH}"
-
-# ------------------------------------------------------------
-# Copy project into image
-# ------------------------------------------------------------
-# IMPORTANT: This now puts everything into /home/cosi/code/cosi-initial
-COPY --chown=1111:1111 . /home/cosi/code/cosi-initial
-
-WORKDIR /home/cosi/code/cosi-initial
-
-# ------------------------------------------------------------
-# Create UV env + install deps
-# ------------------------------------------------------------
-RUN rm -f .python-version
-RUN uv venv && uv sync
-
-# ------------------------------------------------------------
-# Install torch (GPU version)
-# ------------------------------------------------------------
-RUN uv sync --extra-index-url https://download.pytorch.org/whl/cu121
 
 # ------------------------------------------------------------
 # Create external exchange directory
