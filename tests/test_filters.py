@@ -1,8 +1,5 @@
-from typing import Any
-
 import numpy as np
 from src.beta_decay.physics.filters import compton_cone_filter
-from src.utils.reader_extraction import get_reader
 
 
 def test_compton_cone_filter_requires_two_hits() -> None:
@@ -42,10 +39,3 @@ def test_compton_cone_filter_accepts_valid_pair() -> None:
     ]
 
     assert compton_cone_filter(energies, positions) is True
-
-
-def test_real_sim_file_compton_cone_filter_accepts_valid_event() -> None:
-    reader = get_reader("data/Activation.sim")
-
-    def valid_event_finder(reader) -> Any:
-        return

@@ -8,13 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
-Activation.sim
-RunTestHeaven.inc1.id1.sim.gz
-RunTestSky.inc1.id1.sim.gz
 
-# Logs
-/logs
-/plots
+# Simulation output files
+Activation.sim
 
 # environment variables
 .env

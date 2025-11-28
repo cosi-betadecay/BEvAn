@@ -1,6 +1,3 @@
-/plots
-/logs
-
 # environment variables
 .env
 .env.*
