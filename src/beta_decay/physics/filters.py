@@ -1,45 +1,50 @@
-import itertools
-
-import numpy as np
+import torch
 
 
-def compton_cone_filter(energies: list, positions: list) -> bool:
-    """Return True if any hit pair passes the Compton cone annihilation filter.
+def verify_compton_angle(energies: torch.Tensor) -> bool:
+    """Calculate the Compton scattering angle from two energy deposits.
 
     Args:
-        energies (list): List of energy values for each hit.
-        positions (list): List of position vectors for each hit.
+        energies (list): List of energy values for a Compton sequence.
 
     Returns:
-        bool: True if any hit pair passes the Compton cone filter, False otherwise.
+        bool: True if the angle is physically valid, False otherwise.
     """
-    if len(energies) < 2:
-        return False
+    # Get's integrated to the beta decay function, that's why we return True for less than 2 hits.
+    if energies.numel() < 2:
+        return True
 
-    for hit_pair in itertools.combinations(range(len(energies)), 2):
-        E1 = energies[hit_pair[0]]
-        E2 = energies[hit_pair[1]]
+    def sigma_cos_phi(
+        E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035
+    ) -> float | None:
+        """Calculate the uncertainty in the cosine of the Compton scattering angle.
 
-        if E1 + E2 <= 511.0:
-            continue
+        Args:
+            E_0 (torch.Tensor): Sum of all energy deposits.
+            E (torch.Tensor): Sum of all but the first energy deposit.
+            frac_sigma (float): Fractional uncertainty. Defaults to 0.35% (due to HPGe detector resolution).
 
-        cos_theta = 1 - 511.0 / E2 + 511.0 / (E1 + E2)
-        if cos_theta < -1.0 or cos_theta > 1.0:
-            continue
+        Returns:
+            float: Uncertainty in the cosine of the Compton scattering angle.
+        """
+        electron_mass_energy = 511.0  # keV
 
-        theta = np.arccos(cos_theta)
+        sigma_E_0 = frac_sigma * E_0
+        sigma_E = frac_sigma * E
 
-        pos1 = positions[hit_pair[0]]
-        pos2 = positions[hit_pair[1]]
-        vec = pos2 - pos1
-        distance = np.linalg.norm(vec)
-        if distance == 0:
-            continue
-        unit_vec = vec / distance
+        term0 = (sigma_E_0 / (E_0**2)) ** 2
+        term1 = (sigma_E / (E**2)) ** 2
 
-        cone_angle = theta
+        return electron_mass_energy * torch.sqrt(term0 + term1)
 
-        if abs(cone_angle - np.pi / 2) < 0.1:
-            return True
+    E_0 = energies.sum()
+    E = energies[1:].sum()
 
-    return False
+    electron_mass_energy = 511.0  # keV
+    cos_phi = 1 - electron_mass_energy * (1 / E - 1 / E_0)
+
+    _sigma_cos_phi = sigma_cos_phi(E_0, E)
+
+    limit = 1.0 + _sigma_cos_phi
+
+    return bool(torch.abs(cos_phi) <= limit)
