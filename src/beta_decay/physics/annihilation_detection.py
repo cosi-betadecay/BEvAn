@@ -4,6 +4,7 @@ from typing import Any, Tuple
 import ROOT as M
 import torch
 import wandb
+from tqdm import tqdm
 
 from beta_decay.physics.filters import verify_compton_angle
 from utils.reader_extraction import get_reader
@@ -94,10 +95,11 @@ def annihilation_extractor(
 
     TP, FP, FN, TN = 0, 0, 0, 0
 
-    while True:
-        Event = Reader.GetNextEvent()
-        if not Event:
-            break
+    for Event in tqdm(
+        iter(lambda: Reader.GetNextEvent(), None),
+        desc="Processing events",
+        unit="event",
+    ):
         M.SetOwnership(Event, True)
 
         NumberGoodEvents = process(Event, ref_energy, tolerance)

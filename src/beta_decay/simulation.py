@@ -4,6 +4,7 @@ import wandb
 from physics.annihilation_detection import annihilation_extractor
 from utils.plots import plot_metrics
 
+
 def simulation() -> None:
     """Run the annihilation event simulation and evaluate detection performance."""
     wandb.init(project="cosi-betadecay")

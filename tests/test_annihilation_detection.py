@@ -160,3 +160,85 @@ def test_annihilation_extractor_computes_metrics_and_logs(monkeypatch, annihilat
         "false_positive_rate": 0.5,
         "f1_score": 0.5,
     }
+
+
+def test_detected_511_event_valid_compton_sequence(annihilation_detection):
+    # 300 + 211 = 511 keV
+    # This is a valid Compton split.
+    hits = [FakeHit(1, 300.0), FakeHit(1, 211.0)]
+    event = FakeEvent(hits=hits)
+
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
+        is True
+    )
+
+
+def test_detected_511_event_invalid_compton_sequence(annihilation_detection):
+    # 500 + 11 = 511 but this is NOT a valid Compton split
+    # cos(phi) becomes unphysical → must return False
+    hits = [FakeHit(1, 500.0), FakeHit(1, 11.0)]
+    event = FakeEvent(hits=hits)
+
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
+        is False
+    )
+
+
+def test_detected_511_event_valid_compton_outside_tolerance(annihilation_detection):
+    hits = [FakeHit(1, 300.0), FakeHit(1, 210.0)]  # sum = 510
+    event = FakeEvent(hits=hits)
+
+    detected = annihilation_detection.detected_511_event(
+        ref_energy=511.0, Event=event, tolerance=0.1
+    )
+
+    assert detected is False
+
+
+def test_detected_511_event_partial_valid_combination(annihilation_detection):
+    hits = [
+        FakeHit(1, 100.0),
+        FakeHit(1, 200.0),
+        FakeHit(1, 311.0),  # 200 + 311 = 511 valid
+        FakeHit(1, 5.0),
+    ]
+    event = FakeEvent(hits=hits)
+
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
+        is True
+    )
+
+
+def test_detected_511_event_no_energy_match_even_if_compton_valid(annihilation_detection):
+    hits = [FakeHit(1, 300.0), FakeHit(1, 200.0)]  # sum = 500
+    event = FakeEvent(hits=hits)
+
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=0.5)
+        is False
+    )
+
+
+def test_detected_511_event_three_hits_valid_pair(annihilation_detection):
+    hits = [
+        FakeHit(1, 100.0),
+        FakeHit(1, 300.0),
+        FakeHit(1, 211.0),  # 300 + 211 = 511
+    ]
+    event = FakeEvent(hits=hits)
+
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
+        is True
+    )
+
+
+def test_detected_511_event_empty_event(annihilation_detection):
+    event = FakeEvent(hits=[])
+    assert (
+        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
+        is False
+    )

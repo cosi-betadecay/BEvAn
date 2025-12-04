@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
+    "tqdm>=4.67.1",
 ]
 
 [tool.ruff]
