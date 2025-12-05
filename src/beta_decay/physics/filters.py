@@ -48,3 +48,47 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     limit = 1.0 + _sigma_cos_phi
 
     return bool(torch.abs(cos_phi) <= limit)
+
+
+def klein_nishina_filter(energies: torch.Tensor, polarization: bool) -> bool:
+    def theta() -> float:
+        return
+
+    def phi() -> float:
+        return
+
+    def unpolarized_klein_nishina(E_0: float, E: float) -> float:
+        theta_val = theta()
+
+    def polarized_klein_nishina(E_0: float, E: float) -> float:
+        theta_val = theta()
+        phi_val = phi()
+        return
+
+    r_e = 2.8179403227e-15  # classical electron radius in meters
+    electron_mass_energy = 511.0  # keV
+    E_0 = energies.sum()
+    E = energies[1:].sum()
+
+    if polarization:
+        klein_nishina_eq = polarized_klein_nishina(E_0, E)
+    else:
+        klein_nishina_eq = unpolarized_klein_nishina(E_0, E)
+
+    return
+
+
+# Don't use per now, doesn't work well
+def verify_energies_sequence(energies: torch.Tensor) -> bool:
+    """Verify that the energies follow the expected sequence for Compton scattering.
+
+    Args:
+        energies (torch.Tensor): Tensor of energy deposits.
+
+    Returns:
+        bool: True if the energies follow the expected sequence, False otherwise.
+    """
+    if energies.numel() < 2:
+        return True
+
+    return energies[0] >= energies[1]
