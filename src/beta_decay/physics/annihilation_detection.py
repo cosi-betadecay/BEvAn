@@ -65,14 +65,12 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     if energies.numel() == 0:
         return False
 
-    if energies.numel() > 1:
-        if not verify_energies_sequence(energies):
-            return False
-
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
             combo_tensor = torch.stack(combo)
-
+            if energies.numel() > 1:
+                if not verify_energies_sequence(combo_tensor):
+                    continue
             if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
                 if verify_compton_angle(combo_tensor):
                     return True
