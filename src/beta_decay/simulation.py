@@ -29,7 +29,7 @@ def simulation() -> None:
     for idx, tol in enumerate(tolerances):
         (TP, FP, FN, TN, precision, recall, fpr, f1) = annihilation_extractor(
             "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup",
-            "Activation.sim",
+            "data/Activation.sim",
             tolerance=tol,
         )
 

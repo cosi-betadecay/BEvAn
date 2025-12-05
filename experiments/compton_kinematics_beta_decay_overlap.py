@@ -4,8 +4,7 @@ from typing import Any
 import ROOT as M
 import torch
 import tqdm
-from src.utils.reader_extraction import get_reader
-
+from src.beta_decay.utils.reader_extraction import get_reader
 
 # Beta decay detection
 def detected_511_event(
