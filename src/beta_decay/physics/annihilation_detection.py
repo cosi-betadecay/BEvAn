@@ -2,10 +2,12 @@ import itertools
 from typing import Any, Tuple
 
 import ROOT as M
+import torch
 import wandb
+from tqdm import tqdm
 
+from physics.filters import verify_compton_angle
 from utils.reader_extraction import get_reader
-
 
 def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.
@@ -55,15 +57,20 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     """
     n_hits = Event.GetNHTs()
 
-    energies = [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)]
+    energies = torch.tensor(
+        [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32
+    )
 
-    if energies == []:
+    if energies.numel() == 0:
         return False
 
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
-            if abs(sum(combo) - ref_energy) < tolerance:
-                return True
+            combo_tensor = torch.stack(combo)
+
+            if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
+                if verify_compton_angle(combo_tensor):
+                    return True
 
     return False
 
@@ -87,10 +94,11 @@ def annihilation_extractor(
 
     TP, FP, FN, TN = 0, 0, 0, 0
 
-    while True:
-        Event = Reader.GetNextEvent()
-        if not Event:
-            break
+    for Event in tqdm(
+        iter(lambda: Reader.GetNextEvent(), None),
+        desc="Processing events",
+        unit="event",
+    ):
         M.SetOwnership(Event, True)
 
         NumberGoodEvents = process(Event, ref_energy, tolerance)
