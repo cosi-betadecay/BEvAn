@@ -1,16 +1,17 @@
 import itertools
-from typing import Any, Tuple
+from typing import Any
 
 import ROOT as M
 import torch
 import wandb
 from tqdm import tqdm
 
+from beta_decay.mathematics.calculations import calculate_tolerance
 from physics.filters import verify_compton_angle
 from utils.reader_extraction import get_reader
 
 
-def process(Event: Any, ref_energy: float, tolerance: float) -> int:
+def process(Event: Any, ref_energy: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.
 
     Args:
@@ -21,6 +22,7 @@ def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     Returns:
         int: Number of events that match the annihilation criteria.
     """
+    tolerance = calculate_tolerance()
     NumberGoodEvents = 0
 
     for i in range(Event.GetNIAs()):
@@ -45,17 +47,17 @@ def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     return NumberGoodEvents
 
 
-def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
+def detected_511_event(ref_energy: float, Event: Any) -> bool:
     """Check if event contains a hit combination summing to the reference energy.
 
     Args:
         ref_energy (float): Reference energy to compare against (e.g., 511 keV).
         Event (Any): MEGAlib event object with detector hits.
-        tolerance (float): Allowed energy deviation from the reference.
 
     Returns:
         bool: True if a hit combination matches the reference energy, else False.
     """
+    tolerance = calculate_tolerance()
     n_hits = Event.GetNHTs()
 
     energies = torch.tensor(
@@ -75,20 +77,16 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     return False
 
 
-def annihilation_extractor(
-    geometry_file: str, sim_file: str, ref_energy: int = 511, tolerance: float = 1.5
-) -> Tuple[int, int, int, int, float, float, float]:
+def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 511) -> None:
     """Extract annihilation events and compute detection performance metrics.
 
     Args:
         geometry_file (str): Path to the detector geometry setup file (XML).
         sim_file (str): Path to the MEGAlib simulation file (.sim).
         ref_energy (float): Reference energy to compare against (default 511 keV).
-        tolerance (float): Allowed energy deviation from the reference.
 
     Returns:
-        Tuple[int, int, int, int, float, float, float]: Evaluation results as
-            (TP, FP, FN, TN, precision, recall, false positive rate).
+        None
     """
     Reader = get_reader(geometry_file, sim_file)
 
@@ -101,9 +99,9 @@ def annihilation_extractor(
     ):
         M.SetOwnership(Event, True)
 
-        NumberGoodEvents = process(Event, ref_energy, tolerance)
+        NumberGoodEvents = process(Event, ref_energy)
         is_annihilation = NumberGoodEvents > 0
-        detected_511 = detected_511_event(ref_energy, Event, tolerance)
+        detected_511 = detected_511_event(ref_energy, Event)
 
         if is_annihilation:
             if detected_511:
@@ -133,5 +131,3 @@ def annihilation_extractor(
             "f1_score": f1_score,
         }
     )
-
-    return TP, FP, FN, TN, precision, recall, fpr, f1_score
