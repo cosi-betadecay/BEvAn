@@ -50,6 +50,7 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     return bool(torch.abs(cos_phi) <= limit)
 
 
+# Don't use per now, doesn't work well
 def verify_energies_sequence(energies: torch.Tensor) -> bool:
     """Verify that the energies follow the expected sequence for Compton scattering.
 
@@ -63,15 +64,3 @@ def verify_energies_sequence(energies: torch.Tensor) -> bool:
         return True
 
     return energies[0] >= energies[1]
-
-
-def compton_total_filter(energies: torch.Tensor) -> bool:
-    """Verify both the energy sequence and Compton angle validity.
-
-    Args:
-        energies (torch.Tensor): Tensor of energy deposits.
-
-    Returns:
-        bool: True if both the energy sequence and Compton angle are valid, False otherwise.
-    """
-    return verify_energies_sequence(energies) and verify_compton_angle(energies)
