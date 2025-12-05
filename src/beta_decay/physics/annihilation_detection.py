@@ -6,8 +6,9 @@ import torch
 import wandb
 from tqdm import tqdm
 
-from physics.filters import verify_compton_angle
+from physics.filters import compton_total_filter
 from utils.reader_extraction import get_reader
+
 
 def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.
@@ -69,7 +70,7 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
             combo_tensor = torch.stack(combo)
 
             if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
-                if verify_compton_angle(combo_tensor):
+                if compton_total_filter(combo_tensor):
                     return True
 
     return False

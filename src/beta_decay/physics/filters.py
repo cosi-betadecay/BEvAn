@@ -1,5 +1,6 @@
 import torch
 
+
 def verify_compton_angle(energies: torch.Tensor) -> bool:
     """Calculate the Compton scattering angle from two energy deposits.
 
@@ -47,3 +48,30 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     limit = 1.0 + _sigma_cos_phi
 
     return bool(torch.abs(cos_phi) <= limit)
+
+
+def verify_energies_sequence(energies: torch.Tensor) -> bool:
+    """Verify that the energies follow the expected sequence for Compton scattering.
+
+    Args:
+        energies (torch.Tensor): Tensor of energy deposits.
+
+    Returns:
+        bool: True if the energies follow the expected sequence, False otherwise.
+    """
+    if energies.numel() < 2:
+        return True
+
+    return energies[0] >= energies[1]
+
+
+def compton_total_filter(energies: torch.Tensor) -> bool:
+    """Verify both the energy sequence and Compton angle validity.
+
+    Args:
+        energies (torch.Tensor): Tensor of energy deposits.
+
+    Returns:
+        bool: True if both the energy sequence and Compton angle are valid, False otherwise.
+    """
+    return verify_energies_sequence(energies) and verify_compton_angle(energies)
