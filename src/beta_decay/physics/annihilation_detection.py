@@ -6,9 +6,8 @@ import torch
 import wandb
 from tqdm import tqdm
 
-from beta_decay.physics.filters import verify_compton_angle
+from src.beta_decay.physics.filters import verify_compton_angle
 from utils.reader_extraction import get_reader
-
 
 def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.

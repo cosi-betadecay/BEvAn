@@ -1,7 +1,6 @@
 import torch
 from src.beta_decay.physics.filters import verify_compton_angle
 
-
 def test_verify_compton_angle_valid():
     energies = torch.tensor([300.0, 200.0])
     assert verify_compton_angle(energies) is True
