@@ -50,32 +50,67 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     return bool(torch.abs(cos_phi) <= limit)
 
 
-def klein_nishina_filter(energies: torch.Tensor, polarization: bool) -> bool:
-    def theta(E_0: float, E: float, electron_mass_energy: float) -> float:
-        return
+def klein_nishina_weight(energies: torch.Tensor) -> float:
+    """Calculate the Klein–Nishina weight for a given set of energy deposits.
 
-    def phi() -> float:
-        return
+    Args:
+        energies (torch.Tensor): Tensor of energy deposits.
 
-    def unpolarized_klein_nishina(E_0: float, E: float) -> float:
-        theta_val = theta(E_0, E, electron_mass_energy)
+    Returns:
+        float: Klein–Nishina weight.
+    """
 
-    def polarized_klein_nishina(E_0: float, E: float) -> float:
-        theta_val = theta(E_0, E, electron_mass_energy)
-        phi_val = phi()
-        return
+    def cos_theta(E_0: float, E: float, electron_mass_energy: float) -> float:
+        return 1 - electron_mass_energy * (1 / E - 1 / E_0)
+
+    def sigma_cos_theta(
+        E_0: torch.Tensor, E: torch.Tensor, electron_mass_energy: float, frac_sigma: float = 0.0035
+    ) -> float | None:
+        """Calculate the uncertainty in the cosine of the Compton scattering angle.
+
+        Args:
+            E_0 (torch.Tensor): Sum of all energy deposits.
+            E (torch.Tensor): Sum of all but the first energy deposit.
+            electron_mass_energy (float): Electron rest mass energy in keV.
+            frac_sigma (float): Fractional uncertainty. Defaults to 0.35% (due to HPGe detector resolution).
+
+        Returns:
+            float: Uncertainty in the cosine of the Compton scattering angle.
+        """
+        electron_mass_energy = 511.0  # keV
+
+        sigma_E_0 = frac_sigma * E_0
+        sigma_E = frac_sigma * E
+
+        term0 = (sigma_E_0 / (E_0**2)) ** 2
+        term1 = (sigma_E / (E**2)) ** 2
+
+        return electron_mass_energy * torch.sqrt(term0 + term1)
+
+    if energies.numel() < 2:
+        return 1.0  # No weighting for single hits
 
     r_e = 2.8179403227e-15  # classical electron radius in meters
     electron_mass_energy = 511.0  # keV
     E_0 = energies.sum()
     E = energies[1:].sum()
 
-    if polarization:
-        klein_nishina_eq = polarized_klein_nishina(E_0, E)
-    else:
-        klein_nishina_eq = unpolarized_klein_nishina(E_0, E)
+    _cos_theta = cos_theta(E_0, E, electron_mass_energy)
+    _sigma_cos_theta = sigma_cos_theta(E_0, E, electron_mass_energy)
+    limit = 1.0 + _sigma_cos_theta
 
-    return
+    if torch.abs(_cos_theta) > limit:
+        return 0.0  # Invalid angle, return zero weight
+
+    lam_ratio = E / E_0
+    theta = torch.acos(_cos_theta)
+
+    r_e = 2.8179403227e-15  # classical electron radius, m
+
+    # Klein–Nishina differential cross-section (unpolarized)
+    weight = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
+
+    return weight
 
 
 # Don't use per now, doesn't work well

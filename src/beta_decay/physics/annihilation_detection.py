@@ -7,7 +7,7 @@ import wandb
 from tqdm import tqdm
 
 from beta_decay.mathematics.calculations import calculate_tolerance
-from physics.filters import verify_compton_angle
+from physics.filters import klein_nishina_weight, verify_compton_angle
 from utils.reader_extraction import get_reader
 
 
@@ -72,7 +72,10 @@ def detected_511_event(ref_energy: float, Event: Any) -> bool:
             combo_tensor = torch.stack(combo)
             if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
                 if verify_compton_angle(combo_tensor):
-                    return True
+                    weight = klein_nishina_weight(combo_tensor)
+                    if weight > 0:
+                        wandb.log({"klein-nishina_weight": weight})
+                        return True
 
     return False
 
