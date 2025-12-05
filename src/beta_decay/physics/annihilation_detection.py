@@ -64,20 +64,35 @@ def detected_511_event(ref_energy: float, Event: Any) -> bool:
         [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32
     )
 
-    if energies.numel() == 0:
-        return False
+    valid_weights = []
 
+    # Collect ALL valid combinations across all r
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
             combo_tensor = torch.stack(combo)
-            if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
-                if verify_compton_angle(combo_tensor):
-                    weight = klein_nishina_weight(combo_tensor)
-                    if weight > 0.9:
-                        wandb.log({"klein-nishina_weight": weight})
-                        return True
 
-    return False
+            # 1. Energy sum
+            if torch.abs(combo_tensor.sum() - ref_energy) >= tolerance:
+                continue
+
+            # 2. Compton kinematic constraint
+            if not verify_compton_angle(combo_tensor):
+                continue
+
+            # 3. Klein–Nishina weight
+            w = klein_nishina_weight(combo_tensor)
+            if w > 0:
+                valid_weights.append(w)
+
+    # No valid combinations → event is not 511 keV
+    if len(valid_weights) == 0:
+        return False
+
+    weights = torch.tensor(valid_weights, dtype=torch.float32)
+    weights_normalized = weights / weights.sum()
+    best = weights_normalized.max().item()
+
+    return best > 0.7
 
 
 def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 511) -> None:
