@@ -1,11 +1,22 @@
+import os
+
 import numpy as np
 import wandb
+from dotenv import load_dotenv
 
 from physics.annihilation_detection import annihilation_extractor
 from utils.plots import plot_metrics
 
 def simulation() -> None:
     """Run the annihilation event simulation and evaluate detection performance."""
+    load_dotenv()
+    wandb_api_key = os.getenv("WANDB_API_KEY")
+
+    if wandb_api_key is None:
+        raise RuntimeError("WANDB_API_KEY not found in .env")
+
+    wandb.login(key=wandb_api_key)
+
     wandb.init(project="cosi-betadecay")
 
     tolerances = np.array([10, 9, 8, 6, 5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1])
