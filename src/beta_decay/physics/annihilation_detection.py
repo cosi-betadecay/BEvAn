@@ -6,7 +6,7 @@ import torch
 import wandb
 from tqdm import tqdm
 
-from physics.filters import compton_total_filter
+from physics.filters import verify_compton_angle, verify_energies_sequence
 from utils.reader_extraction import get_reader
 
 
@@ -65,12 +65,16 @@ def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
     if energies.numel() == 0:
         return False
 
+    if energies.numel() > 1:
+        if not verify_energies_sequence(energies):
+            return False
+
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
             combo_tensor = torch.stack(combo)
 
             if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
-                if compton_total_filter(combo_tensor):
+                if verify_compton_angle(combo_tensor):
                     return True
 
     return False
