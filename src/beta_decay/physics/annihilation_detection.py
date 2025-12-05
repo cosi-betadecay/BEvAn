@@ -4,9 +4,9 @@ from typing import Any
 import ROOT as M
 import torch
 import wandb
+from mathematics.calculations import calculate_tolerance
 from tqdm import tqdm
 
-from beta_decay.mathematics.calculations import calculate_tolerance
 from physics.filters import klein_nishina_weight, verify_compton_angle
 from utils.reader_extraction import get_reader
 
@@ -73,7 +73,7 @@ def detected_511_event(ref_energy: float, Event: Any) -> bool:
             if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
                 if verify_compton_angle(combo_tensor):
                     weight = klein_nishina_weight(combo_tensor)
-                    if weight > 0:
+                    if weight > 0.9:
                         wandb.log({"klein-nishina_weight": weight})
                         return True
 
