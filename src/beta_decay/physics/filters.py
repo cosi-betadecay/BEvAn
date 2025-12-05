@@ -51,17 +51,17 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
 
 
 def klein_nishina_filter(energies: torch.Tensor, polarization: bool) -> bool:
-    def theta() -> float:
+    def theta(E_0: float, E: float, electron_mass_energy: float) -> float:
         return
 
     def phi() -> float:
         return
 
     def unpolarized_klein_nishina(E_0: float, E: float) -> float:
-        theta_val = theta()
+        theta_val = theta(E_0, E, electron_mass_energy)
 
     def polarized_klein_nishina(E_0: float, E: float) -> float:
-        theta_val = theta()
+        theta_val = theta(E_0, E, electron_mass_energy)
         phi_val = phi()
         return
 
