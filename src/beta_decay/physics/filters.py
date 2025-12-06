@@ -48,6 +48,7 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     return bool(torch.abs(cos_phi) <= limit)
 
 
+# Didn't really make a difference this weight
 def klein_nishina_weight(energies: torch.Tensor) -> float:
     """Calculate the Klein–Nishina weight for a given set of energy deposits.
 
@@ -109,19 +110,3 @@ def klein_nishina_weight(energies: torch.Tensor) -> float:
     weight = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
 
     return weight
-
-
-# Don't use per now, doesn't work well
-def verify_energies_sequence(energies: torch.Tensor) -> bool:
-    """Verify that the energies follow the expected sequence for Compton scattering.
-
-    Args:
-        energies (torch.Tensor): Tensor of energy deposits.
-
-    Returns:
-        bool: True if the energies follow the expected sequence, False otherwise.
-    """
-    if energies.numel() < 2:
-        return True
-
-    return energies[0] >= energies[1]

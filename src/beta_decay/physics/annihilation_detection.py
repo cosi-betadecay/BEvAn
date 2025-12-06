@@ -5,7 +5,7 @@ import ROOT as M
 import torch
 import wandb
 from mathematics.calculations import calculate_tolerance
-from physics.filters import klein_nishina_weight, verify_compton_angle
+from physics.filters import verify_compton_angle
 from tqdm import tqdm
 from utils.reader_extraction import get_reader
 
@@ -61,35 +61,14 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
 
-    valid_weights = []
-
-    # Collect ALL valid combinations across all r
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
             combo_tensor = torch.stack(combo)
 
-            # 1. Energy sum
-            if torch.abs(combo_tensor.sum() - ref_energy) >= tolerance:
-                continue
+            if torch.abs(combo_tensor.sum() - ref_energy) >= tolerance and verify_compton_angle(combo_tensor):
+                return True
 
-            # 2. Compton kinematic constraint
-            if not verify_compton_angle(combo_tensor):
-                continue
-
-            # 3. Klein-Nishina weight
-            w = klein_nishina_weight(combo_tensor)
-            if w > 0:
-                valid_weights.append(w)
-
-    # No valid combinations → event is not 511 keV
-    if len(valid_weights) == 0:
-        return False
-
-    weights = torch.tensor(valid_weights, dtype=torch.float32)
-    weights_normalized = weights / weights.sum()
-    best = weights_normalized.max().item()
-
-    return best > 0.7
+    return False
 
 
 def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 511) -> None:
