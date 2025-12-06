@@ -1,0 +1,32 @@
+# ===============================
+# Ruff Configuration
+# ===============================
+
+target-version = "py312"
+line-length = 110
+
+[lint]
+select = [
+    "E",      # Errors
+    "F",      # Pyflakes
+    "I",      # Import sorting (isort)
+    "UP",     # Pyupgrade
+    "B",      # Bugbear
+    "A",      # builtins
+    "C4",     # comprehensions
+    "TID",    # tidy imports
+    "SIM",    # simplify
+    "Q",      # quotes
+    "RUF"     # Ruff
+]
+
+ignore = [
+    "E501"    # Let formatter handle line length
+]
+
+# Use preview lint rules (new recommended config name)
+explicit-preview-rules = true
+
+[lint.isort]
+known-first-party = ["src"]
+combine-as-imports = true

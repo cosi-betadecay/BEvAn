@@ -1,16 +1,16 @@
 import itertools
-from typing import Any, Tuple
+from typing import Any
 
 import ROOT as M
 import torch
 import wandb
-from tqdm import tqdm
-
+from mathematics.calculations import calculate_tolerance
 from physics.filters import verify_compton_angle
+from tqdm import tqdm
 from utils.reader_extraction import get_reader
 
 
-def process(Event: Any, ref_energy: float, tolerance: float) -> int:
+def process(event: Any, ref_energy: float) -> int:
     """Count annihilation events matching a reference energy within tolerance.
 
     Args:
@@ -21,117 +21,107 @@ def process(Event: Any, ref_energy: float, tolerance: float) -> int:
     Returns:
         int: Number of events that match the annihilation criteria.
     """
-    NumberGoodEvents = 0
+    tolerance = calculate_tolerance()
+    number_good_events = 0
 
-    for i in range(Event.GetNIAs()):
-        if Event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
-            ProcessID = i + 1
+    for i in range(event.GetNIAs()):
+        if event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
+            process_id = i + 1
 
-            SecondaryIDs = []
-            for j in range(Event.GetNIAs()):
-                if Event.GetIAAt(j).GetOriginID() == ProcessID:
-                    SecondaryIDs.append(j + 1)
+            secondary_ids = []
+            for j in range(event.GetNIAs()):
+                if event.GetIAAt(j).GetOriginID() == process_id:
+                    secondary_ids.append(j + 1)
 
-            TotalEnergy = 0
-            for h in range(Event.GetNHTs()):
-                for SID in SecondaryIDs:
-                    if Event.GetHTAt(h).IsOrigin(SID):
-                        TotalEnergy += Event.GetHTAt(h).GetEnergy()
+            total_energy = 0
+            for h in range(event.GetNHTs()):
+                for sid in secondary_ids:
+                    if event.GetHTAt(h).IsOrigin(sid):
+                        total_energy += event.GetHTAt(h).GetEnergy()
                         break
 
-            if abs(TotalEnergy - ref_energy) < tolerance:
-                NumberGoodEvents += 1
+            if abs(total_energy - ref_energy) < tolerance:
+                number_good_events += 1
 
-    return NumberGoodEvents
+    return number_good_events
 
 
-def detected_511_event(ref_energy: float, Event: Any, tolerance: float) -> bool:
+def detected_511_event(ref_energy: float, event: Any) -> bool:
     """Check if event contains a hit combination summing to the reference energy.
 
     Args:
         ref_energy (float): Reference energy to compare against (e.g., 511 keV).
         Event (Any): MEGAlib event object with detector hits.
-        tolerance (float): Allowed energy deviation from the reference.
 
     Returns:
         bool: True if a hit combination matches the reference energy, else False.
     """
-    n_hits = Event.GetNHTs()
+    tolerance = calculate_tolerance()
+    n_hits = event.GetNHTs()
 
-    energies = torch.tensor(
-        [Event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32
-    )
-
-    if energies.numel() == 0:
-        return False
+    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
 
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
             combo_tensor = torch.stack(combo)
-            if torch.abs(combo_tensor.sum() - ref_energy) < tolerance:
-                if verify_compton_angle(combo_tensor):
-                    return True
+
+            if torch.abs(combo_tensor.sum() - ref_energy) >= tolerance and verify_compton_angle(combo_tensor):
+                return True
 
     return False
 
 
-def annihilation_extractor(
-    geometry_file: str, sim_file: str, ref_energy: int = 511, tolerance: float = 1.5
-) -> Tuple[int, int, int, int, float, float, float]:
+def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 511) -> None:
     """Extract annihilation events and compute detection performance metrics.
 
     Args:
         geometry_file (str): Path to the detector geometry setup file (XML).
         sim_file (str): Path to the MEGAlib simulation file (.sim).
         ref_energy (float): Reference energy to compare against (default 511 keV).
-        tolerance (float): Allowed energy deviation from the reference.
 
     Returns:
-        Tuple[int, int, int, int, float, float, float]: Evaluation results as
-            (TP, FP, FN, TN, precision, recall, false positive rate).
+        None
     """
-    Reader = get_reader(geometry_file, sim_file)
+    reader = get_reader(geometry_file, sim_file)
 
-    TP, FP, FN, TN = 0, 0, 0, 0
+    tp, fp, fn, tn = 0, 0, 0, 0
 
-    for Event in tqdm(
-        iter(lambda: Reader.GetNextEvent(), None),
+    for event in tqdm(
+        iter(lambda: reader.GetNextEvent(), None),
         desc="Processing events",
         unit="event",
     ):
-        M.SetOwnership(Event, True)
+        M.SetOwnership(event, True)
 
-        NumberGoodEvents = process(Event, ref_energy, tolerance)
-        is_annihilation = NumberGoodEvents > 0
-        detected_511 = detected_511_event(ref_energy, Event, tolerance)
+        number_good_events = process(event, ref_energy)
+        is_annihilation = number_good_events > 0
+        detected_511 = detected_511_event(ref_energy, event)
 
         if is_annihilation:
             if detected_511:
-                TP += 1
+                tp += 1
             else:
-                FN += 1
+                fn += 1
         else:
             if detected_511:
-                FP += 1
+                fp += 1
             else:
-                TN += 1
+                tn += 1
 
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
-    fpr = FP / (FP + TN) if (FP + TN) > 0 else 0
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
     wandb.log(
         {
-            "TP": TP,
-            "FP": FP,
-            "FN": FN,
-            "TN": TN,
+            "TP": tp,
+            "FP": fp,
+            "FN": fn,
+            "TN": tn,
             "precision": precision,
             "recall": recall,
             "false_positive_rate": fpr,
             "f1_score": f1_score,
         }
     )
-
-    return TP, FP, FN, TN, precision, recall, fpr, f1_score
