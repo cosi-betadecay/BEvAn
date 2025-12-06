@@ -1,3 +1,5 @@
+from ast import Tuple
+
 import torch
 
 
@@ -110,3 +112,46 @@ def klein_nishina_weight(energies: torch.Tensor) -> float:
     weight = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
 
     return weight
+
+
+def angular_resolution_measure_filter(energies: torch.Tensor, positions: torch.Tensor) -> bool | None:
+    def theta_geo(positions: torch.Tensor) -> float:
+        return
+
+    def theta_kin(energies: torch.Tensor) -> float:
+        return
+
+    def calculate_arm(theta_geo: float, theta_kin: float) -> float:
+        return
+
+    def classify_arm(arm_calculated) -> bool:
+        return
+
+    if energies.numel() < 3 or positions.shape[0] < 3:
+        return None
+
+    _theta_geo = theta_geo(positions)
+    _theta_kin = theta_kin(energies)
+    arm = calculate_arm(_theta_geo, _theta_kin)
+
+    return classify_arm(arm)
+
+
+def scatter_plane_division_filter(positions: torch.Tensor) -> bool | None:
+    def normal_vectors(positions: torch.Tensor) -> Tuple[float, float]:
+        n1, n2 = 0
+        return n1, n2
+
+    def scatter_plane_division(n1: float, n2: float) -> float:
+        return torch.arccos((n1 * n2) / (torch.norm(n1) * torch.norm(n2)))
+
+    def classify_spd(scatter_plane_division: float) -> bool:
+        return
+
+    if positions.shape[0] < 3:
+        return None
+
+    n1, n2 = normal_vectors(positions)
+    spd = scatter_plane_division(n1, n2)
+
+    return classify_spd(spd)
