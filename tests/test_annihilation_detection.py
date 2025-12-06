@@ -103,9 +103,7 @@ def test_detected_511_event_uses_energy_combinations(annihilation_detection, ene
     hits = [FakeHit(origin_id=i + 1, energy=e) for i, e in enumerate(energies)]
     event = FakeEvent(hits=hits)
 
-    detected = annihilation_detection.detected_511_event(
-        ref_energy=511.0, Event=event, tolerance=0.5
-    )
+    detected = annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=0.5)
 
     assert detected is expected
 
@@ -125,12 +123,8 @@ def test_annihilation_extractor_computes_metrics_and_logs(monkeypatch, annihilat
         def GetNextEvent(self):
             return next(self._events, None)
 
-    monkeypatch.setattr(
-        annihilation_detection, "get_reader", lambda *_args, **_kwargs: FakeReader(events)
-    )
-    monkeypatch.setattr(
-        annihilation_detection, "process", lambda event, *_args: event.process_result
-    )
+    monkeypatch.setattr(annihilation_detection, "get_reader", lambda *_args, **_kwargs: FakeReader(events))
+    monkeypatch.setattr(annihilation_detection, "process", lambda event, *_args: event.process_result)
     monkeypatch.setattr(
         annihilation_detection,
         "detected_511_event",
@@ -168,10 +162,7 @@ def test_detected_511_event_valid_compton_sequence(annihilation_detection):
     hits = [FakeHit(1, 300.0), FakeHit(1, 211.0)]
     event = FakeEvent(hits=hits)
 
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
-        is True
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0) is True
 
 
 def test_detected_511_event_invalid_compton_sequence(annihilation_detection):
@@ -180,19 +171,14 @@ def test_detected_511_event_invalid_compton_sequence(annihilation_detection):
     hits = [FakeHit(1, 500.0), FakeHit(1, 11.0)]
     event = FakeEvent(hits=hits)
 
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
-        is False
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0) is False
 
 
 def test_detected_511_event_valid_compton_outside_tolerance(annihilation_detection):
     hits = [FakeHit(1, 300.0), FakeHit(1, 210.0)]  # sum = 510
     event = FakeEvent(hits=hits)
 
-    detected = annihilation_detection.detected_511_event(
-        ref_energy=511.0, Event=event, tolerance=0.1
-    )
+    detected = annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=0.1)
 
     assert detected is False
 
@@ -206,20 +192,14 @@ def test_detected_511_event_partial_valid_combination(annihilation_detection):
     ]
     event = FakeEvent(hits=hits)
 
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
-        is True
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0) is True
 
 
 def test_detected_511_event_no_energy_match_even_if_compton_valid(annihilation_detection):
     hits = [FakeHit(1, 300.0), FakeHit(1, 200.0)]  # sum = 500
     event = FakeEvent(hits=hits)
 
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=0.5)
-        is False
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=0.5) is False
 
 
 def test_detected_511_event_three_hits_valid_pair(annihilation_detection):
@@ -230,15 +210,9 @@ def test_detected_511_event_three_hits_valid_pair(annihilation_detection):
     ]
     event = FakeEvent(hits=hits)
 
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
-        is True
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0) is True
 
 
 def test_detected_511_event_empty_event(annihilation_detection):
     event = FakeEvent(hits=[])
-    assert (
-        annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0)
-        is False
-    )
+    assert annihilation_detection.detected_511_event(ref_energy=511.0, Event=event, tolerance=1.0) is False

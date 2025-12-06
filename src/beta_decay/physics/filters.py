@@ -14,9 +14,7 @@ def verify_compton_angle(energies: torch.Tensor) -> bool:
     if energies.numel() < 2:
         return True
 
-    def sigma_cos_phi(
-        E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035
-    ) -> float | None:
+    def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
         """Calculate the uncertainty in the cosine of the Compton scattering angle.
 
         Args:

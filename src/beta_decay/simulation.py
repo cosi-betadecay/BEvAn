@@ -2,7 +2,6 @@ import os
 
 import wandb
 from dotenv import load_dotenv
-
 from physics.annihilation_detection import annihilation_extractor
 
 
