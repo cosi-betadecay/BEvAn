@@ -60,6 +60,10 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
     n_hits = event.GetNHTs()
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+    positions = torch.tensor([event.GetHTAt(i).GetPosition() for i in range(n_hits)], dtype=torch.float32)
+
+    print(positions)
+    print(energies)
 
     for r in range(1, n_hits + 1):
         for combo in itertools.combinations(energies, r):
