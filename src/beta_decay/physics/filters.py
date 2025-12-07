@@ -193,7 +193,7 @@ def angular_resolution_measure_filter(
         """
         return torch.abs(theta_geo - theta_kin)
 
-    def classify_arm(arm_calculated: float, arm_threshold: float = 0.3) -> bool:
+    def classify_arm(arm_calculated: float, arm_threshold: float = 0.05) -> bool:
         """Classify an event based on its ARM value.
 
         Args:
@@ -215,32 +215,25 @@ def angular_resolution_measure_filter(
         return False
 
     arm = calculate_arm(_theta_geo, _theta_kin)
-    print(arm)
 
     return classify_arm(arm)
 
 
 # need to find the unit of the positions
 # need to verify the mid_threshold amount - read papers
-def minimum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 3.0) -> bool:
-    """Reject events where consecutive interaction points occur too close together.
-
-    This filter enforces a minimum spatial separation between successive interaction
-    positions. In HPGe strip detectors (such as COSI), two interaction sites that occur
-    within a few millimeters of each other are often indistinguishable due to the
-    detector's spatial resolution. Applying a minimum interaction distance (MID)
-    threshold helps suppress physically implausible or poorly reconstructed sequences.
+def maximum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 4.0) -> bool:
+    """Reject events where consecutive interaction points occur too far together.
 
     Args:
         positions (torch.Tensor):
-            Tensor of shape (N, 3) containing interaction positions in millimeters.
+            Tensor of shape (N, 3) containing interaction positions.
             Requires at least 2 positions; otherwise the event automatically passes.
         mid_threshold (float):
-            Minimum allowed distance (in mm) between consecutive interaction points.
-            Defaults to 3.0 mm, consistent with HPGe positional resolution.
+            Maximum allowed distance between consecutive interaction points.
+            Defaults to 4.0
 
     Returns:
-        bool: True if all consecutive interaction distances are >= mid_threshold. False if any distance is below threshold or if NaNs are encountered.
+        bool: True if all consecutive interaction distances are <= mid_threshold. False if any distance is below threshold or if NaNs are encountered.
     """
     if positions.shape[0] < 2:
         return True
@@ -251,4 +244,4 @@ def minimum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: 
     if torch.isnan(distances).any():
         return False
 
-    return bool(torch.all(distances >= mid_threshold))
+    return bool(torch.all(distances <= mid_threshold))

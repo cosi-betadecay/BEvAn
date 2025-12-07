@@ -3,15 +3,12 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from mathematics.calculations import calculate_tolerance
-from physics.filters import (
-    angular_resolution_measure_filter,
-    minimum_interaction_distance_filter,
-    verify_compton_angle,
-)
+from physics.filters import maximum_interaction_distance_filter, verify_compton_angle
 from tqdm import tqdm
 from utils.reader_extraction import get_reader
+
+import wandb
 
 
 def process(event: Any, ref_energy: float) -> int:
@@ -87,15 +84,13 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
             if not verify_compton_angle(energy_combo):
                 continue
 
-            if len(idx_combo) > 1:
-                mid_filter = minimum_interaction_distance_filter(pos_combo)
-                if mid_filter is False:
-                    continue
+            if not maximum_interaction_distance_filter(pos_combo):
+                continue
 
-            if len(idx_combo) >= 3:
-                arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
-                if arm_filter is False or arm_filter is None:
-                    continue
+            #if len(idx_combo) >= 3:
+            #    arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
+            #    if arm_filter is False or arm_filter is None:
+            #        continue
 
             return True
 
