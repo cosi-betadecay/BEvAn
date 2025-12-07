@@ -3,12 +3,16 @@ from typing import Any
 
 import ROOT as M
 import torch
-from mathematics.calculations import calculate_tolerance
-from physics.filters import maximum_interaction_distance_filter, verify_compton_angle
-from tqdm import tqdm
-from utils.reader_extraction import get_reader
-
 import wandb
+from mathematics.calculations import calculate_tolerance
+from physics.filters import (
+    angular_resolution_measure_filter,
+    maximum_interaction_distance_filter,
+    verify_compton_angle,
+)
+from tqdm import tqdm
+from utils.plots import plot_confusion_matrix
+from utils.reader_extraction import get_reader
 
 
 def process(event: Any, ref_energy: float) -> int:
@@ -47,7 +51,14 @@ def process(event: Any, ref_energy: float) -> int:
     return number_good_events
 
 
-def detected_511_event(ref_energy: float, event: Any) -> bool:
+def detected_511_event(
+    ref_energy: float,
+    event: Any,
+    baseline_activation: bool,
+    compton_angle_activation: bool,
+    mid_activation: bool,
+    arm_activation: bool,
+) -> bool:
     """Check if event contains a hit combination summing to the reference energy.
 
     Args:
@@ -78,26 +89,34 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance:
+            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance and baseline_activation:
                 continue
 
-            if not verify_compton_angle(energy_combo):
+            if not verify_compton_angle(energy_combo) and compton_angle_activation:
                 continue
 
-            if not maximum_interaction_distance_filter(pos_combo):
+            if not maximum_interaction_distance_filter(pos_combo) and mid_activation:
                 continue
 
-            #if len(idx_combo) >= 3:
-            #    arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
-            #    if arm_filter is False or arm_filter is None:
-            #        continue
+            if len(idx_combo) >= 3 and arm_activation:
+                arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
+                if arm_filter is False or arm_filter is None:
+                    continue
 
             return True
 
     return False
 
 
-def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 511) -> None:
+def annihilation_extractor(
+    geometry_file: str,
+    sim_file: str,
+    baseline_activation: bool,
+    compton_angle_activation: bool,
+    mid_activation: bool,
+    arm_activation: bool,
+    ref_energy: int = 511,
+) -> None:
     """Extract annihilation events and compute detection performance metrics.
 
     Args:
@@ -121,7 +140,14 @@ def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 
 
         number_good_events = process(event, ref_energy)
         is_annihilation = number_good_events > 0
-        detected_511 = detected_511_event(ref_energy, event)
+        detected_511 = detected_511_event(
+            ref_energy,
+            event,
+            baseline_activation,
+            compton_angle_activation,
+            mid_activation,
+            arm_activation,
+        )
 
         if is_annihilation:
             if detected_511:
@@ -151,3 +177,5 @@ def annihilation_extractor(geometry_file: str, sim_file: str, ref_energy: int = 
             "f1_score": f1_score,
         }
     )
+
+    plot_confusion_matrix(tp, fp, fn, tn)
