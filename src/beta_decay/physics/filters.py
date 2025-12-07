@@ -112,15 +112,16 @@ def klein_nishina_weight(energies: torch.Tensor) -> float:
     return weight
 
 
+# Not too impactful because of ~1% of events having 3 or more energies/positions
 def angular_resolution_measure_filter(
-    energies: torch.Tensor, positions: torch.Tensor, theta_limit: float = 1.05
+    energies: torch.Tensor, positions: torch.Tensor, theta_limit: float = 1.10
 ) -> bool | None:
     """Filter events using the angular resolution measure (ARM).
 
     Args:
         energies (torch.Tensor): Energy deposits for the interaction sequence (keV).
         positions (torch.Tensor): Interaction positions; first three hits are used (same order as energies).
-        theta_limit (float, optional): Max allowed ``cos(theta)`` magnitude to accept noisy angles. Defaults to 1.05.
+        theta_limit (float, optional): Max allowed ``cos(theta)`` magnitude to accept noisy angles. Defaults to 1.10.
 
     Returns:
         bool | None: True if the ARM is within threshold, False if rejected, None when not enough hits.
@@ -202,7 +203,7 @@ def angular_resolution_measure_filter(
         Returns:
             bool: True if the ARM passes the threshold, otherwise False.
         """
-        return arm_calculated <= arm_threshold
+        return bool(arm_calculated <= arm_threshold)
 
     if energies.numel() < 3 or positions.shape[0] < 3:
         return None
@@ -214,25 +215,40 @@ def angular_resolution_measure_filter(
         return False
 
     arm = calculate_arm(_theta_geo, _theta_kin)
+    print(arm)
 
     return classify_arm(arm)
 
 
-def scatter_plane_division_filter(positions: torch.Tensor) -> bool | None:
-    def normal_vectors(positions: torch.Tensor) -> tuple[float, float]:
-        n1, n2 = 0
-        return n1, n2
+# need to find the unit of the positions
+# need to verify the mid_threshold amount - read papers
+def minimum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 3.0) -> bool:
+    """Reject events where consecutive interaction points occur too close together.
 
-    def scatter_plane_division(n1: float, n2: float) -> float:
-        return torch.arccos((torch.dot(n1, n2)) / (torch.norm(n1) * torch.norm(n2)))
+    This filter enforces a minimum spatial separation between successive interaction
+    positions. In HPGe strip detectors (such as COSI), two interaction sites that occur
+    within a few millimeters of each other are often indistinguishable due to the
+    detector's spatial resolution. Applying a minimum interaction distance (MID)
+    threshold helps suppress physically implausible or poorly reconstructed sequences.
 
-    def classify_spd(scatter_plane_division: float) -> bool:
-        return
+    Args:
+        positions (torch.Tensor):
+            Tensor of shape (N, 3) containing interaction positions in millimeters.
+            Requires at least 2 positions; otherwise the event automatically passes.
+        mid_threshold (float):
+            Minimum allowed distance (in mm) between consecutive interaction points.
+            Defaults to 3.0 mm, consistent with HPGe positional resolution.
 
-    if positions.shape[0] < 3:
-        return None
+    Returns:
+        bool: True if all consecutive interaction distances are >= mid_threshold. False if any distance is below threshold or if NaNs are encountered.
+    """
+    if positions.shape[0] < 2:
+        return True
 
-    n1, n2 = normal_vectors(positions)
-    spd = scatter_plane_division(n1, n2)
+    diffs = positions[1:] - positions[:-1]  # shape (N-1, 3)
+    distances = torch.norm(diffs, dim=1)  # shape (N-1,)
 
-    return classify_spd(spd)
+    if torch.isnan(distances).any():
+        return False
+
+    return bool(torch.all(distances >= mid_threshold))

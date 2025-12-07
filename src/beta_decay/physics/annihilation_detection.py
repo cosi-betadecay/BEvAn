@@ -3,12 +3,15 @@ from typing import Any
 
 import ROOT as M
 import torch
+import wandb
 from mathematics.calculations import calculate_tolerance
-from physics.filters import angular_resolution_measure_filter, verify_compton_angle
+from physics.filters import (
+    angular_resolution_measure_filter,
+    minimum_interaction_distance_filter,
+    verify_compton_angle,
+)
 from tqdm import tqdm
 from utils.reader_extraction import get_reader
-
-import wandb
 
 
 def process(event: Any, ref_energy: float) -> int:
@@ -61,14 +64,20 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
     n_hits = event.GetNHTs()
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
-    positions = torch.tensor([(event.GetHTAt(i).GetPosition().X(),
-                  event.GetHTAt(i).GetPosition().Y(),
-                  event.GetHTAt(i).GetPosition().Z())
-                 for i in range(n_hits)], dtype=torch.float32)
+    positions = torch.tensor(
+        [
+            (
+                event.GetHTAt(i).GetPosition().X(),
+                event.GetHTAt(i).GetPosition().Y(),
+                event.GetHTAt(i).GetPosition().Z(),
+            )
+            for i in range(n_hits)
+        ],
+        dtype=torch.float32,
+    )
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
-
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
@@ -78,9 +87,14 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
             if not verify_compton_angle(energy_combo):
                 continue
 
+            if len(idx_combo) > 1:
+                mid_filter = minimum_interaction_distance_filter(pos_combo)
+                if mid_filter is False:
+                    continue
+
             if len(idx_combo) >= 3:
-                arm_ok = angular_resolution_measure_filter(energy_combo, pos_combo)
-                if arm_ok is False:
+                arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
+                if arm_filter is False or arm_filter is None:
                     continue
 
             return True
