@@ -3,11 +3,12 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from mathematics.calculations import calculate_tolerance
-from physics.filters import verify_compton_angle
+from physics.filters import angular_resolution_measure_filter, verify_compton_angle
 from tqdm import tqdm
 from utils.reader_extraction import get_reader
+
+import wandb
 
 
 def process(event: Any, ref_energy: float) -> int:
@@ -60,17 +61,29 @@ def detected_511_event(ref_energy: float, event: Any) -> bool:
     n_hits = event.GetNHTs()
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
-    positions = torch.tensor([event.GetHTAt(i).GetPosition() for i in range(n_hits)], dtype=torch.float32)
-
-    print(positions)
-    print(energies)
+    positions = torch.tensor([(event.GetHTAt(i).GetPosition().X(),
+                  event.GetHTAt(i).GetPosition().Y(),
+                  event.GetHTAt(i).GetPosition().Z())
+                 for i in range(n_hits)], dtype=torch.float32)
 
     for r in range(1, n_hits + 1):
-        for combo in itertools.combinations(energies, r):
-            combo_tensor = torch.stack(combo)
+        for idx_combo in itertools.combinations(range(n_hits), r):
 
-            if torch.abs(combo_tensor.sum() - ref_energy) >= tolerance and verify_compton_angle(combo_tensor):
-                return True
+            energy_combo = energies[list(idx_combo)]
+            pos_combo = positions[list(idx_combo)]
+
+            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance:
+                continue
+
+            if not verify_compton_angle(energy_combo):
+                continue
+
+            if len(idx_combo) >= 3:
+                arm_ok = angular_resolution_measure_filter(energy_combo, pos_combo)
+                if arm_ok is False:
+                    continue
+
+            return True
 
     return False
 
