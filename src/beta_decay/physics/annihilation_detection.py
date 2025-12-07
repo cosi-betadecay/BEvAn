@@ -1,6 +1,7 @@
 import itertools
 from typing import Any
 
+import matplotlib.pyplot as plt
 import ROOT as M
 import torch
 import wandb
@@ -165,6 +166,7 @@ def annihilation_extractor(
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
+    fig = plot_confusion_matrix(tp, fp, fn, tn)
     wandb.log(
         {
             "TP": tp,
@@ -175,7 +177,7 @@ def annihilation_extractor(
             "recall": recall,
             "false_positive_rate": fpr,
             "f1_score": f1_score,
+            "confusion_matrix": wandb.Image(fig),
         }
     )
-
-    plot_confusion_matrix(tp, fp, fn, tn)
+    plt.close(fig)
