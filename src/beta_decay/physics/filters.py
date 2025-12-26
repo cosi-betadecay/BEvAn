@@ -221,6 +221,8 @@ def angular_resolution_measure_filter(
 
 # need to find the unit of the positions
 # need to verify the mid_threshold amount - read papers
+# todo: absorbtion of
+# naive bayesian for prob not filters
 def maximum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 4.0) -> bool:
     """Reject events where consecutive interaction points occur too far together.
 
