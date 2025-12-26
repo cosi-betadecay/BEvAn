@@ -11,6 +11,7 @@ from physics.filters import (
     maximum_interaction_distance_filter,
     verify_compton_angle,
 )
+from physics.likelihoods import compton_kinematic_likelihood, energy_likelihood
 from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
@@ -109,6 +110,51 @@ def detected_511_event(
     return False
 
 
+def detected_511_event_likelihoods(
+    ref_energy: float,
+    event: Any,
+) -> bool:
+    """Check if event contains a hit combination summing to the reference energy.
+
+    Args:
+        ref_energy (float): Reference energy to compare against (e.g., 511 keV).
+        Event (Any): MEGAlib event object with detector hits.
+
+    Returns:
+        bool: True if a hit combination matches the reference energy, else False.
+    """
+    tolerance = calculate_tolerance()
+    n_hits = event.GetNHTs()
+
+    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+    positions = torch.tensor(
+        [
+            (
+                event.GetHTAt(i).GetPosition().X(),
+                event.GetHTAt(i).GetPosition().Y(),
+                event.GetHTAt(i).GetPosition().Z(),
+            )
+            for i in range(n_hits)
+        ],
+        dtype=torch.float32,
+    )
+
+    for r in range(1, n_hits + 1):
+        for idx_combo in itertools.combinations(range(n_hits), r):
+            energy_combo = energies[list(idx_combo)]
+            pos_combo = positions[list(idx_combo)]
+
+            _energy_likelihood = energy_likelihood(energy_combo, ref_energy, tolerance)
+            _compton_kin_likelihood = compton_kinematic_likelihood(energy_combo)
+
+            wandb.log(
+                {
+                    "energy_likelihood": _energy_likelihood.item(),
+                    "compton_kinematic_likelihood": _compton_kin_likelihood.item(),
+                }
+            )
+
+
 def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
@@ -148,6 +194,11 @@ def annihilation_extractor(
             compton_angle_activation,
             mid_activation,
             arm_activation,
+        )
+
+        detected_511_event_likelihoods(
+            ref_energy,
+            event,
         )
 
         if is_annihilation:
