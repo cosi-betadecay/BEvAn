@@ -56,3 +56,44 @@ def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
     _sigma_cos_phi = sigma_cos_phi(E_0, E)
 
     return torch.exp(-((torch.max(torch.tensor(0.0), torch.abs(cos_phi) - 1) / _sigma_cos_phi) ** 2) / 2)
+
+
+def maximum_interaction_distance_likelihood(positions: torch.Tensor, mid_threshold: float = 4.0) -> float:
+    """Calculate the maximum interaction distance likelihood for a set of interaction positions.
+
+    Args:
+        positions (torch.Tensor): Tensor of interaction positions.
+        mid_threshold (float, optional): Maximum allowed distance between consecutive interaction points. Defaults to 4.0.
+
+    Returns:
+        float: Maximum interaction distance likelihood.
+    """
+
+    def sigma_d() -> float:
+        """Calculate the uncertainty in interaction distance.
+
+        Returns:
+            float: Uncertainty in interaction distance.
+        """
+        fwhm = 0.175
+        sigma = torch.sqrt(2) * (fwhm / 2.355)
+        return 3 * sigma
+
+    n_interactions = positions.shape[0]
+    if n_interactions < 2:
+        return 1.0
+
+    diffs = positions[1:] - positions[:-1]
+    distances = torch.norm(diffs, dim=1)
+    _sigma_d = sigma_d()
+
+    if torch.isnan(distances).any():
+        return 0.0
+
+    penalties = torch.where(
+        distances <= mid_threshold,
+        torch.ones_like(distances),
+        torch.exp(-0.5 * ((distances - mid_threshold) / _sigma_d) ** 2),
+    )
+
+    return float(torch.min(penalties))

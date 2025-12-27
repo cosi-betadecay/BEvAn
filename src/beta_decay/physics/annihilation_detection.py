@@ -11,7 +11,11 @@ from physics.filters import (
     maximum_interaction_distance_filter,
     verify_compton_angle,
 )
-from physics.likelihoods import compton_kinematic_likelihood, energy_likelihood
+from physics.likelihoods import (
+    compton_kinematic_likelihood,
+    energy_likelihood,
+    maximum_interaction_distance_likelihood,
+)
 from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
@@ -56,10 +60,6 @@ def process(event: Any, ref_energy: float) -> int:
 def detected_511_event(
     ref_energy: float,
     event: Any,
-    baseline_activation: bool,
-    compton_angle_activation: bool,
-    mid_activation: bool,
-    arm_activation: bool,
 ) -> bool:
     """Check if event contains a hit combination summing to the reference energy.
 
@@ -91,16 +91,16 @@ def detected_511_event(
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance and baseline_activation:
+            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance:
                 continue
 
-            if not verify_compton_angle(energy_combo) and compton_angle_activation:
+            if not verify_compton_angle(energy_combo):
                 continue
 
-            if not maximum_interaction_distance_filter(pos_combo) and mid_activation:
+            if not maximum_interaction_distance_filter(pos_combo):
                 continue
 
-            if len(idx_combo) >= 3 and arm_activation:
+            if len(idx_combo) >= 3 and False:
                 arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
                 if arm_filter is False or arm_filter is None:
                     continue
@@ -146,22 +146,18 @@ def detected_511_event_likelihoods(
 
             _energy_likelihood = energy_likelihood(energy_combo, ref_energy, tolerance)
             _compton_kin_likelihood = compton_kinematic_likelihood(energy_combo)
+            _mid_likelihood = maximum_interaction_distance_likelihood(pos_combo)
 
-            wandb.log(
-                {
-                    "energy_likelihood": _energy_likelihood.item(),
-                    "compton_kinematic_likelihood": _compton_kin_likelihood.item(),
-                }
+            print(
+                f"Energy Likelihood: {_energy_likelihood.item():.6f}, "
+                f"Compton Kinematic Likelihood: {_compton_kin_likelihood.item():.6f}, "
+                f"MID Likelihood: {_mid_likelihood.item():.6f}"
             )
 
 
 def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
-    baseline_activation: bool,
-    compton_angle_activation: bool,
-    mid_activation: bool,
-    arm_activation: bool,
     ref_energy: int = 511,
 ) -> None:
     """Extract annihilation events and compute detection performance metrics.
@@ -190,10 +186,6 @@ def annihilation_extractor(
         detected_511 = detected_511_event(
             ref_energy,
             event,
-            baseline_activation,
-            compton_angle_activation,
-            mid_activation,
-            arm_activation,
         )
 
         detected_511_event_likelihoods(
