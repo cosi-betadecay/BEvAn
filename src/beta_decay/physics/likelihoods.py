@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 
@@ -12,9 +13,11 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
     Returns:
         float: Energy likelihood value.
     """
-    return (
-        1 / (torch.sqrt(2 * torch.pi) * sigma_e) * torch.exp(-(((energies - ref_energy) / sigma_e) ** 2) / 2)
+    likelihoods = (
+        1 / (np.sqrt(2 * torch.pi) * sigma_e) * torch.exp(-(((energies - ref_energy) / sigma_e) ** 2) / 2)
     )
+
+    return torch.max(likelihoods)
 
 
 def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
@@ -76,7 +79,7 @@ def maximum_interaction_distance_likelihood(positions: torch.Tensor, mid_thresho
             float: Uncertainty in interaction distance.
         """
         fwhm = 0.175
-        sigma = torch.sqrt(2) * (fwhm / 2.355)
+        sigma = np.sqrt(2) * (fwhm / 2.355)
         return 3 * sigma
 
     n_interactions = positions.shape[0]

@@ -151,7 +151,7 @@ def detected_511_event_likelihoods(
             print(
                 f"Energy Likelihood: {_energy_likelihood.item():.6f}, "
                 f"Compton Kinematic Likelihood: {_compton_kin_likelihood.item():.6f}, "
-                f"MID Likelihood: {_mid_likelihood.item():.6f}"
+                f"MID Likelihood: {_mid_likelihood:.6f}"
             )
 
 
