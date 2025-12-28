@@ -12,14 +12,14 @@ import ROOT as M
 import torch
 import tqdm
 
-from beta_decay.mathematics.calculations import calculate_tolerance
-from beta_decay.physics.annihilation_detection import process
-from beta_decay.physics.likelihoods import (
+from mathematics.calculations import calculate_tolerance
+from physics.annihilation_detection import process
+from physics.likelihoods import (
     compton_kinematic_likelihood,
     energy_likelihood,
     maximum_interaction_distance_likelihood,
 )
-from beta_decay.utils.reader_extraction import get_reader
+from utils.reader_extraction import get_reader
 
 
 def detected_511_event_likelihoods(
