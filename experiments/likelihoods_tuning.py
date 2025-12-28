@@ -1,10 +1,3 @@
-"""
-Experiment to tune likelihood calculations for annihilation event detection.
-Need to create some plots, etc. for analysis.
-Combine the ground truth algorithm with the itertools permutations to check effectiveness of likelihoods
-for different interaction orderings during real annihilation events.
-"""
-
 import itertools
 from typing import Any
 
