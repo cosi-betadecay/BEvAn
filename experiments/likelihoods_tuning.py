@@ -1,9 +1,16 @@
 import itertools
+import os
+import sys
 from typing import Any
 
 import ROOT as M
 import torch
-import tqdm
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+import wandb
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import process
@@ -14,6 +21,9 @@ from physics.likelihoods import (
 )
 from utils.reader_extraction import get_reader
 
+##################################################################################
+##################################################################################
+##################################################################################
 
 def detected_511_event_likelihoods(
     ref_energy: float,
@@ -60,24 +70,14 @@ def detected_511_event_likelihoods(
             )
 
 
-def annihilation_extractor(
+def annihilation_extractor_test_likelihoods(
     geometry_file: str,
     sim_file: str,
     ref_energy: int = 511,
 ) -> None:
-    """Extract annihilation events and compute detection performance metrics.
 
-    Args:
-        geometry_file (str): Path to the detector geometry setup file (XML).
-        sim_file (str): Path to the MEGAlib simulation file (.sim).
-        ref_energy (float): Reference energy to compare against (default 511 keV).
-
-    Returns:
-        None
-    """
     reader = get_reader(geometry_file, sim_file)
 
-    tp, fp, fn, tn = 0, 0, 0, 0
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -89,8 +89,24 @@ def annihilation_extractor(
         is_annihilation = process(event, ref_energy)
 
         if is_annihilation:
-            detected_511 = detected_511_event_likelihoods(
+            detected_511_event_likelihoods(
                 ref_energy,
                 event,
             )
-            break
+
+
+if __name__ == "__main__":
+    load_dotenv()
+    wandb_api_key = os.getenv("WANDB_API_KEY")
+
+    if wandb_api_key is None:
+        raise RuntimeError("WANDB_API_KEY not found in .env")
+
+    wandb.login(key=wandb_api_key)
+    wandb.init(project="cosi-betadecay-likelihoods")
+
+    annihilation_extractor_test_likelihoods(
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    )
+
+    wandb.finish()
