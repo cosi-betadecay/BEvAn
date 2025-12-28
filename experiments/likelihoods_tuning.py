@@ -5,45 +5,99 @@ Combine the ground truth algorithm with the itertools permutations to check effe
 for different interaction orderings during real annihilation events.
 """
 
+import itertools
 from typing import Any
 
 import ROOT as M
+import torch
+import tqdm
 
 from beta_decay.mathematics.calculations import calculate_tolerance
-from beta_decay.physics.filters import maximum_interaction_distance_filter, verify_compton_angle
+from beta_decay.physics.annihilation_detection import process
 from beta_decay.physics.likelihoods import (
     compton_kinematic_likelihood,
     energy_likelihood,
     maximum_interaction_distance_likelihood,
 )
+from beta_decay.utils.reader_extraction import get_reader
 
 
-def process(event: Any, ref_energy: float) -> int:
+def detected_511_event_likelihoods(
+    ref_energy: float,
+    event: Any,
+) -> bool:
+    """Check if event contains a hit combination summing to the reference energy.
+
+    Args:
+        ref_energy (float): Reference energy to compare against (e.g., 511 keV).
+        Event (Any): MEGAlib event object with detector hits.
+
+    Returns:
+        bool: True if a hit combination matches the reference energy, else False.
+    """
     tolerance = calculate_tolerance()
-    number_good_events = 0
+    n_hits = event.GetNHTs()
 
-    for i in range(event.GetNIAs()):
-        if event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
-            process_id = i + 1
+    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+    positions = torch.tensor(
+        [
+            (
+                event.GetHTAt(i).GetPosition().X(),
+                event.GetHTAt(i).GetPosition().Y(),
+                event.GetHTAt(i).GetPosition().Z(),
+            )
+            for i in range(n_hits)
+        ],
+        dtype=torch.float32,
+    )
 
-            secondary_ids = []
-            for j in range(event.GetNIAs()):
-                if event.GetIAAt(j).GetOriginID() == process_id:
-                    secondary_ids.append(j + 1)
+    for r in range(1, n_hits + 1):
+        for idx_combo in itertools.combinations(range(n_hits), r):
+            energy_combo = energies[list(idx_combo)]
+            pos_combo = positions[list(idx_combo)]
 
-            total_energy = 0
-            for h in range(event.GetNHTs()):
-                for sid in secondary_ids:
-                    if event.GetHTAt(h).IsOrigin(sid):
-                        total_energy += event.GetHTAt(h).GetEnergy()
-                        break
+            _energy_likelihood = energy_likelihood(energy_combo, ref_energy, tolerance)
+            _compton_kin_likelihood = compton_kinematic_likelihood(energy_combo)
+            _mid_likelihood = maximum_interaction_distance_likelihood(pos_combo)
 
-            if abs(total_energy - ref_energy) < tolerance:
-                _energy_likelihood = energy_likelihood()
-                _compton_kin_likelihood = compton_kinematic_likelihood()
-                _mid_likelihood = maximum_interaction_distance_likelihood()
+            print(
+                f"Energy Likelihood: {_energy_likelihood.item():.6f}, "
+                f"Compton Kinematic Likelihood: {_compton_kin_likelihood.item():.6f}, "
+                f"MID Likelihood: {_mid_likelihood:.6f}"
+            )
 
-                _compton_kin_filter = verify_compton_angle()
-                _mid_filter = maximum_interaction_distance_filter()
 
-    return number_good_events
+def annihilation_extractor(
+    geometry_file: str,
+    sim_file: str,
+    ref_energy: int = 511,
+) -> None:
+    """Extract annihilation events and compute detection performance metrics.
+
+    Args:
+        geometry_file (str): Path to the detector geometry setup file (XML).
+        sim_file (str): Path to the MEGAlib simulation file (.sim).
+        ref_energy (float): Reference energy to compare against (default 511 keV).
+
+    Returns:
+        None
+    """
+    reader = get_reader(geometry_file, sim_file)
+
+    tp, fp, fn, tn = 0, 0, 0, 0
+
+    for event in tqdm(
+        iter(lambda: reader.GetNextEvent(), None),
+        desc="Processing events",
+        unit="event",
+    ):
+        M.SetOwnership(event, True)
+
+        is_annihilation = process(event, ref_energy)
+
+        if is_annihilation:
+            detected_511 = detected_511_event_likelihoods(
+                ref_energy,
+                event,
+            )
+            break
