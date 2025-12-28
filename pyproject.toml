@@ -24,7 +24,7 @@ dependencies = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = [".", "tests"]
 
 [tool.ruff.lint]
 # E/F/W: pycodestyle/pyflakes warnings; D: pydocstyle for docstrings; I: isort import order.
@@ -34,15 +34,14 @@ ignore = ["D100", "D104"]
 per-file-ignores = { "tests/*" = ["D"] }
 
 [tool.ruff.lint.isort]
-known-first-party = ["beta_decay", "physics", "utils"]
+known-first-party = ["physics", "mathematics", "utils", "experiments"]
 lines-after-imports = 1
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.setuptools]
-package-dir = { "" = "src" }
+package-dir = { "" = "." }
 
 [tool.setuptools.packages.find]
-where = ["src"]
-
+where = ["."]

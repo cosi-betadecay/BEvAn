@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from src.beta_decay.physics.filters import angular_resolution_measure_filter, verify_compton_angle
+from physics.filters import angular_resolution_measure_filter, verify_compton_angle
 
 # ----------------------------
 # Tests: Compton kinematic angle filter
