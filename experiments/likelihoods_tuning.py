@@ -5,10 +5,9 @@ from typing import Any
 
 import ROOT as M
 import torch
+import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
-
-import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -24,6 +23,7 @@ from utils.reader_extraction import get_reader
 ##################################################################################
 ##################################################################################
 ##################################################################################
+
 
 def detected_511_event_likelihoods(
     ref_energy: float,
@@ -63,10 +63,12 @@ def detected_511_event_likelihoods(
             _compton_kin_likelihood = compton_kinematic_likelihood(energy_combo)
             _mid_likelihood = maximum_interaction_distance_likelihood(pos_combo)
 
-            print(
-                f"Energy Likelihood: {_energy_likelihood.item():.6f}, "
-                f"Compton Kinematic Likelihood: {_compton_kin_likelihood.item():.6f}, "
-                f"MID Likelihood: {_mid_likelihood:.6f}"
+            wandb.log(
+                {
+                    "Energy Likelihood": _energy_likelihood.item(),
+                    "Compton Kinematic Likelihood": _compton_kin_likelihood.item(),
+                    "MID Likelihood": _mid_likelihood,
+                }
             )
 
 
@@ -75,9 +77,7 @@ def annihilation_extractor_test_likelihoods(
     sim_file: str,
     ref_energy: int = 511,
 ) -> None:
-
     reader = get_reader(geometry_file, sim_file)
-
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
