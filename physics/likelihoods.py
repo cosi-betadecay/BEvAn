@@ -13,11 +13,13 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
     Returns:
         float: Energy likelihood value.
     """
-    likelihoods = (
-        1 / (np.sqrt(2 * torch.pi) * sigma_e) * torch.exp(-(((energies - ref_energy) / sigma_e) ** 2) / 2)
+    likelihood = (
+        1
+        / (np.sqrt(2 * torch.pi) * sigma_e)
+        * torch.exp(-(((torch.sum(energies) - ref_energy) / sigma_e) ** 2) / 2)
     )
 
-    return float(torch.max(likelihoods))
+    return float(likelihood)
 
 
 def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
