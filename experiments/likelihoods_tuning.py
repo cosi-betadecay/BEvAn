@@ -14,6 +14,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
+from physics.annihilation_detection import process
 from physics.likelihoods import (
     compton_kinematic_likelihood,
     energy_likelihood,
@@ -85,16 +86,16 @@ def annihilation_extractor_test_likelihoods(
     ):
         M.SetOwnership(event, True)
 
-        # is_annihilation = process(event, ref_energy)
+        is_annihilation = process(event, ref_energy)
 
-        # if is_annihilation:
-        energy_likelihood, compton_kinematic_likelihood, mid_likelihood = detected_511_event_likelihoods(
-            ref_energy,
-            event,
-        )
-        energy_likelihoods.append(energy_likelihood)
-        compton_kinematic_likelihoods.append(compton_kinematic_likelihood)
-        mid_likelihoods.append(mid_likelihood)
+        if is_annihilation:
+            energy_likelihood, compton_kinematic_likelihood, mid_likelihood = detected_511_event_likelihoods(
+                ref_energy,
+                event,
+            )
+            energy_likelihoods.append(energy_likelihood)
+            compton_kinematic_likelihoods.append(compton_kinematic_likelihood)
+            mid_likelihoods.append(mid_likelihood)
 
     return energy_likelihoods, compton_kinematic_likelihoods, mid_likelihoods
 
@@ -236,17 +237,17 @@ if __name__ == "__main__":
     ecdf_slope(energy_likelihoods, "Energy Likelihood")
 
     # Kinematic
-    histogram(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    histogram_log(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    cdf(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    violin_plot(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    ecdf_slope(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # histogram(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # histogram_log(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # cdf(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # violin_plot(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # ecdf_slope(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
 
     # MID
-    histogram(mid_likelihoods, "MID Likelihood")
-    histogram_log(mid_likelihoods, "MID Likelihood")
-    cdf(mid_likelihoods, "MID Likelihood")
-    violin_plot(mid_likelihoods, "MID Likelihood")
-    ecdf_slope(mid_likelihoods, "MID Likelihood")
+    # histogram(mid_likelihoods, "MID Likelihood")
+    # histogram_log(mid_likelihoods, "MID Likelihood")
+    # cdf(mid_likelihoods, "MID Likelihood")
+    # violin_plot(mid_likelihoods, "MID Likelihood")
+    # ecdf_slope(mid_likelihoods, "MID Likelihood")
 
     wandb.finish()
