@@ -1,7 +1,7 @@
 import torch
 
 
-def verify_compton_angle(energies: torch.Tensor) -> bool:
+def compton_kinematic_angle_filter(energies: torch.Tensor) -> bool:
     """Calculate the Compton scattering angle from two energy deposits.
 
     Args:

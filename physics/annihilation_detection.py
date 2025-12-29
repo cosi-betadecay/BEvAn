@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 import ROOT as M
 import torch
 import wandb
+from tqdm import tqdm
+
 from mathematics.calculations import calculate_tolerance
 from physics.filters import (
     angular_resolution_measure_filter,
+    compton_kinematic_angle_filter,
     maximum_interaction_distance_filter,
-    verify_compton_angle,
 )
-from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -89,7 +90,7 @@ def detected_511_event(
             if torch.abs(energy_combo.sum() - ref_energy) >= tolerance:
                 continue
 
-            if not verify_compton_angle(energy_combo):
+            if not compton_kinematic_angle_filter(energy_combo):
                 continue
 
             if not maximum_interaction_distance_filter(pos_combo):
