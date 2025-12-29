@@ -133,7 +133,7 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key}/hist", fig)
+    _log_image(f"{key} - hist", fig)
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
@@ -149,7 +149,7 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist, log10(count))")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key}/hist_logy", fig)
+    _log_image(f"{key} - hist_logy", fig)
 
 
 def cdf(likelihoods: list[float], key: str):
@@ -167,7 +167,7 @@ def cdf(likelihoods: list[float], key: str):
     ax.set_title(f"{key} (CDF)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key}/cdf", fig)
+    _log_image(f"{key} - cdf", fig)
 
 
 def violin_plot(likelihoods: list[float], key: str):
@@ -184,7 +184,7 @@ def violin_plot(likelihoods: list[float], key: str):
     ax.set_xticks([])
     ax.set_title(f"{key} (violin)")
 
-    _log_image(f"{key}/violin", fig)
+    _log_image(f"{key} - violin", fig)
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
@@ -203,7 +203,7 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     ax.set_title(f"{key} (ECDF slope proxy / density)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key}/ecdf_slope", fig)
+    _log_image(f"{key} - ecdf_slope", fig)
 
 
 ##################################################################################
