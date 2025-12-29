@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+from mathematics.calculations import calculate_tolerance
+
 
 def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
     """Calculate the likelihood of a set of energy deposits given a reference energy and uncertainty.
@@ -18,13 +20,13 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
     return float(likelihood)
 
 
-def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
-    """Calculate the Compton kinematic likelihood for a set of energy deposits.
+def compton_kinematic_weight(energies: torch.Tensor) -> float:
+    """Calculate a Compton kinematic weight for a set of energy deposits.
 
     Args:
         energies (torch.Tensor): Energy deposits (keV) in interaction order.
     Returns:
-        float: Compton kinematic likelihood.
+        float: Compton kinematic weight.
     """
 
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
@@ -59,6 +61,13 @@ def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
     return float(
         torch.exp(-((torch.max(torch.tensor(0.0), torch.abs(cos_phi) - 1) / _sigma_cos_phi) ** 2) / 2)
     )
+
+
+def energy_likelihood_weighted(energies: torch.Tensor):
+    _energy_likelihood = energy_likelihood(energies, ref_energy=511.0, sigma_e=calculate_tolerance())
+    _compton_kin_likelihood = compton_kinematic_weight(energies)
+
+    return _energy_likelihood * _compton_kin_likelihood
 
 
 def maximum_interaction_distance_likelihood(positions: torch.Tensor, mid_threshold: float = 4.0) -> float:

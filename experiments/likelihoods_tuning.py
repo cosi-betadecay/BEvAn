@@ -16,8 +16,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import process
 from physics.likelihoods import (
-    compton_kinematic_likelihood,
     energy_likelihood,
+    energy_likelihood_weighted,
     maximum_interaction_distance_likelihood,
 )
 from utils.reader_extraction import get_reader
@@ -51,7 +51,7 @@ def detected_511_event_likelihoods(
     )
 
     _energy_likelihood = -float("inf")
-    _compton_kin_likelihood = -float("inf")
+    _energy_likelihood_weighted = -float("inf")
     _mid_likelihood = -float("inf")
 
     for r in range(1, n_hits + 1):
@@ -62,10 +62,12 @@ def detected_511_event_likelihoods(
             _energy_likelihood = max(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
-            _compton_kin_likelihood = max(_compton_kin_likelihood, compton_kinematic_likelihood(energy_combo))
+            _energy_likelihood_weighted = max(
+                _energy_likelihood_weighted, energy_likelihood_weighted(energy_combo)
+            )
             _mid_likelihood = max(_mid_likelihood, maximum_interaction_distance_likelihood(pos_combo))
 
-    return _energy_likelihood, _compton_kin_likelihood, _mid_likelihood
+    return _energy_likelihood, _energy_likelihood_weighted, _mid_likelihood
 
 
 def annihilation_extractor_test_likelihoods(
@@ -76,7 +78,7 @@ def annihilation_extractor_test_likelihoods(
     reader = get_reader(geometry_file, sim_file)
 
     energy_likelihoods = []
-    compton_kinematic_likelihoods = []
+    energy_likelihoods_weighted = []
     mid_likelihoods = []
 
     for event in tqdm(
@@ -89,15 +91,15 @@ def annihilation_extractor_test_likelihoods(
         is_annihilation = process(event, ref_energy)
 
         if is_annihilation:
-            energy_likelihood, compton_kinematic_likelihood, mid_likelihood = detected_511_event_likelihoods(
+            energy_likelihood, energy_likelihood_weighted, mid_likelihood = detected_511_event_likelihoods(
                 ref_energy,
                 event,
             )
             energy_likelihoods.append(energy_likelihood)
-            compton_kinematic_likelihoods.append(compton_kinematic_likelihood)
+            energy_likelihoods_weighted.append(energy_likelihood_weighted)
             mid_likelihoods.append(mid_likelihood)
 
-    return energy_likelihoods, compton_kinematic_likelihoods, mid_likelihoods
+    return energy_likelihoods, energy_likelihoods_weighted, mid_likelihoods
 
 
 ##################################################################################
@@ -223,25 +225,25 @@ if __name__ == "__main__":
     wandb.login(key=wandb_api_key)
     wandb.init(project="cosi-betadecay-likelihoods")
 
-    energy_likelihoods, compton_kinematic_likelihoods, mid_likelihoods = (
+    energy_likelihoods, energy_likelihoods_weighted, mid_likelihoods = (
         annihilation_extractor_test_likelihoods(
             "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
         )
     )
 
     # Energy
-    histogram(energy_likelihoods, "Energy Likelihood")
-    histogram_log(energy_likelihoods, "Energy Likelihood")
-    cdf(energy_likelihoods, "Energy Likelihood")
-    violin_plot(energy_likelihoods, "Energy Likelihood")
-    ecdf_slope(energy_likelihoods, "Energy Likelihood")
+    # histogram(energy_likelihoods, "Energy Likelihood")
+    # histogram_log(energy_likelihoods, "Energy Likelihood")
+    # cdf(energy_likelihoods, "Energy Likelihood")
+    # violin_plot(energy_likelihoods, "Energy Likelihood")
+    # ecdf_slope(energy_likelihoods, "Energy Likelihood")
 
-    # Kinematic
-    # histogram(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    # histogram_log(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    # cdf(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    # violin_plot(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
-    # ecdf_slope(compton_kinematic_likelihoods, "Compton Kinematic Likelihood")
+    # Energy Weighted
+    histogram(energy_likelihoods_weighted, "Energy Likelihood Weighted")
+    histogram_log(energy_likelihoods_weighted, "Energy Likelihood Weighted")
+    cdf(energy_likelihoods_weighted, "Energy Likelihood Weighted")
+    violin_plot(energy_likelihoods_weighted, "Energy Likelihood Weighted")
+    ecdf_slope(energy_likelihoods_weighted, "Energy Likelihood Weighted")
 
     # MID
     # histogram(mid_likelihoods, "MID Likelihood")
