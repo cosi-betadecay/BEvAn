@@ -17,7 +17,7 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
         1 / (np.sqrt(2 * torch.pi) * sigma_e) * torch.exp(-(((energies - ref_energy) / sigma_e) ** 2) / 2)
     )
 
-    return torch.max(likelihoods)
+    return float(torch.max(likelihoods))
 
 
 def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
@@ -58,7 +58,9 @@ def compton_kinematic_likelihood(energies: torch.Tensor) -> float:
     cos_phi = 1 - electron_mass_energy * (1 / E - 1 / E_0)
     _sigma_cos_phi = sigma_cos_phi(E_0, E)
 
-    return torch.exp(-((torch.max(torch.tensor(0.0), torch.abs(cos_phi) - 1) / _sigma_cos_phi) ** 2) / 2)
+    return float(
+        torch.exp(-((torch.max(torch.tensor(0.0), torch.abs(cos_phi) - 1) / _sigma_cos_phi) ** 2) / 2)
+    )
 
 
 def maximum_interaction_distance_likelihood(positions: torch.Tensor, mid_threshold: float = 4.0) -> float:
