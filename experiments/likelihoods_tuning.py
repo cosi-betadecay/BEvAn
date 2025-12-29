@@ -14,9 +14,9 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
-from physics.annihilation_detection import process
 from physics.likelihoods import (
     energy_likelihood,
+    klein_nishina_weight,
 )
 from utils.reader_extraction import get_reader
 
@@ -49,6 +49,7 @@ def detected_511_event_likelihoods(
     )
 
     _energy_likelihood = -float("inf")
+    _klein_nishina_weight = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -58,8 +59,9 @@ def detected_511_event_likelihoods(
             _energy_likelihood = max(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
+            _klein_nishina_weight = max(_klein_nishina_weight, klein_nishina_weight(energy_combo))
 
-    return _energy_likelihood
+    return _energy_likelihood, _klein_nishina_weight
 
 
 def annihilation_extractor_test_likelihoods(
@@ -70,6 +72,7 @@ def annihilation_extractor_test_likelihoods(
     reader = get_reader(geometry_file, sim_file)
 
     energy_likelihoods = []
+    klein_nishina_weight_likelihoods = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -78,16 +81,16 @@ def annihilation_extractor_test_likelihoods(
     ):
         M.SetOwnership(event, True)
 
-        is_annihilation = process(event, ref_energy)
+        # is_annihilation = process(event, ref_energy)
 
-        if is_annihilation:
-            energy_likelihood = detected_511_event_likelihoods(
-                ref_energy,
-                event,
-            )
-            energy_likelihoods.append(energy_likelihood)
+        energy_likelihood, klein_nishina_weight_likelihood = detected_511_event_likelihoods(
+            ref_energy,
+            event,
+        )
+        energy_likelihoods.append(energy_likelihood)
+        klein_nishina_weight_likelihoods.append(klein_nishina_weight_likelihood)
 
-    return energy_likelihoods
+    return energy_likelihoods, klein_nishina_weight_likelihoods
 
 
 ##################################################################################
@@ -213,7 +216,7 @@ if __name__ == "__main__":
     wandb.login(key=wandb_api_key)
     wandb.init(project="cosi-betadecay-likelihoods")
 
-    energy_likelihoods = annihilation_extractor_test_likelihoods(
+    energy_likelihoods, klein_nishina_weight_likelihoods = annihilation_extractor_test_likelihoods(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
 
@@ -223,5 +226,12 @@ if __name__ == "__main__":
     cdf(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
     violin_plot(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
     ecdf_slope(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
+
+    # Klein Nishina
+    histogram(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    histogram_log(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    cdf(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    violin_plot(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    ecdf_slope(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
 
     wandb.finish()
