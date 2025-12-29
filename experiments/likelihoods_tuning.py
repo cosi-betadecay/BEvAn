@@ -3,18 +3,17 @@ import os
 import sys
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 import ROOT as M
 import torch
 import wandb
 from dotenv import load_dotenv
-from matplotlib.pyplot import plt
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
-from physics.annihilation_detection import process
 from physics.likelihoods import (
     compton_kinematic_likelihood,
     energy_likelihood,
@@ -86,16 +85,16 @@ def annihilation_extractor_test_likelihoods(
     ):
         M.SetOwnership(event, True)
 
-        is_annihilation = process(event, ref_energy)
+        # is_annihilation = process(event, ref_energy)
 
-        if is_annihilation:
-            energy_likelihood, compton_kinematic_likelihood, mid_likelihood = detected_511_event_likelihoods(
-                ref_energy,
-                event,
-            )
-            energy_likelihoods.append(energy_likelihood)
-            compton_kinematic_likelihoods.append(compton_kinematic_likelihood)
-            mid_likelihoods.append(mid_likelihood)
+        # if is_annihilation:
+        energy_likelihood, compton_kinematic_likelihood, mid_likelihood = detected_511_event_likelihoods(
+            ref_energy,
+            event,
+        )
+        energy_likelihoods.append(energy_likelihood)
+        compton_kinematic_likelihoods.append(compton_kinematic_likelihood)
+        mid_likelihoods.append(mid_likelihood)
 
     return energy_likelihoods, compton_kinematic_likelihoods, mid_likelihoods
 
