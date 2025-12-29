@@ -8,6 +8,7 @@ import ROOT as M
 import torch
 import wandb
 from dotenv import load_dotenv
+from matplotlib.pyplot import plt
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -49,9 +50,9 @@ def detected_511_event_likelihoods(
         dtype=torch.float32,
     )
 
-    _energy_likelihood = None
-    _compton_kin_likelihood = None
-    _mid_likelihood = None
+    _energy_likelihood = -float("inf")
+    _compton_kin_likelihood = -float("inf")
+    _mid_likelihood = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -151,10 +152,21 @@ def cdf(likelihoods: list[float], key: str):
 
 
 def violin_plot(likelihoods: list[float], key: str):
-    # W&B has a built-in boxplot; violin isn't always available depending on UI.
-    # Use boxplot (robust) as "violin-style summary", or log an image if you insist on true violin.
-    t = make_table(likelihoods, key)
-    wandb.log({f"{key}/boxplot": wandb.plot.boxplot(t, key, title=f"{key} (boxplot)")})
+    vals = np.asarray(likelihoods, dtype=np.float64)
+    vals = vals[np.isfinite(vals)]
+    vals = np.clip(vals, 0.0, 1.0)
+
+    if len(vals) == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.violinplot(vals, showmeans=True, showmedians=True)
+    ax.set_ylabel("Likelihood")
+    ax.set_xticks([])
+    ax.set_title(f"{key} (violin)")
+
+    wandb.log({f"{key}/violin": wandb.Image(fig)})
+    plt.close(fig)
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
