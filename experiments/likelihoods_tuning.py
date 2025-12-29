@@ -111,6 +111,15 @@ def as_np(vals) -> np.ndarray:
     return np.clip(arr, 0.0, 1.0)
 
 
+def _log_image(key: str, fig: plt.Figure) -> None:
+    # Log image and pin to summary so it shows up immediately on the dashboard.
+    img = wandb.Image(fig)
+    wandb.log({key: img})
+    if wandb.run is not None:
+        wandb.run.summary[key] = img
+    plt.close(fig)
+
+
 def histogram(likelihoods: list[float], key: str, bins: int = 50):
     x = as_np(likelihoods)
     if x.size == 0:
@@ -124,8 +133,7 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    wandb.log({f"{key}/hist": wandb.Image(fig)})
-    plt.close(fig)
+    _log_image(f"{key}/hist", fig)
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
@@ -141,8 +149,7 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist, log10(count))")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    wandb.log({f"{key}/hist_logy": wandb.Image(fig)})
-    plt.close(fig)
+    _log_image(f"{key}/hist_logy", fig)
 
 
 def cdf(likelihoods: list[float], key: str):
@@ -160,8 +167,7 @@ def cdf(likelihoods: list[float], key: str):
     ax.set_title(f"{key} (CDF)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    wandb.log({f"{key}/cdf": wandb.Image(fig)})
-    plt.close(fig)
+    _log_image(f"{key}/cdf", fig)
 
 
 def violin_plot(likelihoods: list[float], key: str):
@@ -178,8 +184,7 @@ def violin_plot(likelihoods: list[float], key: str):
     ax.set_xticks([])
     ax.set_title(f"{key} (violin)")
 
-    wandb.log({f"{key}/violin": wandb.Image(fig)})
-    plt.close(fig)
+    _log_image(f"{key}/violin", fig)
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
@@ -198,8 +203,7 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     ax.set_title(f"{key} (ECDF slope proxy / density)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    wandb.log({f"{key}/ecdf_slope": wandb.Image(fig)})
-    plt.close(fig)
+    _log_image(f"{key}/ecdf_slope", fig)
 
 
 ##################################################################################
