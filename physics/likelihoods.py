@@ -13,11 +13,7 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
     Returns:
         float: Energy likelihood value.
     """
-    likelihood = (
-        1
-        / (np.sqrt(2 * torch.pi) * sigma_e)
-        * torch.exp(-(((torch.sum(energies) - ref_energy) / sigma_e) ** 2) / 2)
-    )
+    likelihood = torch.exp(-(((torch.sum(energies) - ref_energy) / sigma_e) ** 2) / 2)
 
     return float(likelihood)
 

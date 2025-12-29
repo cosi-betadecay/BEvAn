@@ -111,33 +111,38 @@ def as_np(vals) -> np.ndarray:
     return np.clip(arr, 0.0, 1.0)
 
 
-def make_table(likelihoods: list[float], name: str) -> wandb.Table:
-    return wandb.Table(data=[[float(x)] for x in likelihoods], columns=[name])
-
-
 def histogram(likelihoods: list[float], key: str, bins: int = 50):
-    t = make_table(likelihoods, key)
-    wandb.log({f"{key}/hist": wandb.plot.histogram(t, key, title=f"{key} (hist)")})
+    x = as_np(likelihoods)
+    if x.size == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.hist(x, bins=bins, range=(0, 1), color="#4c72b0", edgecolor="black", alpha=0.8)
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("Likelihood")
+    ax.set_ylabel("Count")
+    ax.set_title(f"{key} (hist)")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    wandb.log({f"{key}/hist": wandb.Image(fig)})
+    plt.close(fig)
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
-    # W&B histogram doesn't support log y directly; workaround: log-counts via manual binning + line plot
     x = as_np(likelihoods)
-    counts, edges = np.histogram(x, bins=bins, range=(0, 1))
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    log_counts = np.log10(np.maximum(counts, 1))
+    if x.size == 0:
+        return
 
-    t = wandb.Table(
-        data=[[float(a), float(b)] for a, b in zip(centers, log_counts)],
-        columns=["likelihood_bin_center", "log10_count"],
-    )
-    wandb.log(
-        {
-            f"{key}/hist_logy": wandb.plot.line(
-                t, "likelihood_bin_center", "log10_count", title=f"{key} (hist, log10(count))"
-            )
-        }
-    )
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.hist(x, bins=bins, range=(0, 1), color="#55a868", edgecolor="black", alpha=0.8, log=True)
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("Likelihood")
+    ax.set_ylabel("Count (log scale)")
+    ax.set_title(f"{key} (hist, log10(count))")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    wandb.log({f"{key}/hist_logy": wandb.Image(fig)})
+    plt.close(fig)
 
 
 def cdf(likelihoods: list[float], key: str):
@@ -146,8 +151,17 @@ def cdf(likelihoods: list[float], key: str):
         return
     y = np.arange(1, x.size + 1) / x.size
 
-    t = wandb.Table(data=[[float(a), float(b)] for a, b in zip(x, y)], columns=["likelihood", "cdf"])
-    wandb.log({f"{key}/cdf": wandb.plot.line(t, "likelihood", "cdf", title=f"{key} (CDF)")})
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.plot(x, y, color="#c44e52")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Likelihood")
+    ax.set_ylabel("CDF")
+    ax.set_title(f"{key} (CDF)")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    wandb.log({f"{key}/cdf": wandb.Image(fig)})
+    plt.close(fig)
 
 
 def violin_plot(likelihoods: list[float], key: str):
@@ -176,17 +190,16 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     counts, edges = np.histogram(x, bins=bins, range=(0, 1), density=True)
     centers = 0.5 * (edges[:-1] + edges[1:])
 
-    t = wandb.Table(
-        data=[[float(a), float(b)] for a, b in zip(centers, counts)],
-        columns=["likelihood", "ecdf_slope_proxy_density"],
-    )
-    wandb.log(
-        {
-            f"{key}/ecdf_slope": wandb.plot.line(
-                t, "likelihood", "ecdf_slope_proxy_density", title=f"{key} (ECDF slope proxy / density)"
-            )
-        }
-    )
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.plot(centers, counts, color="#8172b2")
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("Likelihood")
+    ax.set_ylabel("ECDF slope proxy / density")
+    ax.set_title(f"{key} (ECDF slope proxy / density)")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    wandb.log({f"{key}/ecdf_slope": wandb.Image(fig)})
+    plt.close(fig)
 
 
 ##################################################################################
