@@ -31,9 +31,12 @@ from utils.reader_extraction import get_reader
 def detected_511_event_likelihoods(
     ref_energy: float,
     event: Any,
-) -> tuple[torch.Tensor, torch.Tensor, float]:
+):
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
+
+    if event.GetGuardRingEnergy() > 0:
+        return 0.0, 0.0
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(

@@ -17,7 +17,7 @@ from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
 
-def process(event: Any, ref_energy: float) -> bool:
+def ground_truth(event: Any, ref_energy: float) -> bool:
     """Count annihilation events matching a reference energy within tolerance.
 
     Args:
@@ -132,7 +132,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        is_annihilation = process(event, ref_energy)
+        is_annihilation = ground_truth(event, ref_energy)
         detected_511 = detected_511_event(
             ref_energy,
             event,
