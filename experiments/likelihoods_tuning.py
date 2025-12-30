@@ -49,7 +49,7 @@ def detected_511_event_likelihoods(
     )
 
     _energy_likelihood = -float("inf")
-    _klein_nishina_weight = -float("inf")
+    _klein_nishina_weight = 0.0
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -59,7 +59,8 @@ def detected_511_event_likelihoods(
             _energy_likelihood = max(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
-            _klein_nishina_weight = max(_klein_nishina_weight, klein_nishina_weight(energy_combo))
+            if r >= 2:
+                _klein_nishina_weight = max(_klein_nishina_weight, klein_nishina_weight(energy_combo))
 
     return _energy_likelihood, _klein_nishina_weight
 
@@ -89,6 +90,12 @@ def annihilation_extractor_test_likelihoods(
         )
         energy_likelihoods.append(energy_likelihood)
         klein_nishina_weight_likelihoods.append(klein_nishina_weight_likelihood)
+
+    print("--------------------------------")
+    print("--- Likelihood counts ---")
+    print(
+        f"Energy likelihood: {len(energy_likelihoods)}\n Klein-Nishina weight likelihood: {len(klein_nishina_weight_likelihoods)}"
+    )
 
     return energy_likelihoods, klein_nishina_weight_likelihoods
 

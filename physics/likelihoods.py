@@ -1,6 +1,7 @@
 import numpy as np
 import torch
-from filters import compton_kinematic_angle_filter
+
+from physics.filters import compton_kinematic_angle_filter
 
 
 def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
