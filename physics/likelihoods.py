@@ -23,66 +23,37 @@ def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float)
 
 # Didn't really make a difference this weight
 def klein_nishina_weight(energies: torch.Tensor) -> float:
-    """Calculate the Klein–Nishina weight for a given set of energy deposits.
-
-    Args:
-        energies (torch.Tensor): Tensor of energy deposits.
-
-    Returns:
-        float: Klein–Nishina weight.
-    """
-
-    def cos_theta(E_0: float, E: float, electron_mass_energy: float) -> float:
-        return 1 - electron_mass_energy * (1 / E - 1 / E_0)
-
-    def sigma_cos_theta(
-        E_0: torch.Tensor, E: torch.Tensor, electron_mass_energy: float, frac_sigma: float = 0.0035
-    ) -> float | None:
-        """Calculate the uncertainty in the cosine of the Compton scattering angle.
-
-        Args:
-            E_0 (torch.Tensor): Sum of all energy deposits.
-            E (torch.Tensor): Sum of all but the first energy deposit.
-            electron_mass_energy (float): Electron rest mass energy in keV.
-            frac_sigma (float): Fractional uncertainty. Defaults to 0.35% (due to HPGe detector resolution).
-
-        Returns:
-            float: Uncertainty in the cosine of the Compton scattering angle.
-        """
-        electron_mass_energy = 511.0  # keV
-
-        sigma_E_0 = frac_sigma * E_0
-        sigma_E = frac_sigma * E
-
-        term0 = (sigma_E_0 / (E_0**2)) ** 2
-        term1 = (sigma_E / (E**2)) ** 2
-
-        return electron_mass_energy * torch.sqrt(term0 + term1)
-
     if energies.numel() < 2:
-        return 1.0  # No weighting for single hits
+        return 1.0
 
-    r_e = 2.8179403227e-15  # classical electron radius in meters
-    electron_mass_energy = 511.0  # keV
-    E_0 = energies.sum()
+    me = 511.0
+    E0 = energies.sum()
     E = energies[1:].sum()
 
-    _cos_theta = cos_theta(E_0, E, electron_mass_energy)
-    _sigma_cos_theta = sigma_cos_theta(E_0, E, electron_mass_energy)
-    limit = 1.0 + _sigma_cos_theta
+    # Guard against nonsense combos
+    if E <= 0 or E0 <= 0 or E >= E0:
+        return 0.0
 
-    if torch.abs(_cos_theta) > limit:
-        return 0.0  # Invalid angle, return zero weight
+    cos_theta = 1.0 - me * (1.0 / E - 1.0 / E0)
 
-    lam_ratio = E / E_0
-    theta = torch.acos(_cos_theta)
+    # If you want to keep your "validity with tolerance", do it elsewhere.
+    # Here: enforce physical domain strictly.
+    if cos_theta < -1.0 or cos_theta > 1.0:
+        return 0.0
 
-    r_e = 2.8179403227e-15  # classical electron radius, m
+    # Numerical safety for acos/sin
+    cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
+    theta = torch.acos(cos_theta)
 
-    # Klein–Nishina differential cross-section (unpolarized)
-    weight = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
+    lam = E / E0  # E'/E0
 
-    return weight
+    # Dimensionless normalized KN (max = 1 at theta=0)
+    w = 0.5 * (lam**2) * (lam + (1.0 / lam) - torch.sin(theta) ** 2)
+
+    # Clamp for safety (should already be within [0,1] for valid Compton kinematics)
+    w = torch.clamp(w, 0.0, 1.0)
+
+    return float(w)
 
 
 def maximum_interaction_distance_likelihood(positions: torch.Tensor, mid_threshold: float = 4.0) -> float:
