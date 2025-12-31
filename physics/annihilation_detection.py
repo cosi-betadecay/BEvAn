@@ -13,6 +13,7 @@ from physics.filters import (
     compton_kinematic_angle_filter,
     maximum_interaction_distance_filter,
 )
+from physics.likelihoods import energy_likelihood
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -106,6 +107,46 @@ def detected_511_event(
     return False
 
 
+def detected_511_event_likelihoods(
+    ref_energy: float,
+    event: Any,
+):
+    tolerance = calculate_tolerance()
+    n_hits = event.GetNHTs()
+
+    if event.GetGuardRingEnergy() > 0:
+        return 0.0, 0.0
+
+    if n_hits < 2:
+        return 0.0, 0.0
+
+    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+    positions = torch.tensor(
+        [
+            (
+                event.GetHTAt(i).GetPosition().X(),
+                event.GetHTAt(i).GetPosition().Y(),
+                event.GetHTAt(i).GetPosition().Z(),
+            )
+            for i in range(n_hits)
+        ],
+        dtype=torch.float32,
+    )
+
+    _energy_likelihood = -float("inf")
+
+    for r in range(1, n_hits + 1):
+        for idx_combo in itertools.combinations(range(n_hits), r):
+            energy_combo = energies[list(idx_combo)]
+            pos_combo = positions[list(idx_combo)]
+
+            _energy_likelihood = max(
+                _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
+            )
+
+    return _energy_likelihood >= 0.7
+
+
 def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
@@ -132,19 +173,15 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        is_annihilation = ground_truth(event, ref_energy)
-        detected_511 = detected_511_event(
-            ref_energy,
-            event,
-        )
+        prediction = detected_511_event_likelihoods(ref_energy, event)
 
-        if is_annihilation:
-            if detected_511:
+        if ground_truth(event, ref_energy):
+            if prediction:
                 tp += 1
             else:
                 fn += 1
         else:
-            if detected_511:
+            if prediction:
                 fp += 1
             else:
                 tn += 1
