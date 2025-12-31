@@ -3,7 +3,7 @@ import torch
 
 
 def energy_likelihood(
-    energies: torch.Tensor, positions: torch.Tensor, ref_energy: float, sigma_e: float
+    energies: torch.Tensor, ref_energy: float, sigma_e: float
 ) -> float:
     """Calculate the likelihood of a set of energy deposits given a reference energy and uncertainty.
 
@@ -139,19 +139,7 @@ def maximum_interaction_distance_weight(
     return float(torch.max(likelihoods))
 
 
-def compton_kinematic_angle_weight(energies: torch.Tensor) -> bool:
-    """Calculate the Compton scattering angle from two energy deposits.
-
-    Args:
-        energies (list): List of energy values for a Compton sequence.
-
-    Returns:
-        bool: True if the angle is physically valid, False otherwise.
-    """
-    # Get's integrated to the beta decay function, that's why we return True for less than 2 hits.
-    if energies.numel() < 2:
-        return True
-
+def compton_kinematic_angle_weight(energies: torch.Tensor) -> float:
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
         """Calculate the uncertainty in the cosine of the Compton scattering angle.
 
@@ -172,19 +160,25 @@ def compton_kinematic_angle_weight(energies: torch.Tensor) -> bool:
         term1 = (sigma_E / (E**2)) ** 2
 
         return electron_mass_energy * torch.sqrt(term0 + term1)
+    
+    if energies.numel() < 2:
+        return 1.0  # neutral
 
-    E_0 = energies.sum()
+    E0 = energies.sum()
     E = energies[1:].sum()
 
-    electron_mass_energy = 511.0  # keV
-    cos_phi = 1 - electron_mass_energy * (1 / E - 1 / E_0)
+    m_e = 511.0
+    cos_phi = 1.0 - m_e * (1.0 / E - 1.0 / E0)
+    abs_cos = torch.abs(cos_phi)
 
-    _sigma_cos_phi = sigma_cos_phi(E_0, E)
+    sigma = sigma_cos_phi(E0, E)
+    z = (abs_cos - 1.0) / sigma
 
-    limit = 1.0 + _sigma_cos_phi
-
-    weight = torch.abs(cos_phi) / limit
-    weight = weight.clamp(weight, 0, 1.0)
+    weight = torch.where(
+        z <= 0,
+        torch.tensor(1.0, device=z.device),
+        torch.exp(-0.5 * z**2)
+    )
 
     return float(weight)
 
@@ -192,8 +186,13 @@ def compton_kinematic_angle_weight(energies: torch.Tensor) -> bool:
 def probability_density_function(
     energies: torch.Tensor, positions: torch.Tensor, time: float, ref_energy: float, tolerance: float
 ) -> float:
-    _energy_likelihood = energy_likelihood(energies, ref_energy, tolerance)
-    _compton_kinematic_weight = compton_kinematic_angle_weight(energies)
-    _maximum_interaction_distance_weight = maximum_interaction_distance_weight(positions, time)
+    # --- energy likelihood (numeric) ---
+    energy_ll = energy_likelihood(energies, ref_energy, tolerance)
+    angular_ll = compton_kinematic_angle_weight(energies)
 
-    return _energy_likelihood * _compton_kinematic_weight * _maximum_interaction_distance_weight
+    if energy_ll <= 0.0 or angular_ll <= 0.0:
+        return 0.0
+
+    log_posterior = np.log(energy_ll) + np.log(angular_ll)
+
+    return np.exp(log_posterior)

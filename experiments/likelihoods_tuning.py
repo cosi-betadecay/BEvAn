@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -18,7 +19,7 @@ from physics.annihilation_detection import ground_truth
 from physics.likelihoods import (
     compton_kinematic_angle_weight,
     energy_likelihood,
-    maximum_interaction_distance_weight,
+    probability_density_function,
 )
 from utils.reader_extraction import get_reader
 
@@ -37,12 +38,6 @@ def detected_511_event_likelihoods(
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
 
-    if event.GetGuardRingEnergy() > 0:
-        return 0.0, 0.0
-
-    if n_hits < 2:
-        return 0.0, 0.0
-
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(
         [
@@ -55,11 +50,13 @@ def detected_511_event_likelihoods(
         ],
         dtype=torch.float32,
     )
-    time = float(event.GetTime())
+
+    if len(energies) == 0:
+        return 0.0, 0.0, 0.0
 
     _energy_likelihood = -float("inf")
     _compton_kinematic_weight = -float("inf")
-    _maximum_interaction_distance_weight = -float("inf")
+    _pdf = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -72,11 +69,10 @@ def detected_511_event_likelihoods(
             _compton_kinematic_weight = max(
                 _compton_kinematic_weight, compton_kinematic_angle_weight(energy_combo)
             )
-            _maximum_interaction_distance_weight = max(
-                _maximum_interaction_distance_weight, maximum_interaction_distance_weight(pos_combo, time)
-            )
 
-    return _energy_likelihood, _compton_kinematic_weight, _maximum_interaction_distance_weight
+            _pdf = max(_pdf, probability_density_function(energy_combo, pos_combo, 0, ref_energy, tolerance))
+
+    return _energy_likelihood, _compton_kinematic_weight, _pdf
 
 
 def annihilation_extractor_test_likelihoods(
@@ -88,7 +84,7 @@ def annihilation_extractor_test_likelihoods(
 
     energy_likelihoods = []
     compton_kinematic_weights = []
-    maximum_interaction_distance_weights = []
+    pdfs = []
     ground_truths = []
 
     for event in tqdm(
@@ -104,7 +100,7 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        energy_likelihood, compton_kinematic_weight, maximum_interaction_distance_weight = (
+        energy_likelihood, compton_kinematic_weight, pdf = (
             detected_511_event_likelihoods(
                 ref_energy,
                 event,
@@ -112,9 +108,9 @@ def annihilation_extractor_test_likelihoods(
         )
         energy_likelihoods.append(energy_likelihood)
         compton_kinematic_weights.append(compton_kinematic_weight)
-        maximum_interaction_distance_weights.append(maximum_interaction_distance_weight)
+        pdfs.append(pdf)
 
-    return energy_likelihoods, compton_kinematic_weights, maximum_interaction_distance_weights, ground_truths
+    return energy_likelihoods, compton_kinematic_weights, pdfs, ground_truths
 
 
 ##################################################################################
@@ -303,7 +299,7 @@ if __name__ == "__main__":
     (
         energy_likelihoods,
         compton_kinematic_angle_weights,
-        maximum_interaction_distance_weights,
+        probability_densities,
         ground_truths,
     ) = annihilation_extractor_test_likelihoods(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
@@ -312,26 +308,26 @@ if __name__ == "__main__":
     energy_likelihoods_false_events = []
     compton_kinematic_true_events = []
     compton_kinematic_false_events = []
-    mid_true_events = []
-    mid_false_events = []
+    probability_density_function_true_events = []
+    probability_density_function_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             energy_likelihoods_true_events.append(energy_likelihoods[i])
             compton_kinematic_true_events.append(compton_kinematic_angle_weights[i])
-            mid_true_events.append(maximum_interaction_distance_weights[i])
+            probability_density_function_true_events.append(probability_densities[i])
         else:
             energy_likelihoods_false_events.append(energy_likelihoods[i])
             compton_kinematic_false_events.append(compton_kinematic_angle_weights[i])
-            mid_false_events.append(maximum_interaction_distance_weights[i])
+            probability_density_function_false_events.append(probability_densities[i])
 
     runs = [
         ("true_events_energy_likelihood", energy_likelihoods_true_events),
         ("false_events_energy_likelihood", energy_likelihoods_false_events),
         ("true_events_compton_kinematic", compton_kinematic_true_events),
         ("false_events_compton_kinematic", compton_kinematic_false_events),
-        ("true_events_mid", mid_true_events),
-        ("false_events_mid", mid_false_events),
+        ("true_events_pdf", probability_density_function_true_events),
+        ("false_events_pdf", probability_density_function_false_events),
     ]
 
     for label, data in runs:
