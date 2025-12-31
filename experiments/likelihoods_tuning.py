@@ -7,16 +7,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ROOT as M
 import torch
+import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
-
-import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods import (
+from physics.posterior import (
     compton_kinematic_angle_weight,
     energy_likelihood,
     probability_density_function,
@@ -100,11 +99,9 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        energy_likelihood, compton_kinematic_weight, pdf = (
-            detected_511_event_likelihoods(
-                ref_energy,
-                event,
-            )
+        energy_likelihood, compton_kinematic_weight, pdf = detected_511_event_likelihoods(
+            ref_energy,
+            event,
         )
         energy_likelihoods.append(energy_likelihood)
         compton_kinematic_weights.append(compton_kinematic_weight)
