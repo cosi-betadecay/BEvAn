@@ -16,8 +16,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods import (
+    compton_kinematic_angle_weight,
     energy_likelihood,
-    klein_nishina_weight,
+    maximum_interaction_distance_weight,
 )
 from utils.reader_extraction import get_reader
 
@@ -54,9 +55,11 @@ def detected_511_event_likelihoods(
         ],
         dtype=torch.float32,
     )
+    time = float(event.GetTime())
 
     _energy_likelihood = -float("inf")
-    _klein_nishina_weight = 0.0
+    _compton_kinematic_weight = -float("inf")
+    _maximum_interaction_distance_weight = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -66,10 +69,14 @@ def detected_511_event_likelihoods(
             _energy_likelihood = max(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
-            if r >= 2:
-                _klein_nishina_weight = max(_klein_nishina_weight, klein_nishina_weight(energy_combo))
+            _compton_kinematic_weight = max(
+                _compton_kinematic_weight, compton_kinematic_angle_weight(energy_combo)
+            )
+            _maximum_interaction_distance_weight = max(
+                _maximum_interaction_distance_weight, maximum_interaction_distance_weight(pos_combo, time)
+            )
 
-    return _energy_likelihood, _klein_nishina_weight
+    return _energy_likelihood, _compton_kinematic_weight, _maximum_interaction_distance_weight
 
 
 def annihilation_extractor_test_likelihoods(
@@ -80,7 +87,8 @@ def annihilation_extractor_test_likelihoods(
     reader = get_reader(geometry_file, sim_file)
 
     energy_likelihoods = []
-    klein_nishina_weight_likelihoods = []
+    compton_kinematic_weights = []
+    maximum_interaction_distance_weights = []
     ground_truths = []
 
     for event in tqdm(
@@ -96,14 +104,17 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        energy_likelihood, klein_nishina_weight_likelihood = detected_511_event_likelihoods(
-            ref_energy,
-            event,
+        energy_likelihood, compton_kinematic_weight, maximum_interaction_distance_weight = (
+            detected_511_event_likelihoods(
+                ref_energy,
+                event,
+            )
         )
         energy_likelihoods.append(energy_likelihood)
-        klein_nishina_weight_likelihoods.append(klein_nishina_weight_likelihood)
+        compton_kinematic_weights.append(compton_kinematic_weight)
+        maximum_interaction_distance_weights.append(maximum_interaction_distance_weight)
 
-    return energy_likelihoods, klein_nishina_weight_likelihoods, ground_truths
+    return energy_likelihoods, compton_kinematic_weights, maximum_interaction_distance_weights, ground_truths
 
 
 ##################################################################################
@@ -289,23 +300,38 @@ def log_calculations(likelihoods: list[float], key: str):
 if __name__ == "__main__":
     load_dotenv()
 
-    energy_likelihoods, klein_nishina_weight_likelihoods, ground_truths = (
-        annihilation_extractor_test_likelihoods(
-            "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
-        )
+    (
+        energy_likelihoods,
+        compton_kinematic_angle_weights,
+        maximum_interaction_distance_weights,
+        ground_truths,
+    ) = annihilation_extractor_test_likelihoods(
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
     energy_likelihoods_true_events = []
     energy_likelihoods_false_events = []
+    compton_kinematic_true_events = []
+    compton_kinematic_false_events = []
+    mid_true_events = []
+    mid_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             energy_likelihoods_true_events.append(energy_likelihoods[i])
+            compton_kinematic_true_events.append(compton_kinematic_angle_weights[i])
+            mid_true_events.append(maximum_interaction_distance_weights[i])
         else:
             energy_likelihoods_false_events.append(energy_likelihoods[i])
+            compton_kinematic_false_events.append(compton_kinematic_angle_weights[i])
+            mid_false_events.append(maximum_interaction_distance_weights[i])
 
     runs = [
         ("true_events_energy_likelihood", energy_likelihoods_true_events),
         ("false_events_energy_likelihood", energy_likelihoods_false_events),
+        ("true_events_compton_kinematic", compton_kinematic_true_events),
+        ("false_events_compton_kinematic", compton_kinematic_false_events),
+        ("true_events_mid", mid_true_events),
+        ("false_events_mid", mid_false_events),
     ]
 
     for label, data in runs:
@@ -315,11 +341,11 @@ if __name__ == "__main__":
         wandb.login(key=wandb_api_key)
         wandb.init(project="cosi-betadecay-likelihoods", name=label, reinit=True)
 
-        histogram(data, "Energy True Events")
-        histogram_log(data, "Energy True Events")
-        cdf(data, "Energy True Events")
-        violin_plot(data, "Energy True Events")
-        ecdf_slope(data, "Energy True Events")
-        log_calculations(data, "Energy True Events")
+        histogram(data, label)
+        histogram_log(data, label)
+        cdf(data, label)
+        violin_plot(data, label)
+        ecdf_slope(data, label)
+        log_calculations(data, label)
 
         wandb.finish()
