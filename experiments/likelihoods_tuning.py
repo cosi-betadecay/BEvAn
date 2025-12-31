@@ -38,6 +38,9 @@ def detected_511_event_likelihoods(
     if event.GetGuardRingEnergy() > 0:
         return 0.0, 0.0
 
+    if n_hits < 2:
+        return 0.0, 0.0
+
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(
         [
@@ -93,12 +96,6 @@ def annihilation_extractor_test_likelihoods(
         )
         energy_likelihoods.append(energy_likelihood)
         klein_nishina_weight_likelihoods.append(klein_nishina_weight_likelihood)
-
-    print("--------------------------------")
-    print("--- Likelihood counts ---")
-    print(
-        f"Energy likelihood: {len(energy_likelihoods)}\n Klein-Nishina weight likelihood: {len(klein_nishina_weight_likelihoods)}"
-    )
 
     return energy_likelihoods, klein_nishina_weight_likelihoods
 
@@ -210,6 +207,84 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     _log_image(f"{key} - ecdf_slope", fig)
 
 
+# Calculations
+
+
+def log_calculations(likelihoods: list[float], key: str):
+    x = as_np(likelihoods)
+    total_count = len(likelihoods)
+    valid_count = x.size
+    invalid_count = total_count - valid_count
+
+    if valid_count == 0:
+        return
+
+    mean = np.mean(x)
+    median = np.median(x)
+    std = np.std(x)
+    var = np.var(x)
+
+    min_val = np.min(x)
+    max_val = np.max(x)
+    percentiles = np.percentile(x, [1, 5, 10, 25, 75, 90, 95, 99])
+    q01, q05, q10, q25, q75, q90, q95, q99 = percentiles
+    iqr = q75 - q25
+
+    mad = np.median(np.abs(x - median))
+    mean_abs_dev = np.mean(np.abs(x - mean))
+    coeff_var = std / mean if mean != 0 else np.nan
+    value_range = max_val - min_val
+
+    centered = x - mean
+    m2 = np.mean(centered**2)
+    m3 = np.mean(centered**3)
+    m4 = np.mean(centered**4)
+    skewness = m3 / (m2**1.5) if m2 > 0 else np.nan
+    kurtosis_excess = m4 / (m2 * m2) - 3 if m2 > 0 else np.nan
+
+    trimmed_mask = (x >= q05) & (x <= q95)
+    trimmed_mean = np.mean(x[trimmed_mask]) if np.any(trimmed_mask) else mean
+
+    thresholds = [0.1, 0.5, 0.9, 0.99]
+    fraction_ge = {thr: float(np.mean(x >= thr)) for thr in thresholds}
+    fraction_le_10 = float(np.mean(x <= 0.1))
+
+    wandb.log(
+        {
+            f"{key} - count_total": total_count,
+            f"{key} - count_valid": valid_count,
+            f"{key} - count_invalid": invalid_count,
+            f"{key} - min": min_val,
+            f"{key} - max": max_val,
+            f"{key} - range": value_range,
+            f"{key} - mean": mean,
+            f"{key} - median": median,
+            f"{key} - trimmed_mean_5_95": trimmed_mean,
+            f"{key} - std": std,
+            f"{key} - var": var,
+            f"{key} - coeff_var": coeff_var,
+            f"{key} - mad": mad,
+            f"{key} - mean_abs_dev": mean_abs_dev,
+            f"{key} - q01": q01,
+            f"{key} - q05": q05,
+            f"{key} - q10": q10,
+            f"{key} - q25": q25,
+            f"{key} - q75": q75,
+            f"{key} - q90": q90,
+            f"{key} - q95": q95,
+            f"{key} - q99": q99,
+            f"{key} - iqr": iqr,
+            f"{key} - skewness": skewness,
+            f"{key} - kurtosis_excess": kurtosis_excess,
+            f"{key} - frac_ge_10pct": fraction_ge[0.1],
+            f"{key} - frac_ge_50pct": fraction_ge[0.5],
+            f"{key} - frac_ge_90pct": fraction_ge[0.9],
+            f"{key} - frac_ge_99pct": fraction_ge[0.99],
+            f"{key} - frac_le_10pct": fraction_le_10,
+        }
+    )
+
+
 ##################################################################################
 
 
@@ -236,6 +311,7 @@ if __name__ == "__main__":
     cdf(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
     violin_plot(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
     ecdf_slope(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
+    log_calculations(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
 
     # Klein Nishina
     histogram(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
@@ -243,5 +319,6 @@ if __name__ == "__main__":
     cdf(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
     violin_plot(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
     ecdf_slope(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    log_calculations(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
 
     wandb.finish()
