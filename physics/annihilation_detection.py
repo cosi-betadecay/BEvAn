@@ -114,12 +114,6 @@ def detected_511_event_likelihoods(
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
 
-    if event.GetGuardRingEnergy() > 0:
-        return 0.0, 0.0
-
-    if n_hits < 2:
-        return 0.0, 0.0
-
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(
         [
