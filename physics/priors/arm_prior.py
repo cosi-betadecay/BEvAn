@@ -1,58 +1,12 @@
 import torch
 
 
-def compton_kinematic_angle_filter(energies: torch.Tensor) -> bool:
-    """Calculate the Compton scattering angle from two energy deposits.
-
-    Args:
-        energies (list): List of energy values for a Compton sequence.
-
-    Returns:
-        bool: True if the angle is physically valid, False otherwise.
-    """
-    # Get's integrated to the beta decay function, that's why we return True for less than 2 hits.
-    if energies.numel() < 2:
-        return True
-
-    def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
-        """Calculate the uncertainty in the cosine of the Compton scattering angle.
-
-        Args:
-            E_0 (torch.Tensor): Sum of all energy deposits.
-            E (torch.Tensor): Sum of all but the first energy deposit.
-            frac_sigma (float): Fractional uncertainty. Defaults to 0.35% (due to HPGe detector resolution).
-
-        Returns:
-            float: Uncertainty in the cosine of the Compton scattering angle.
-        """
-        electron_mass_energy = 511.0  # keV
-
-        sigma_E_0 = frac_sigma * E_0
-        sigma_E = frac_sigma * E
-
-        term0 = (sigma_E_0 / (E_0**2)) ** 2
-        term1 = (sigma_E / (E**2)) ** 2
-
-        return electron_mass_energy * torch.sqrt(term0 + term1)
-
-    E_0 = energies.sum()
-    E = energies[1:].sum()
-
-    electron_mass_energy = 511.0  # keV
-    cos_phi = 1 - electron_mass_energy * (1 / E - 1 / E_0)
-
-    _sigma_cos_phi = sigma_cos_phi(E_0, E)
-
-    limit = 1.0 + _sigma_cos_phi
-
-    return bool(torch.abs(cos_phi) <= limit)
-
-
 # Not too impactful because of ~1% of events having 3 or more energies/positions
-def angular_resolution_measure_filter(
+# Need to convert to a prior somehow
+def angular_resolution_measure_prior(
     energies: torch.Tensor, positions: torch.Tensor, theta_limit: float = 1.10
-) -> bool | None:
-    """Filter events using the angular resolution measure (ARM).
+) -> float:
+    """Estimate the likelihood of an event using the angular resolution measure (ARM).
 
     Args:
         energies (torch.Tensor): Energy deposits for the interaction sequence (keV).
@@ -152,34 +106,5 @@ def angular_resolution_measure_filter(
 
     arm = calculate_arm(_theta_geo, _theta_kin)
 
+    # Fix: return a prior value instead of a boolean
     return classify_arm(arm)
-
-
-# need to find the unit of the positions
-# need to verify the mid_threshold amount - read papers
-# todo: absorbtion of
-# naive bayesian for prob not filters
-def maximum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 4.0) -> bool:
-    """Reject events where consecutive interaction points occur too far together.
-
-    Args:
-        positions (torch.Tensor):
-            Tensor of shape (N, 3) containing interaction positions.
-            Requires at least 2 positions; otherwise the event automatically passes.
-        mid_threshold (float):
-            Maximum allowed distance between consecutive interaction points.
-            Defaults to 4.0
-
-    Returns:
-        bool: True if all consecutive interaction distances are <= mid_threshold. False if any distance is below threshold or if NaNs are encountered.
-    """
-    if positions.shape[0] < 2:
-        return True
-
-    diffs = positions[1:] - positions[:-1]  # shape (N-1, 3)
-    distances = torch.norm(diffs, dim=1)  # shape (N-1,)
-
-    if torch.isnan(distances).any():
-        return False
-
-    return bool(torch.all(distances <= mid_threshold))

@@ -7,24 +7,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ROOT as M
 import torch
+import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
-
-import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods import (
-    compton_kinematic_angle_weight,
+from physics.posterior import (
     energy_likelihood,
-    probability_density_function,
+    posterior,
 )
+from physics.priors.compton_kinematic_angle_prior import compton_kinematic_angle_prior
 from utils.reader_extraction import get_reader
 
-##################################################################################
-##################################################################################
 ##################################################################################
 
 
@@ -56,7 +53,7 @@ def detected_511_event_likelihoods(
 
     _energy_likelihood = -float("inf")
     _compton_kinematic_weight = -float("inf")
-    _pdf = -float("inf")
+    _posterior = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -67,12 +64,14 @@ def detected_511_event_likelihoods(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
             _compton_kinematic_weight = max(
-                _compton_kinematic_weight, compton_kinematic_angle_weight(energy_combo)
+                _compton_kinematic_weight, compton_kinematic_angle_prior(energy_combo)
             )
 
-            _pdf = max(_pdf, probability_density_function(energy_combo, pos_combo, 0, ref_energy, tolerance))
+            _posterior = max(
+                _posterior, posterior(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0)
+            )
 
-    return _energy_likelihood, _compton_kinematic_weight, _pdf
+    return _energy_likelihood, _compton_kinematic_weight, _posterior
 
 
 def annihilation_extractor_test_likelihoods(
@@ -84,7 +83,7 @@ def annihilation_extractor_test_likelihoods(
 
     energy_likelihoods = []
     compton_kinematic_weights = []
-    pdfs = []
+    posteriors = []
     ground_truths = []
 
     for event in tqdm(
@@ -100,17 +99,15 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        energy_likelihood, compton_kinematic_weight, pdf = (
-            detected_511_event_likelihoods(
-                ref_energy,
-                event,
-            )
+        energy_likelihood, compton_kinematic_weight, posterior = detected_511_event_likelihoods(
+            ref_energy,
+            event,
         )
         energy_likelihoods.append(energy_likelihood)
         compton_kinematic_weights.append(compton_kinematic_weight)
-        pdfs.append(pdf)
+        posteriors.append(posterior)
 
-    return energy_likelihoods, compton_kinematic_weights, pdfs, ground_truths
+    return energy_likelihoods, compton_kinematic_weights, posteriors, ground_truths
 
 
 ##################################################################################
@@ -290,16 +287,13 @@ def log_calculations(likelihoods: list[float], key: str):
 ##################################################################################
 
 
-# Main
-
-
 if __name__ == "__main__":
     load_dotenv()
 
     (
         energy_likelihoods,
         compton_kinematic_angle_weights,
-        probability_densities,
+        posteriors,
         ground_truths,
     ) = annihilation_extractor_test_likelihoods(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
@@ -308,26 +302,25 @@ if __name__ == "__main__":
     energy_likelihoods_false_events = []
     compton_kinematic_true_events = []
     compton_kinematic_false_events = []
-    probability_density_function_true_events = []
-    probability_density_function_false_events = []
+    posteriors_true_events = []
+    posteriors_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             energy_likelihoods_true_events.append(energy_likelihoods[i])
             compton_kinematic_true_events.append(compton_kinematic_angle_weights[i])
-            probability_density_function_true_events.append(probability_densities[i])
+            posteriors_true_events.append(posteriors[i])
         else:
             energy_likelihoods_false_events.append(energy_likelihoods[i])
             compton_kinematic_false_events.append(compton_kinematic_angle_weights[i])
-            probability_density_function_false_events.append(probability_densities[i])
-
+            posteriors_false_events.append(posteriors[i])
     runs = [
         ("true_events_energy_likelihood", energy_likelihoods_true_events),
         ("false_events_energy_likelihood", energy_likelihoods_false_events),
         ("true_events_compton_kinematic", compton_kinematic_true_events),
         ("false_events_compton_kinematic", compton_kinematic_false_events),
-        ("true_events_pdf", probability_density_function_true_events),
-        ("false_events_pdf", probability_density_function_false_events),
+        ("true_events_posterior", posteriors_true_events),
+        ("false_events_posterior", posteriors_false_events),
     ]
 
     for label, data in runs:

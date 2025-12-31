@@ -8,12 +8,7 @@ import wandb
 from tqdm import tqdm
 
 from mathematics.calculations import calculate_tolerance
-from physics.filters import (
-    angular_resolution_measure_filter,
-    compton_kinematic_angle_filter,
-    maximum_interaction_distance_filter,
-)
-from physics.likelihoods import posterior_score
+from physics.posterior import posterior
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -57,15 +52,22 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
 def detected_511_event(
     ref_energy: float,
     event: Any,
+    alpha_compton_kin: float,
+    alpha_kn: float,
+    alpha_mid: float,
+    alpha_arm: float,
 ) -> bool:
-    """Check if event contains a hit combination summing to the reference energy.
+    """Determine if an event is detected as a 511 keV annihilation event based on posterior probability.
 
     Args:
         ref_energy (float): Reference energy to compare against (e.g., 511 keV).
-        Event (Any): MEGAlib event object with detector hits.
-
+        event (Any): MEGAlib event object containing interactions and hits.
+        alpha_compton_kin (float): Compton kinetic energy parameter.
+        alpha_kn (float): Klein-Nishina parameter.
+        alpha_mid (float): Maximum interaction distance parameter.
+        alpha_arm (float): Angular resolution measure parameter.
     Returns:
-        bool: True if a hit combination matches the reference energy, else False.
+        bool: True if the event is detected as a 511 keV annihilation event, else False.
     """
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
@@ -83,58 +85,29 @@ def detected_511_event(
         dtype=torch.float32,
     )
 
+    _posterior = -float("inf")
+
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            if torch.abs(energy_combo.sum() - ref_energy) >= tolerance:
-                continue
+            t = 0  # Find a way of getting time information from MEGAlib events
 
-            if not compton_kinematic_angle_filter(energy_combo):
-                continue
-
-            if not maximum_interaction_distance_filter(pos_combo):
-                continue
-
-            if len(idx_combo) >= 3 and False:
-                arm_filter = angular_resolution_measure_filter(energy_combo, pos_combo)
-                if arm_filter is False or arm_filter is None:
-                    continue
-
-            return True
-
-    return False
-
-
-def detected_511_event_likelihoods(
-    ref_energy: float,
-    event: Any,
-):
-    tolerance = calculate_tolerance()
-    n_hits = event.GetNHTs()
-
-    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
-    positions = torch.tensor(
-        [
-            (
-                event.GetHTAt(i).GetPosition().X(),
-                event.GetHTAt(i).GetPosition().Y(),
-                event.GetHTAt(i).GetPosition().Z(),
+            _posterior_score = max(
+                _posterior,
+                posterior(
+                    energy_combo,
+                    pos_combo,
+                    t,
+                    ref_energy,
+                    tolerance,
+                    alpha_compton_kin,
+                    alpha_kn,
+                    alpha_mid,
+                    alpha_arm,
+                ),
             )
-            for i in range(n_hits)
-        ],
-        dtype=torch.float32,
-    )
-
-    _posterior_score = -float("inf")
-
-    for r in range(1, n_hits + 1):
-        for idx_combo in itertools.combinations(range(n_hits), r):
-            energy_combo = energies[list(idx_combo)]
-            pos_combo = positions[list(idx_combo)]
-
-            _posterior_score = max(_posterior_score, posterior_score(energy_combo, ref_energy, tolerance))
 
     return _posterior_score >= 0.8
 
@@ -142,6 +115,10 @@ def detected_511_event_likelihoods(
 def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
+    alpha_compton_kin: float,
+    alpha_kn: float,
+    alpha_mid: float,
+    alpha_arm: float,
     ref_energy: int = 511,
 ) -> None:
     """Extract annihilation events and compute detection performance metrics.
@@ -149,10 +126,11 @@ def annihilation_extractor(
     Args:
         geometry_file (str): Path to the detector geometry setup file (XML).
         sim_file (str): Path to the MEGAlib simulation file (.sim).
+        alpha_compton_kin (float): Compton kinetic energy parameter.
+        alpha_kn (float): Klein-Nishina parameter.
+        alpha_mid (float): Maximum interaction distance parameter.
+        alpha_arm (float): Angular resolution measure parameter.
         ref_energy (float): Reference energy to compare against (default 511 keV).
-
-    Returns:
-        None
     """
     reader = get_reader(geometry_file, sim_file)
 
@@ -165,7 +143,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event_likelihoods(ref_energy, event)
+        prediction = detected_511_event(ref_energy, event, alpha_compton_kin, alpha_kn, alpha_mid, alpha_arm)
 
         if ground_truth(event, ref_energy):
             if prediction:
