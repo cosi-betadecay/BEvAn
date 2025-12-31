@@ -136,7 +136,7 @@ def detected_511_event_likelihoods(
 
             _posterior_score = max(_posterior_score, posterior_score(energy_combo, ref_energy, tolerance))
 
-    return _posterior_score >= 0.7
+    return _posterior_score >= 0.8
 
 
 def annihilation_extractor(
