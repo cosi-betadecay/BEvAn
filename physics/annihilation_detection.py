@@ -13,7 +13,7 @@ from physics.filters import (
     compton_kinematic_angle_filter,
     maximum_interaction_distance_filter,
 )
-from physics.likelihoods import energy_likelihood
+from physics.likelihoods import posterior_score
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -133,18 +133,16 @@ def detected_511_event_likelihoods(
         dtype=torch.float32,
     )
 
-    _energy_likelihood = -float("inf")
+    _posterior_score = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            _energy_likelihood = max(
-                _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
-            )
+            _posterior_score = max(_posterior_score, posterior_score(energy_combo, ref_energy, tolerance))
 
-    return _energy_likelihood >= 0.7
+    return _posterior_score >= 0.7
 
 
 def annihilation_extractor(

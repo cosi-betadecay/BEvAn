@@ -2,9 +2,7 @@ import numpy as np
 import torch
 
 
-def energy_likelihood(
-    energies: torch.Tensor, ref_energy: float, sigma_e: float
-) -> float:
+def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
     """Calculate the likelihood of a set of energy deposits given a reference energy and uncertainty.
 
     Args:
@@ -160,7 +158,7 @@ def compton_kinematic_angle_weight(energies: torch.Tensor) -> float:
         term1 = (sigma_E / (E**2)) ** 2
 
         return electron_mass_energy * torch.sqrt(term0 + term1)
-    
+
     if energies.numel() < 2:
         return 1.0  # neutral
 
@@ -174,19 +172,12 @@ def compton_kinematic_angle_weight(energies: torch.Tensor) -> float:
     sigma = sigma_cos_phi(E0, E)
     z = (abs_cos - 1.0) / sigma
 
-    weight = torch.where(
-        z <= 0,
-        torch.tensor(1.0, device=z.device),
-        torch.exp(-0.5 * z**2)
-    )
+    weight = torch.where(z <= 0, torch.tensor(1.0, device=z.device), torch.exp(-0.5 * z**2))
 
     return float(weight)
 
 
-def probability_density_function(
-    energies: torch.Tensor, positions: torch.Tensor, time: float, ref_energy: float, tolerance: float
-) -> float:
-    # --- energy likelihood (numeric) ---
+def posterior_score(energies: torch.Tensor, ref_energy: float, tolerance: float) -> float:
     energy_ll = energy_likelihood(energies, ref_energy, tolerance)
     angular_ll = compton_kinematic_angle_weight(energies)
 
