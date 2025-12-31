@@ -14,6 +14,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
+from physics.annihilation_detection import ground_truth
 from physics.likelihoods import (
     energy_likelihood,
     klein_nishina_weight,
@@ -80,6 +81,7 @@ def annihilation_extractor_test_likelihoods(
 
     energy_likelihoods = []
     klein_nishina_weight_likelihoods = []
+    ground_truths = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -88,7 +90,11 @@ def annihilation_extractor_test_likelihoods(
     ):
         M.SetOwnership(event, True)
 
-        # is_annihilation = process(event, ref_energy)
+        is_annihilation = ground_truth(event, ref_energy)
+        if is_annihilation:
+            ground_truths.append(1)
+        else:
+            ground_truths.append(0)
 
         energy_likelihood, klein_nishina_weight_likelihood = detected_511_event_likelihoods(
             ref_energy,
@@ -97,7 +103,7 @@ def annihilation_extractor_test_likelihoods(
         energy_likelihoods.append(energy_likelihood)
         klein_nishina_weight_likelihoods.append(klein_nishina_weight_likelihood)
 
-    return energy_likelihoods, klein_nishina_weight_likelihoods
+    return energy_likelihoods, klein_nishina_weight_likelihoods, ground_truths
 
 
 ##################################################################################
@@ -212,9 +218,7 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
 
 def log_calculations(likelihoods: list[float], key: str):
     x = as_np(likelihoods)
-    total_count = len(likelihoods)
     valid_count = x.size
-    invalid_count = total_count - valid_count
 
     if valid_count == 0:
         return
@@ -224,8 +228,6 @@ def log_calculations(likelihoods: list[float], key: str):
     std = np.std(x)
     var = np.var(x)
 
-    min_val = np.min(x)
-    max_val = np.max(x)
     percentiles = np.percentile(x, [1, 5, 10, 25, 75, 90, 95, 99])
     q01, q05, q10, q25, q75, q90, q95, q99 = percentiles
     iqr = q75 - q25
@@ -233,7 +235,6 @@ def log_calculations(likelihoods: list[float], key: str):
     mad = np.median(np.abs(x - median))
     mean_abs_dev = np.mean(np.abs(x - mean))
     coeff_var = std / mean if mean != 0 else np.nan
-    value_range = max_val - min_val
 
     centered = x - mean
     m2 = np.mean(centered**2)
@@ -251,12 +252,6 @@ def log_calculations(likelihoods: list[float], key: str):
 
     wandb.log(
         {
-            f"{key} - count_total": total_count,
-            f"{key} - count_valid": valid_count,
-            f"{key} - count_invalid": invalid_count,
-            f"{key} - min": min_val,
-            f"{key} - max": max_val,
-            f"{key} - range": value_range,
             f"{key} - mean": mean,
             f"{key} - median": median,
             f"{key} - trimmed_mean_5_95": trimmed_mean,
@@ -293,32 +288,38 @@ def log_calculations(likelihoods: list[float], key: str):
 
 if __name__ == "__main__":
     load_dotenv()
-    wandb_api_key = os.getenv("WANDB_API_KEY")
 
-    if wandb_api_key is None:
-        raise RuntimeError("WANDB_API_KEY not found in .env")
-
-    wandb.login(key=wandb_api_key)
-    wandb.init(project="cosi-betadecay-likelihoods")
-
-    energy_likelihoods, klein_nishina_weight_likelihoods = annihilation_extractor_test_likelihoods(
-        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    energy_likelihoods, klein_nishina_weight_likelihoods, ground_truths = (
+        annihilation_extractor_test_likelihoods(
+            "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+        )
     )
+    energy_likelihoods_true_events = []
+    energy_likelihoods_false_events = []
 
-    # Energy
-    histogram(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
-    histogram_log(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
-    cdf(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
-    violin_plot(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
-    ecdf_slope(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
-    log_calculations(energy_likelihoods, "Energy Likelihood (Compton Kinematic Filter)")
+    for i in range(len(ground_truths)):
+        if ground_truths[i] == 1:
+            energy_likelihoods_true_events.append(energy_likelihoods[i])
+        else:
+            energy_likelihoods_false_events.append(energy_likelihoods[i])
 
-    # Klein Nishina
-    histogram(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
-    histogram_log(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
-    cdf(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
-    violin_plot(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
-    ecdf_slope(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
-    log_calculations(klein_nishina_weight_likelihoods, "Klein Nishina Weight")
+    runs = [
+        ("true_events_energy_likelihood", energy_likelihoods_true_events),
+        ("false_events_energy_likelihood", energy_likelihoods_false_events),
+    ]
 
-    wandb.finish()
+    for label, data in runs:
+        wandb_api_key = os.getenv("WANDB_API_KEY")
+        if wandb_api_key is None:
+            raise RuntimeError("WANDB_API_KEY not found in .env")
+        wandb.login(key=wandb_api_key)
+        wandb.init(project="cosi-betadecay-likelihoods", name=label, reinit=True)
+
+        histogram(data, "Energy True Events")
+        histogram_log(data, "Energy True Events")
+        cdf(data, "Energy True Events")
+        violin_plot(data, "Energy True Events")
+        ecdf_slope(data, "Energy True Events")
+        log_calculations(data, "Energy True Events")
+
+        wandb.finish()
