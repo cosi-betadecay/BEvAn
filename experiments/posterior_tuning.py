@@ -16,10 +16,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.posterior import (
-    compton_kinematic_angle_weight,
     energy_likelihood,
     posterior,
 )
+from physics.priors.compton_kinematic_angle_prior import compton_kinematic_angle_prior
 from utils.reader_extraction import get_reader
 
 ##################################################################################
@@ -64,7 +64,7 @@ def detected_511_event_likelihoods(
                 _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
             )
             _compton_kinematic_weight = max(
-                _compton_kinematic_weight, compton_kinematic_angle_weight(energy_combo)
+                _compton_kinematic_weight, compton_kinematic_angle_prior(energy_combo)
             )
 
             _posterior = max(
