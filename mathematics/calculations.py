@@ -1,4 +1,3 @@
-import wandb
 
 
 def calculate_tolerance() -> float:
@@ -24,5 +23,4 @@ def calculate_tolerance() -> float:
     fwhm = 2.25
     sigma = fwhm / 2.355
     tolerance = 3 * sigma
-    wandb.log({"tolerance_keV": tolerance})
     return tolerance

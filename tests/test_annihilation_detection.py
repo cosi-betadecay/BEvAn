@@ -1,14 +1,8 @@
 import importlib
 import sys
 import types
-from pathlib import Path
 
 import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_PATH = PROJECT_ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
 
 
 class FakeInteraction:
@@ -68,7 +62,7 @@ def annihilation_detection(monkeypatch):
     fake_root.SetOwnership = lambda *_args, **_kwargs: None
     monkeypatch.setitem(sys.modules, "ROOT", fake_root)
 
-    module_name = "beta_decay.physics.annihilation_detection"
+    module_name = "physics.annihilation_detection"
     sys.modules.pop(module_name, None)
     module = importlib.import_module(module_name)
     return importlib.reload(module)
