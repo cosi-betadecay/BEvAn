@@ -1,5 +1,3 @@
-
-
 def calculate_tolerance() -> float:
     """Calculate the physically motivated energy tolerance for 511 keV detection.
 

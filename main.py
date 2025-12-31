@@ -6,10 +6,14 @@ from dotenv import load_dotenv
 from physics.annihilation_detection import annihilation_extractor
 
 
-def simulation(
+def main(
     run_name: str,
 ) -> None:
-    """Run the annihilation event simulation and evaluate detection performance."""
+    """Run the annihilation event simulation and evaluate detection performance.
+
+    Args:
+        run_name (str): Name of the wandb run.
+    """
     wandb.init(project="cosi-betadecay", name=run_name)
 
     annihilation_extractor(
@@ -28,4 +32,4 @@ if __name__ == "__main__":
 
     wandb.login(key=wandb_api_key)
 
-    simulation("Likelihood")
+    main("Likelihood")

@@ -57,6 +57,18 @@ def detected_511_event(
     alpha_mid: float,
     alpha_arm: float,
 ) -> bool:
+    """Determine if an event is detected as a 511 keV annihilation event based on posterior probability.
+
+    Args:
+        ref_energy (float): Reference energy to compare against (e.g., 511 keV).
+        event (Any): MEGAlib event object containing interactions and hits.
+        alpha_compton_kin (float): Compton kinetic energy parameter.
+        alpha_kn (float): Klein-Nishina parameter.
+        alpha_mid (float): Maximum interaction distance parameter.
+        alpha_arm (float): Angular resolution measure parameter.
+    Returns:
+        bool: True if the event is detected as a 511 keV annihilation event, else False.
+    """
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
 
@@ -119,9 +131,6 @@ def annihilation_extractor(
         alpha_mid (float): Maximum interaction distance parameter.
         alpha_arm (float): Angular resolution measure parameter.
         ref_energy (float): Reference energy to compare against (default 511 keV).
-
-    Returns:
-        None
     """
     reader = get_reader(geometry_file, sim_file)
 
