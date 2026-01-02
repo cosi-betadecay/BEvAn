@@ -3,7 +3,7 @@ import torch
 
 # Not too impactful because of ~1% of events having 3 or more energies/positions
 # Need to convert to a prior somehow
-def angular_resolution_measure_prior(
+def angular_resolution_measure_likelihood(
     energies: torch.Tensor, positions: torch.Tensor, theta_limit: float = 1.10
 ) -> float:
     """Estimate the likelihood of an event using the angular resolution measure (ARM).

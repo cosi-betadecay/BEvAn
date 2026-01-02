@@ -1,27 +1,13 @@
 import torch
 
-from physics.priors.arm_prior import angular_resolution_measure_prior
-from physics.priors.compton_kinematic_angle_prior import compton_kinematic_angle_prior
-from physics.priors.klein_nishina_prior import klein_nishina_prior
-from physics.priors.mid_prior import maximum_interaction_distance_prior
+from physics.likelihoods.arm_likelihood import angular_resolution_measure_likelihood
+from physics.likelihoods.compton_kinematic_angle_likelihood import compton_kinematic_angle_likelihood
+from physics.likelihoods.energy_likelihood import energy_likelihood
+from physics.likelihoods.klein_nishina_likelihood import klein_nishina_likelihood
+from physics.likelihoods.mid_likelihood import maximum_interaction_distance_likelihood
 
 
-def energy_likelihood(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
-    """Calculate the likelihood of a set of energy deposits given a reference energy and uncertainty.
-
-    Args:
-        energies (torch.Tensor): Energy deposits (keV) in interaction order.
-        ref_energy (float): Reference energy (keV).
-        sigma_e (float): Energy uncertainty (keV).
-
-    Returns:
-        float: Energy likelihood value.
-    """
-    likelihood = torch.exp(-(((torch.sum(energies) - ref_energy) / sigma_e) ** 2) / 2)
-
-    return float(likelihood)
-
-
+# Need to fix this properly so it actually becomes a posterior calculation, but for now this will do
 def posterior(
     energies: torch.Tensor,
     positions: torch.Tensor,
@@ -50,10 +36,10 @@ def posterior(
         float: Posterior probability.
     """
     energy_ll = energy_likelihood(energies, ref_energy, tolerance)
-    compton_kin_ll = compton_kinematic_angle_prior(energies)
-    kn_ll = klein_nishina_prior(energies)
-    mid_ll = maximum_interaction_distance_prior(positions, time)
-    arm_ll = angular_resolution_measure_prior(energies, positions)
+    compton_kin_ll = compton_kinematic_angle_likelihood(energies)
+    kn_ll = klein_nishina_likelihood(energies)
+    mid_ll = maximum_interaction_distance_likelihood(positions, time)
+    arm_ll = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
         torch.log(energy_ll)

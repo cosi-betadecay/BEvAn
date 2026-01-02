@@ -1,7 +1,7 @@
 import torch
 
 
-def klein_nishina_prior(energies: torch.Tensor) -> float:
+def klein_nishina_likelihood(energies: torch.Tensor) -> float:
     """Calculate the Klein–Nishina weight for a given set of energy deposits.
 
     Args:

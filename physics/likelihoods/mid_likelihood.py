@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-def maximum_interaction_distance_prior(
+def maximum_interaction_distance_likelihood(
     positions: torch.Tensor, time: float, mid_threshold: float = 4.0
 ) -> float | None:
     """Calculate the maximum interaction distance likelihood for a set of interaction positions.
