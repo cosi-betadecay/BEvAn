@@ -52,7 +52,7 @@ def detected_511_event_likelihoods(
 
     _kn = -float("inf")
 
-    for r in range(1, n_hits + 1):
+    for r in range(2, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
