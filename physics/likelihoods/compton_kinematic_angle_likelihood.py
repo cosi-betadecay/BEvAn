@@ -1,7 +1,7 @@
 import torch
 
 
-def compton_kinematic_angle_prior(energies: torch.Tensor) -> float:
+def compton_kinematic_angle_likelihood(energies: torch.Tensor) -> float:
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
         """Calculate the uncertainty in the cosine of the Compton scattering angle.
 
