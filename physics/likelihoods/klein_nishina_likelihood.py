@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 
 
@@ -15,31 +14,48 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
     def cos_theta(E_0: float, E: float, electron_mass_energy: float) -> float:
         return 1 - electron_mass_energy * (1 / E - 1 / E_0)
 
-    def kn_log_likelihood(energies: torch.Tensor) -> float:
-        r_e = 2.8179403227e-15  # classical electron radius in meters
-        electron_mass_energy = 511.0  # keV
-        E_0 = energies.sum()
-        E = E_0 - energies[0]
-
+    def kn_cross_section(E_0: float, r_e: float, E: float, electron_mass_energy: float) -> float:
         _cos_theta = cos_theta(E_0, E, electron_mass_energy)
+        _cos_theta = torch.clamp(_cos_theta, -1.0, 1.0)
 
         lam_ratio = E / E_0
         theta = torch.acos(_cos_theta)
 
-        r_e = 2.8179403227e-15  # classical electron radius, m
-
         # Klein-Nishina differential cross-section (unpolarized)
         kn = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
-        log_kn = torch.log(kn + 1e-40)
 
-        kn_max = 0.5 * (r_e**2)
-        log_kn_max = np.log(kn_max + 1e-40)
+        return kn
 
-        z = log_kn - log_kn_max
+    def sigma_scat(electron_mass_energy: float, E_0: torch.Tensor, r_e: float) -> float:
+        eps = E_0 / electron_mass_energy
+        one_plus_2e = 1.0 + 2.0 * eps
+        ln_term = torch.log(one_plus_2e)
 
-        return torch.exp(-z**2)
-    
-    if len(energies) < 2:
-        return 0.0
+        sigma_kn = (
+            2.0
+            * torch.pi
+            * r_e
+            * r_e
+            * (
+                (1.0 + eps) / (eps * eps) * (2.0 * (1.0 + eps) / one_plus_2e - ln_term / eps)
+                + 0.5 * ln_term / eps
+                - (1.0 + 3.0 * eps) / (one_plus_2e * one_plus_2e)
+            )
+        )
 
-    return float(kn_log_likelihood(energies))
+        return sigma_kn
+
+    def likelihood_function(energies: torch.Tensor) -> float:
+        electron_mass_energy = 511.0  # keV
+        r_e = 2.8179403227e-15  # meters (classical electron radius)
+        E_0 = energies.sum()
+        E = E_0 - energies[0]
+
+        kn_diff_cross_section = kn_cross_section(E_0, r_e, E, electron_mass_energy)
+        sigma_s = sigma_scat(electron_mass_energy, E_0, r_e)
+
+        likelihood = kn_diff_cross_section / sigma_s
+
+        return float(likelihood)
+
+    return likelihood_function(energies)
