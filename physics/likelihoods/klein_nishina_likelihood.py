@@ -43,7 +43,7 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
     r_e = 2.8179403227e-15  # classical electron radius in meters
     electron_mass_energy = 511.0  # keV
     E_0 = energies.sum()
-    E = energies[1:].sum()
+    E = E_0 - energies[0]
 
     _cos_theta = cos_theta(E_0, E, electron_mass_energy)
     _sigma_cos_theta = sigma_cos_theta(E_0, E, electron_mass_energy)
@@ -59,8 +59,5 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
 
     # Klein–Nishina differential cross-section (unpolarized)
     kn = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
-    kn_max = r_e**2
 
-    weight = float(kn / kn_max)
-
-    return weight
+    return float(kn)
