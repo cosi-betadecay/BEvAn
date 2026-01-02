@@ -44,3 +44,4 @@ if __name__ == "__main__":
     wandb.login(key=wandb_api_key)
 
     main("Likelihood-80p-including:posterior:energy-0.9_kn-0.1", 0.9, 0, 0.1, 0, 0)
+    main("Likelihood-80p-including:posterior:energy-0.95_kn-0.05", 0.9, 0, 0.05, 0, 0)
