@@ -52,6 +52,7 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
 def detected_511_event(
     ref_energy: float,
     event: Any,
+    alpha_energy: float,
     alpha_compton_kin: float,
     alpha_kn: float,
     alpha_mid: float,
@@ -102,6 +103,7 @@ def detected_511_event(
                     t,
                     ref_energy,
                     tolerance,
+                    alpha_energy,
                     alpha_compton_kin,
                     alpha_kn,
                     alpha_mid,
@@ -115,6 +117,7 @@ def detected_511_event(
 def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
+    alpha_energy: float,
     alpha_compton_kin: float,
     alpha_kn: float,
     alpha_mid: float,
@@ -143,7 +146,9 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(ref_energy, event, alpha_compton_kin, alpha_kn, alpha_mid, alpha_arm)
+        prediction = detected_511_event(
+            ref_energy, event, alpha_energy, alpha_compton_kin, alpha_kn, alpha_mid, alpha_arm
+        )
 
         if ground_truth(event, ref_energy):
             if prediction:

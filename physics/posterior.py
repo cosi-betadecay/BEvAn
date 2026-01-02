@@ -14,6 +14,7 @@ def posterior(
     time: float,
     ref_energy: float,
     tolerance: float,
+    alpha_energy: float,
     alpha_compton_kin: float,
     alpha_kn: float,
     alpha_mid: float,
@@ -42,7 +43,7 @@ def posterior(
     arm_ll = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
-        torch.log(energy_ll)
+        alpha_energy * torch.log(energy_ll)
         + alpha_compton_kin * torch.log(compton_kin_ll)
         + alpha_kn * torch.log(kn_ll)
         + alpha_mid * torch.log(mid_ll)

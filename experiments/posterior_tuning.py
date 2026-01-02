@@ -66,7 +66,7 @@ def detected_511_event_likelihoods(
             )
 
             _posterior = max(
-                _posterior, posterior(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0)
+                _posterior, posterior(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 1.0, 0, 0, 0)
             )
 
     return _energy_likelihood, _compton_kinematic_weight, _posterior
