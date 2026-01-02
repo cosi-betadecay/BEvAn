@@ -1,7 +1,7 @@
 import torch
 
 
-def klein_nishina_likelihood(energies: torch.Tensor) -> float:
+def klein_nishina_pdf(energies: torch.Tensor) -> float:
     """Calculate the Klein–Nishina weight for a given set of energy deposits.
 
     Args:
@@ -45,7 +45,7 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
 
         return sigma_kn
 
-    def likelihood_function(energies: torch.Tensor) -> float:
+    def pdf(energies: torch.Tensor) -> float:
         electron_mass_energy = 511.0  # keV
         r_e = 2.8179403227e-15  # meters (classical electron radius)
         E_0 = energies.sum()
@@ -58,4 +58,4 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
 
         return float(likelihood)
 
-    return likelihood_function(energies)
+    return pdf(energies)
