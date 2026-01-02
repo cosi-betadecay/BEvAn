@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 
@@ -32,10 +33,13 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
         log_kn = torch.log(kn + 1e-40)
 
         kn_max = 0.5 * (r_e**2)
-        log_kn_max = torch.log(kn_max + 1e-40)
+        log_kn_max = np.log(kn_max + 1e-40)
 
         z = log_kn - log_kn_max
 
-        return torch.exp(z)
+        return torch.exp(-z**2)
+    
+    if len(energies) < 2:
+        return 0.0
 
     return float(kn_log_likelihood(energies))
