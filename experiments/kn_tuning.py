@@ -49,7 +49,7 @@ def detected_511_event_likelihoods(
     )
 
     if len(energies) == 0:
-        return 0.0
+        return 0.0, 0.0
 
     _kn = -float("inf")
     _energy_likelihood = -float("inf")
