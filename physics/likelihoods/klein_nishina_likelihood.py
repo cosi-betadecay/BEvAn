@@ -29,7 +29,13 @@ def klein_nishina_likelihood(energies: torch.Tensor) -> float:
 
         # Klein-Nishina differential cross-section (unpolarized)
         kn = 0.5 * (r_e**2) * (lam_ratio**2) * (lam_ratio + (1 / lam_ratio) - torch.sin(theta) ** 2)
+        log_kn = torch.log(kn + 1e-40)
 
-        return float(torch.log(kn + 1e-40))
+        kn_max = 0.5 * (r_e**2)
+        log_kn_max = torch.log(kn_max + 1e-40)
 
-    return kn_log_likelihood(energies)
+        z = log_kn - log_kn_max
+
+        return torch.exp(z)
+
+    return float(kn_log_likelihood(energies))

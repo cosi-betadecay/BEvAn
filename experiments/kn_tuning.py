@@ -3,10 +3,10 @@ import os
 import sys
 from typing import Any
 
+import ROOT as M
 import torch
 import wandb
 from dotenv import load_dotenv
-from ROOT import M
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
