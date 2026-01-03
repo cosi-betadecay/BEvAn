@@ -80,7 +80,6 @@ def cdf(likelihoods: list[float], key: str):
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.plot(x, y, color="#c44e52")
     ax.set_xlim(left=0)
-    ax.set_ylim(left=0)
     ax.set_xlabel("Likelihood")
     ax.set_ylabel("CDF")
     ax.set_title(f"{key} (CDF)")
