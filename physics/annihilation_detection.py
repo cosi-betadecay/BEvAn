@@ -175,7 +175,7 @@ def annihilation_extractor(
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
         desc="Processing events",
-        unit=" event",
+        unit=" events",
     ):
         M.SetOwnership(event, True)
 
