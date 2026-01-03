@@ -2,13 +2,14 @@ import itertools
 from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 import ROOT as M
 import torch
 import wandb
 from tqdm import tqdm
 
 from mathematics.calculations import calculate_tolerance
-from physics.posterior import posterior
+from physics.posterior import posterior_bdecay, posterior_bg
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -49,6 +50,19 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
     return number_good_events > 0
 
 
+def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
+    """_summary_
+
+    Args:
+        posterior_bdecay (float): _description_
+        posterior_bg (float): _description_
+
+    Returns:
+        bool: _description_
+    """
+    return np.log(posterior_bdecay) - np.log(posterior_bg) >= 0
+
+
 def detected_511_event(
     ref_energy: float,
     event: Any,
@@ -86,7 +100,8 @@ def detected_511_event(
         dtype=torch.float32,
     )
 
-    _posterior = -float("inf")
+    _posterior_bdecay = -float("inf")
+    _posterior_bg = -float("inf")
 
     for r in range(2, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -95,9 +110,9 @@ def detected_511_event(
 
             t = 0  # Find a way of getting time information from MEGAlib events
 
-            _posterior_score = max(
-                _posterior,
-                posterior(
+            _posterior_bdecay = max(
+                _posterior_bdecay,
+                posterior_bdecay(
                     energy_combo,
                     pos_combo,
                     t,
@@ -111,7 +126,23 @@ def detected_511_event(
                 ),
             )
 
-    return _posterior_score >= 0.8
+            _posterior_bg = max(
+                _posterior_bg,
+                posterior_bg(
+                    energy_combo,
+                    pos_combo,
+                    t,
+                    ref_energy,
+                    tolerance,
+                    alpha_energy,
+                    alpha_compton_kin,
+                    alpha_kn,
+                    alpha_mid,
+                    alpha_arm,
+                ),
+            )
+
+    return classifier(_posterior_bdecay, _posterior_bg)
 
 
 def annihilation_extractor(

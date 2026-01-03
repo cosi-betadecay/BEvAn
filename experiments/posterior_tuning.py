@@ -13,8 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods.compton_kinematic_angle_likelihood import compton_kinematic_angle_likelihood
-from physics.likelihoods.energy_likelihood import energy_likelihood
+from physics.likelihoods.compton_kin import compton_kinematic_angle_likelihood
+from physics.likelihoods.energy import energy_likelihood
 from physics.posterior import posterior
 from utils.plots import (
     cdf,

@@ -27,7 +27,7 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
 def as_np(vals) -> np.ndarray:
     arr = np.asarray(vals, dtype=np.float64)
     arr = arr[np.isfinite(arr)]
-    return np.clip(arr, 0.0, 1.0)
+    return arr
 
 
 def _log_image(key: str, fig: plt.Figure) -> None:
@@ -45,8 +45,8 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
         return
 
     fig, ax = plt.subplots(figsize=(5, 4))
-    ax.hist(x, bins=bins, range=(0, 1), color="#4c72b0", edgecolor="black", alpha=0.8)
-    ax.set_xlim(0, 1)
+    ax.hist(x, bins=bins, color="#4c72b0", edgecolor="black", alpha=0.8)
+    ax.set_xlim(left=0)
     ax.set_xlabel("Likelihood")
     ax.set_ylabel("Count")
     ax.set_title(f"{key} (hist)")
@@ -61,8 +61,8 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
         return
 
     fig, ax = plt.subplots(figsize=(5, 4))
-    ax.hist(x, bins=bins, range=(0, 1), color="#55a868", edgecolor="black", alpha=0.8, log=True)
-    ax.set_xlim(0, 1)
+    ax.hist(x, bins=bins, color="#55a868", edgecolor="black", alpha=0.8, log=True)
+    ax.set_xlim(left=0)
     ax.set_xlabel("Likelihood")
     ax.set_ylabel("Count (log scale)")
     ax.set_title(f"{key} (hist, log10(count))")
@@ -79,8 +79,8 @@ def cdf(likelihoods: list[float], key: str):
 
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.plot(x, y, color="#c44e52")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+    ax.set_xlim(left=0)
+    ax.set_ylim(left=0)
     ax.set_xlabel("Likelihood")
     ax.set_ylabel("CDF")
     ax.set_title(f"{key} (CDF)")
@@ -92,7 +92,6 @@ def cdf(likelihoods: list[float], key: str):
 def violin_plot(likelihoods: list[float], key: str):
     vals = np.asarray(likelihoods, dtype=np.float64)
     vals = vals[np.isfinite(vals)]
-    vals = np.clip(vals, 0.0, 1.0)
 
     if len(vals) == 0:
         return
@@ -111,12 +110,12 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     x = as_np(likelihoods)
     if x.size == 0:
         return
-    counts, edges = np.histogram(x, bins=bins, range=(0, 1), density=True)
+    counts, edges = np.histogram(x, bins=bins, density=True)
     centers = 0.5 * (edges[:-1] + edges[1:])
 
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.plot(centers, counts, color="#8172b2")
-    ax.set_xlim(0, 1)
+    ax.set_xlim(left=0)
     ax.set_xlabel("Likelihood")
     ax.set_ylabel("ECDF slope proxy / density")
     ax.set_title(f"{key} (ECDF slope proxy / density)")

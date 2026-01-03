@@ -13,8 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods.energy_likelihood import energy_likelihood
-from physics.likelihoods.klein_nishina_likelihood import klein_nishina_pdf
+from physics.likelihoods.energy import energy_pdf_bdecay
+from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (
     cdf,
     ecdf_slope,
@@ -61,7 +61,7 @@ def detected_511_event_likelihoods(
 
             _kn = max(_kn, klein_nishina_pdf(energy_combo))
             _energy_likelihood = max(
-                _energy_likelihood, energy_likelihood(energy_combo, ref_energy, tolerance)
+                _energy_likelihood, energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
             )
 
     return _kn, _energy_likelihood
@@ -130,8 +130,6 @@ if __name__ == "__main__":
     runs = [
         ("true_events_kn", kns_true_events),
         ("false_events_kn", kns_false_events),
-        ("true_events_combination", combination_true_events),
-        ("false_events_combination", combination_false_events),
     ]
 
     for label, data in runs:

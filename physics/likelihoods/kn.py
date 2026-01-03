@@ -53,9 +53,8 @@ def klein_nishina_pdf(energies: torch.Tensor) -> float:
 
         kn_diff_cross_section = kn_cross_section(E_0, r_e, E, electron_mass_energy)
         sigma_s = sigma_scat(electron_mass_energy, E_0, r_e)
+        pdf = kn_diff_cross_section / sigma_s
 
-        likelihood = kn_diff_cross_section / sigma_s
-
-        return float(likelihood)
+        return float(pdf)
 
     return pdf(energies)

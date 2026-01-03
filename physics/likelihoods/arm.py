@@ -108,3 +108,6 @@ def angular_resolution_measure_likelihood(
 
     # Fix: return a prior value instead of a boolean
     return classify_arm(arm)
+
+
+# Add for bg too

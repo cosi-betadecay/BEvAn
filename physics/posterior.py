@@ -1,14 +1,13 @@
 import torch
 
-from physics.likelihoods.arm_likelihood import angular_resolution_measure_likelihood
-from physics.likelihoods.compton_kinematic_angle_likelihood import compton_kinematic_angle_likelihood
-from physics.likelihoods.energy_likelihood import energy_likelihood
-from physics.likelihoods.klein_nishina_likelihood import klein_nishina_likelihood
-from physics.likelihoods.mid_likelihood import maximum_interaction_distance_likelihood
+from physics.likelihoods.arm import angular_resolution_measure_likelihood
+from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay, compton_kin_heurestic_bg
+from physics.likelihoods.energy import energy_heurestic_bg, energy_pdf_bdecay
+from physics.likelihoods.kn import klein_nishina_pdf_bdecay, klein_nishina_pdf_bg
+from physics.likelihoods.mid import mid_heurestic_bdecay, mid_heurestic_bg
 
 
-# Need to fix this properly so it actually becomes a posterior calculation, but for now this will do
-def posterior(
+def posterior_bdecay(
     energies: torch.Tensor,
     positions: torch.Tensor,
     time: float,
@@ -20,7 +19,7 @@ def posterior(
     alpha_mid: float,
     alpha_arm: float,
 ) -> float:
-    """Calculate the posterior probability of an event given various priors and likelihoods.
+    """Calculate the posterior score for beta decay given various pdfs, heurestics, etc.
 
     Args:
         energies (torch.Tensor): Energy deposits (keV) in interaction order.
@@ -34,20 +33,65 @@ def posterior(
         alpha_arm (float): Angular resolution measure prior weight.
 
     Returns:
-        float: Posterior probability.
+        float: Posterior score.
     """
-    energy_ll = energy_likelihood(energies, ref_energy, tolerance)
-    compton_kin_ll = compton_kinematic_angle_likelihood(energies)
-    kn_ll = klein_nishina_likelihood(energies)
-    mid_ll = maximum_interaction_distance_likelihood(positions, time)
-    arm_ll = angular_resolution_measure_likelihood(energies, positions)
+    energy_beta = energy_pdf_bdecay(energies, ref_energy, tolerance)
+    compton_kin_beta = compton_kin_heurestic_bdecay(energies)
+    kn_beta = klein_nishina_pdf_bdecay(energies)
+    mid_beta = mid_heurestic_bdecay(positions, time)
+    arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
-        alpha_energy * torch.log(energy_ll)
-        + alpha_compton_kin * torch.log(compton_kin_ll)
-        + alpha_kn * torch.log(kn_ll)
-        + alpha_mid * torch.log(mid_ll)
-        + alpha_arm * torch.log(arm_ll)
+        alpha_energy * torch.log(energy_beta)
+        + alpha_compton_kin * torch.log(compton_kin_beta)
+        + alpha_kn * torch.log(kn_beta)
+        + alpha_mid * torch.log(mid_beta)
+        + alpha_arm * torch.log(arm_beta)
+    )
+
+    return float(torch.exp(log_posterior))
+
+
+def posterior_bg(
+    energies: torch.Tensor,
+    positions: torch.Tensor,
+    time: float,
+    ref_energy: float,
+    tolerance: float,
+    alpha_energy: float,
+    alpha_compton_kin: float,
+    alpha_kn: float,
+    alpha_mid: float,
+    alpha_arm: float,
+) -> float:
+    """Calculate the posterior score for a background event given various various pdfs, heurestics, etc.
+
+    Args:
+        energies (torch.Tensor): Energy deposits (keV) in interaction order.
+        positions (torch.Tensor): Interaction positions.
+        time (float): Interaction time.
+        ref_energy (float): Reference energy (keV).
+        tolerance (float): Energy tolerance (keV).
+        alpha_compton_kin (float): Compton kinematic angle prior weight.
+        alpha_kn (float): Klein-Nishina prior weight.
+        alpha_mid (float): Maximum interaction distance prior weight.
+        alpha_arm (float): Angular resolution measure prior weight.
+
+    Returns:
+        float: Posterior score.
+    """
+    energy_beta = energy_heurestic_bg(energies, ref_energy, tolerance)
+    compton_kin_beta = compton_kin_heurestic_bg(energies)
+    kn_beta = klein_nishina_pdf_bg(energies)
+    mid_beta = mid_heurestic_bg(positions, time)
+    arm_beta = angular_resolution_measure_likelihood(energies, positions)
+
+    log_posterior = (
+        alpha_energy * torch.log(energy_beta)
+        + alpha_compton_kin * torch.log(compton_kin_beta)
+        + alpha_kn * torch.log(kn_beta)
+        + alpha_mid * torch.log(mid_beta)
+        + alpha_arm * torch.log(arm_beta)
     )
 
     return float(torch.exp(log_posterior))
