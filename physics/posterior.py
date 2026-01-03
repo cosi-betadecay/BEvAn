@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-from physics.likelihoods.arm import angular_resolution_measure_likelihood
 from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay, compton_kin_heurestic_bg
 from physics.likelihoods.energy import energy_heurestic_bg, energy_pdf_bdecay
 from physics.likelihoods.mid import mid_heurestic_bdecay, mid_heurestic_bg
@@ -37,13 +36,12 @@ def posterior_bdecay(
     energy_beta = energy_pdf_bdecay(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bdecay(energies)
     mid_beta = mid_heurestic_bdecay(positions, time)
-    arm_beta = angular_resolution_measure_likelihood(energies, positions)
+    # arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
         alpha_energy * np.log(energy_beta)
         + alpha_compton_kin * np.log(compton_kin_beta)
         + alpha_mid * np.log(mid_beta)
-        + alpha_arm * np.log(arm_beta)
     )
 
     return np.exp(log_posterior)
@@ -80,13 +78,12 @@ def posterior_bg(
     energy_beta = energy_heurestic_bg(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bg(energies)
     mid_beta = mid_heurestic_bg(positions, time)
-    arm_beta = angular_resolution_measure_likelihood(energies, positions)
+    # arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
         alpha_energy * np.log(energy_beta)
         + alpha_compton_kin * np.log(compton_kin_beta)
         + alpha_mid * np.log(mid_beta)
-        + alpha_arm * np.log(arm_beta)
     )
 
     return np.exp(log_posterior)
