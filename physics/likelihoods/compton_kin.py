@@ -1,7 +1,7 @@
 import torch
 
 
-def compton_kinematic_angle_likelihood(energies: torch.Tensor) -> float:
+def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
         """Calculate the uncertainty in the cosine of the Compton scattering angle.
 
@@ -39,3 +39,15 @@ def compton_kinematic_angle_likelihood(energies: torch.Tensor) -> float:
     weight = torch.where(z <= 0, torch.tensor(1.0, device=z.device), torch.exp(-0.5 * z**2))
 
     return float(weight)
+
+
+def compton_kin_heurestic_bg(energies: torch.Tensor) -> float:
+    """_summary_
+
+    Args:
+        energies (torch.Tensor): _description_
+
+    Returns:
+        float: _description_
+    """
+    return 1 - compton_kin_heurestic_bdecay(energies)

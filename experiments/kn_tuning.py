@@ -1,0 +1,122 @@
+import itertools
+import os
+import sys
+from typing import Any
+
+import numpy as np
+import ROOT as M
+import torch
+import wandb
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from physics.annihilation_detection import ground_truth
+from physics.likelihoods.kn import klein_nishina_pdf
+from utils.plots import (
+    cdf,
+    ecdf_slope,
+    histogram,
+    histogram_log,
+    log_calculations,
+    violin_plot,
+)
+from utils.reader_extraction import get_reader
+
+##################################################################################
+
+
+def detected_511_event_likelihoods(
+    ref_energy: float,
+    event: Any,
+):
+    n_hits = event.GetNHTs()
+
+    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+
+    if len(energies) == 0:
+        return 0.0
+
+    _kn = -float("inf")
+
+    for r in range(2, n_hits + 1):
+        for idx_combo in itertools.combinations(range(n_hits), r):
+            energy_combo = energies[list(idx_combo)]
+
+            _kn = max(_kn, klein_nishina_pdf(energy_combo))
+
+    return _kn
+
+
+def annihilation_extractor_test_kn(
+    geometry_file: str,
+    sim_file: str,
+    ref_energy: int = 511,
+) -> None:
+    reader = get_reader(geometry_file, sim_file)
+
+    kns = []
+    ground_truths = []
+
+    for event in tqdm(
+        iter(lambda: reader.GetNextEvent(), None),
+        desc="Processing events",
+        unit="event",
+    ):
+        M.SetOwnership(event, True)
+
+        is_annihilation = ground_truth(event, ref_energy)
+        if is_annihilation:
+            ground_truths.append(1)
+        else:
+            ground_truths.append(0)
+
+        kn = detected_511_event_likelihoods(
+            ref_energy,
+            event,
+        )
+
+        kns.append(kn)
+
+    return kns, ground_truths
+
+
+##################################################################################
+
+
+if __name__ == "__main__":
+    load_dotenv()
+
+    (
+        kns,
+        ground_truths,
+    ) = annihilation_extractor_test_kn(
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    )
+
+    kns = np.array(kns)
+    floor = np.nanmin(kns[np.isfinite(kns)])
+    kns = np.where(np.isfinite(kns), kns, floor)
+    kns = (kns - np.min(kns)) / (np.max(kns) - np.min(kns) + 1e-8)
+    kns = list(kns)
+
+    runs = [
+        ("kn", kns),
+    ]
+
+    for label, data in runs:
+        wandb_api_key = os.getenv("WANDB_API_KEY")
+        if wandb_api_key is None:
+            raise RuntimeError("WANDB_API_KEY not found in .env")
+        wandb.login(key=wandb_api_key)
+        wandb.init(project="cosi-betadecay-kn", name=label, reinit=True)
+
+        histogram(data, label)
+        histogram_log(data, label)
+        cdf(data, label)
+        violin_plot(data, label)
+        ecdf_slope(data, label)
+        log_calculations(data, label)
+
+        wandb.finish()

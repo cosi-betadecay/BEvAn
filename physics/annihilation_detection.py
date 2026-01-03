@@ -4,11 +4,12 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
-from physics.posterior import posterior
+from physics.likelihoods.kn import klein_nishina_pdf
+from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -49,12 +50,24 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
     return number_good_events > 0
 
 
+def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
+    """_summary_
+
+    Args:
+        posterior_bdecay (float): _description_
+        posterior_bg (float): _description_
+
+    Returns:
+        bool: _description_
+    """
+    return posterior_bdecay >= 0.8
+
+
 def detected_511_event(
     ref_energy: float,
     event: Any,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
 ) -> bool:
@@ -86,7 +99,9 @@ def detected_511_event(
         dtype=torch.float32,
     )
 
-    _posterior = -float("inf")
+    _posterior_bdecay = -float("inf")
+    _posterior_bg = -float("inf")
+    _kn = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
@@ -95,9 +110,9 @@ def detected_511_event(
 
             t = 0  # Find a way of getting time information from MEGAlib events
 
-            _posterior_score = max(
-                _posterior,
-                posterior(
+            _posterior_bdecay = max(
+                _posterior_bdecay,
+                posterior_bdecay(
                     energy_combo,
                     pos_combo,
                     t,
@@ -105,13 +120,33 @@ def detected_511_event(
                     tolerance,
                     alpha_energy,
                     alpha_compton_kin,
-                    alpha_kn,
                     alpha_mid,
                     alpha_arm,
                 ),
             )
 
-    return _posterior_score >= 0.8
+            #_posterior_bg = max(
+            #    _posterior_bg,
+            #    posterior_bg(
+            #        energy_combo,
+            #        pos_combo,
+            #        t,
+            #       ref_energy,
+            #        tolerance,
+            #        alpha_energy,
+            #        alpha_compton_kin,
+            #        alpha_mid,
+            #        alpha_arm,
+            #    ),
+            #)
+
+            if r > 1:
+                _kn = max(_kn, klein_nishina_pdf(energies))
+
+    if _kn == -float("inf"):
+        _kn = 1
+
+    return classifier(_posterior_bdecay, _posterior_bg), _kn
 
 
 def annihilation_extractor(
@@ -119,7 +154,6 @@ def annihilation_extractor(
     sim_file: str,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
     ref_energy: int = 511,
@@ -137,29 +171,40 @@ def annihilation_extractor(
     """
     reader = get_reader(geometry_file, sim_file)
 
-    tp, fp, fn, tn = 0, 0, 0, 0
+    ground_truths = []
+    predictions = []
+    kns = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
         desc="Processing events",
-        unit="event",
+        unit=" events",
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(
-            ref_energy, event, alpha_energy, alpha_compton_kin, alpha_kn, alpha_mid, alpha_arm
+        prediction, _kn = detected_511_event(
+            ref_energy, event, alpha_energy, alpha_compton_kin, alpha_mid, alpha_arm
         )
+        _ground_truth = ground_truth(event, ref_energy)
 
-        if ground_truth(event, ref_energy):
-            if prediction:
-                tp += 1
-            else:
-                fn += 1
-        else:
-            if prediction:
-                fp += 1
-            else:
-                tn += 1
+        predictions.append(prediction)
+        kns.append(_kn)
+        ground_truths.append(_ground_truth)
+
+    kns = torch.tensor(kns)
+    predictions = torch.tensor(predictions, dtype=torch.bool)
+    gt = torch.tensor(ground_truths, dtype=torch.bool)
+
+
+    # Apply KN cut and gate predictions
+    quantile = torch.quantile(kns, 0.05)
+    kns_pred = kns >= quantile
+    preds = kns_pred & predictions
+
+    tp = torch.sum(gt & preds).item()
+    fp = torch.sum(~gt & preds).item()
+    fn = torch.sum(gt & ~preds).item()
+    tn = torch.sum(~gt & ~preds).item()
 
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0

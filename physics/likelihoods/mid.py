@@ -2,10 +2,8 @@ import numpy as np
 import torch
 
 
-def maximum_interaction_distance_likelihood(
-    positions: torch.Tensor, time: float, mid_threshold: float = 4.0
-) -> float | None:
-    """Calculate the maximum interaction distance likelihood for a set of interaction positions.
+def mid_heurestic_bdecay(positions: torch.Tensor, time: float, mid_threshold: float = 4.0) -> float | None:
+    """Calculate the maximum interaction distance score for a set of interaction positions.
 
     Args:
         positions (torch.Tensor): Tensor of interaction positions.
@@ -42,7 +40,7 @@ def maximum_interaction_distance_likelihood(
 
     n_interactions = positions.shape[0]
     if n_interactions < 2:
-        return None
+        return 1
 
     diffs = positions[1:] - positions[:-1]
     distances = torch.norm(diffs, dim=1)
@@ -52,3 +50,11 @@ def maximum_interaction_distance_likelihood(
     likelihoods = torch.exp(-0.5 * ((distances - _mu_d) / _sigma_d) ** 2)
 
     return float(torch.max(likelihoods))
+
+
+def mid_heurestic_bg(positions: torch.Tensor, time: float, mid_threshold: float = 4.0) -> float | None:
+    mid_bdecay = mid_heurestic_bdecay(positions, time)
+    if mid_bdecay is None:
+        return None
+
+    return 1 - mid_bdecay

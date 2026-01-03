@@ -107,4 +107,8 @@ def angular_resolution_measure_likelihood(
     arm = calculate_arm(_theta_geo, _theta_kin)
 
     # Fix: return a prior value instead of a boolean
+    return 1
     return classify_arm(arm)
+
+
+# Add for bg too
