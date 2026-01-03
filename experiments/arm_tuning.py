@@ -48,14 +48,19 @@ def detected_511_event_likelihoods(
     if len(energies) == 0:
         return 0.0
 
-    _arm = -float("inf")
+    log_terms_arm = []
 
     for r in range(3, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            _arm = max(_arm, angular_resolution_measure_kernel(energy_combo, pos_combo).item())
+            log_terms_arm.append(torch.log(angular_resolution_measure_kernel(energy_combo, pos_combo)))
+
+    if len(log_terms_arm) == 0:
+        return 0.0
+
+    _arm = torch.logsumexp(torch.stack(log_terms_arm), dim=0).item()
 
     return _arm
 
