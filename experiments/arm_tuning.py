@@ -60,7 +60,7 @@ def detected_511_event_likelihoods(
     if len(log_terms_arm) == 0:
         return 0.0
 
-    _arm = torch.logsumexp(torch.stack(log_terms_arm), dim=0).item()
+    _arm = torch.logsumexp(log_terms_arm, dim=0) - torch.log(torch.tensor(len(log_terms_arm)))
 
     return _arm
 
@@ -113,23 +113,6 @@ if __name__ == "__main__":
     ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
-
-    arms = torch.tensor(arms)
-    finite_mask = torch.isfinite(arms)
-
-    if not torch.any(finite_mask):
-        # No valid values → return zeros (or handle however you prefer)
-        arms = torch.zeros_like(arms)
-    else:
-        floor = torch.min(arms[finite_mask])
-        arms = torch.where(finite_mask, arms, floor)
-
-        arms_min = torch.min(arms)
-        arms_max = torch.max(arms)
-
-        arms = (arms - arms_min) / (arms_max - arms_min + 1e-8)
-
-    arms = arms.tolist()
 
     true_events_arms = []
     false_events_arms = []
