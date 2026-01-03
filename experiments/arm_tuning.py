@@ -11,8 +11,10 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.energy import energy_pdf_bdecay
 from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (
     cdf,
@@ -32,6 +34,7 @@ def detected_511_event_likelihoods(
     event: Any,
 ):
     n_hits = event.GetNHTs()
+    tolerance = calculate_tolerance()
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(
@@ -58,11 +61,12 @@ def detected_511_event_likelihoods(
 
             _arm = angular_resolution_measure_kernel(energy_combo, pos_combo)
             _kn = klein_nishina_pdf(energy_combo)
+            _energy = energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
 
             _arm = torch.clamp(_arm, min=1e-12)
             _kn = torch.clamp(_kn, min=1e-12)
 
-            score = torch.log(_arm) + 0.5 * torch.log(_kn)  # alpha = 0.5
+            score = torch.log(_arm) + torch.log(_energy) + 0.5 * torch.log(_kn)  # alpha = 0.5
 
             _best = max(_best, score.item())
 
@@ -118,19 +122,19 @@ if __name__ == "__main__":
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
 
-    true_events_arm_kns = []
-    false_events_arm_kns = []
+    true_events_arm_kn_energies = []
+    false_events_arm_kn_energies = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
-            true_events_arm_kns.append(combs[i])
+            true_events_arm_kn_energies.append(combs[i])
         else:
-            false_events_arm_kns.append(combs[i])
+            false_events_arm_kn_energies.append(combs[i])
 
     runs = [
-        ("arm-kn", combs),
-        ("arm-kn_true_events", true_events_arm_kns),
-        ("arm-kn_false_events", false_events_arm_kns),
+        ("arm-kn-energy", combs),
+        ("arm-kn-energy_true_events", true_events_arm_kn_energies),
+        ("arm-kn-energy_false_events", false_events_arm_kn_energies),
     ]
 
     for label, data in runs:
