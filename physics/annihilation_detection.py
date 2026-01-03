@@ -4,9 +4,9 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.likelihoods.kn import klein_nishina_pdf
 from physics.posterior import posterior_bdecay
@@ -125,7 +125,7 @@ def detected_511_event(
                 ),
             )
 
-            #_posterior_bg = max(
+            # _posterior_bg = max(
             #    _posterior_bg,
             #    posterior_bg(
             #        energy_combo,
@@ -138,7 +138,7 @@ def detected_511_event(
             #        alpha_mid,
             #        alpha_arm,
             #    ),
-            #)
+            # )
 
             if r > 1:
                 _kn = max(_kn, klein_nishina_pdf(energies))
@@ -194,7 +194,6 @@ def annihilation_extractor(
     kns = torch.tensor(kns)
     predictions = torch.tensor(predictions, dtype=torch.bool)
     gt = torch.tensor(ground_truths, dtype=torch.bool)
-
 
     # Apply KN cut and gate predictions
     quantile = torch.quantile(kns, 0.05)
