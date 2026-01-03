@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from physics.likelihoods.arm import angular_resolution_measure_likelihood
@@ -39,13 +40,13 @@ def posterior_bdecay(
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
-        alpha_energy * torch.log(energy_beta)
-        + alpha_compton_kin * torch.log(compton_kin_beta)
-        + alpha_mid * torch.log(mid_beta)
-        + alpha_arm * torch.log(arm_beta)
+        alpha_energy * np.log(energy_beta)
+        + alpha_compton_kin * np.log(compton_kin_beta)
+        + alpha_mid * np.log(mid_beta)
+        + alpha_arm * np.log(arm_beta)
     )
 
-    return float(torch.exp(log_posterior))
+    return np.exp(log_posterior)
 
 
 def posterior_bg(
@@ -82,10 +83,10 @@ def posterior_bg(
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
-        alpha_energy * torch.log(energy_beta)
-        + alpha_compton_kin * torch.log(compton_kin_beta)
-        + alpha_mid * torch.log(mid_beta)
-        + alpha_arm * torch.log(arm_beta)
+        alpha_energy * np.log(energy_beta)
+        + alpha_compton_kin * np.log(compton_kin_beta)
+        + alpha_mid * np.log(mid_beta)
+        + alpha_arm * np.log(arm_beta)
     )
 
-    return float(torch.exp(log_posterior))
+    return np.exp(log_posterior)

@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.likelihoods.kn import klein_nishina_pdf
 from physics.posterior import posterior_bdecay, posterior_bg
@@ -69,7 +69,6 @@ def detected_511_event(
     event: Any,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
 ) -> bool:
