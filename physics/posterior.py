@@ -3,7 +3,7 @@ import torch
 from physics.likelihoods.arm import angular_resolution_measure_likelihood
 from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay, compton_kin_heurestic_bg
 from physics.likelihoods.energy import energy_heurestic_bg, energy_pdf_bdecay
-from physics.likelihoods.kn import klein_nishina_pdf_bdecay, klein_nishina_pdf_bg
+from physics.likelihoods.kn import klein_nishina_pdf
 from physics.likelihoods.mid import mid_heurestic_bdecay, mid_heurestic_bg
 
 
@@ -37,7 +37,7 @@ def posterior_bdecay(
     """
     energy_beta = energy_pdf_bdecay(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bdecay(energies)
-    kn_beta = klein_nishina_pdf_bdecay(energies)
+    kn_beta = klein_nishina_pdf(energies)
     mid_beta = mid_heurestic_bdecay(positions, time)
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
@@ -82,7 +82,7 @@ def posterior_bg(
     """
     energy_beta = energy_heurestic_bg(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bg(energies)
-    kn_beta = klein_nishina_pdf_bg(energies)
+    kn_beta = klein_nishina_pdf(energies)
     mid_beta = mid_heurestic_bg(positions, time)
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 

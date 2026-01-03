@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+
 import wandb
 
 
@@ -52,7 +53,7 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key} - hist", fig)
+    _log_image("hist", fig)
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
@@ -68,7 +69,7 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
     ax.set_title(f"{key} (hist, log10(count))")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key} - hist_logy", fig)
+    _log_image("hist_logy", fig)
 
 
 def cdf(likelihoods: list[float], key: str):
@@ -85,7 +86,7 @@ def cdf(likelihoods: list[float], key: str):
     ax.set_title(f"{key} (CDF)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key} - cdf", fig)
+    _log_image("cdf", fig)
 
 
 def violin_plot(likelihoods: list[float], key: str):
@@ -101,7 +102,7 @@ def violin_plot(likelihoods: list[float], key: str):
     ax.set_xticks([])
     ax.set_title(f"{key} (violin)")
 
-    _log_image(f"{key} - violin", fig)
+    _log_image("violin", fig)
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
@@ -120,7 +121,7 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     ax.set_title(f"{key} (ECDF slope proxy / density)")
     ax.grid(True, linestyle="--", alpha=0.4)
 
-    _log_image(f"{key} - ecdf_slope", fig)
+    _log_image("ecdf_slope", fig)
 
 
 # Calculations
@@ -162,29 +163,29 @@ def log_calculations(likelihoods: list[float], key: str):
 
     wandb.log(
         {
-            f"{key} - mean": mean,
-            f"{key} - median": median,
-            f"{key} - trimmed_mean_5_95": trimmed_mean,
-            f"{key} - std": std,
-            f"{key} - var": var,
-            f"{key} - coeff_var": coeff_var,
-            f"{key} - mad": mad,
-            f"{key} - mean_abs_dev": mean_abs_dev,
-            f"{key} - q01": q01,
-            f"{key} - q05": q05,
-            f"{key} - q10": q10,
-            f"{key} - q25": q25,
-            f"{key} - q75": q75,
-            f"{key} - q90": q90,
-            f"{key} - q95": q95,
-            f"{key} - q99": q99,
-            f"{key} - iqr": iqr,
-            f"{key} - skewness": skewness,
-            f"{key} - kurtosis_excess": kurtosis_excess,
-            f"{key} - frac_ge_10pct": fraction_ge[0.1],
-            f"{key} - frac_ge_50pct": fraction_ge[0.5],
-            f"{key} - frac_ge_90pct": fraction_ge[0.9],
-            f"{key} - frac_ge_99pct": fraction_ge[0.99],
-            f"{key} - frac_le_10pct": fraction_le_10,
+            "mean": mean,
+            "median": median,
+            "trimmed_mean_5_95": trimmed_mean,
+            "std": std,
+            "var": var,
+            "coeff_var": coeff_var,
+            "mad": mad,
+            "mean_abs_dev": mean_abs_dev,
+            "q01": q01,
+            "q05": q05,
+            "q10": q10,
+            "q25": q25,
+            "q75": q75,
+            "q90": q90,
+            "q95": q95,
+            "q99": q99,
+            "iqr": iqr,
+            "skewness": skewness,
+            "kurtosis_excess": kurtosis_excess,
+            "frac_ge_10pct": fraction_ge[0.1],
+            "frac_ge_50pct": fraction_ge[0.5],
+            "frac_ge_90pct": fraction_ge[0.9],
+            "frac_ge_99pct": fraction_ge[0.99],
+            "frac_le_10pct": fraction_le_10,
         }
     )

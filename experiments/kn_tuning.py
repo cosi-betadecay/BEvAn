@@ -3,11 +3,13 @@ import os
 import sys
 from typing import Any
 
+import numpy as np
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -93,17 +95,15 @@ if __name__ == "__main__":
     ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
-    kns_true_events = []
-    kns_false_events = []
 
-    for i in range(len(ground_truths)):
-        if ground_truths[i] == 1:
-            kns_true_events.append(kns[i])
-        else:
-            kns_false_events.append(kns[i])
+    kns = np.array(kns)
+    floor = np.nanmin(kns[np.isfinite(kns)])
+    kns = np.where(np.isfinite(kns), kns, floor)
+    kns = (kns - np.min(kns)) / (np.max(kns) - np.min(kns) + 1e-8)
+    kns = list(kns)
+
     runs = [
-        ("true_events_kn", kns_true_events),
-        ("false_events_kn", kns_false_events),
+        ("kn", kns),
     ]
 
     for label, data in runs:
