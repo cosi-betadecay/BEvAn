@@ -60,7 +60,10 @@ def detected_511_event_likelihoods(
     if len(log_terms_arm) == 0:
         return 0.0
 
-    _arm = torch.logsumexp(log_terms_arm, dim=0) - torch.log(torch.tensor(len(log_terms_arm)))
+    _arm = (
+        torch.logsumexp(torch.stack(log_terms_arm), dim=0)
+        - torch.log(torch.tensor(len(log_terms_arm), device=log_terms_arm[0].device))
+    ).item()
 
     return _arm
 
