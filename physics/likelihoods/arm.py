@@ -1,114 +1,62 @@
 import torch
 
 
-# Not too impactful because of ~1% of events having 3 or more energies/positions
-# Need to convert to a prior somehow
-def angular_resolution_measure_likelihood(
-    energies: torch.Tensor, positions: torch.Tensor, theta_limit: float = 1.10
-) -> float:
-    """Estimate the likelihood of an event using the angular resolution measure (ARM).
+def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        sigma_x = 0.15  # cm (≈1.5 mm HPGe position resolution), get from paper later on
 
-    Args:
-        energies (torch.Tensor): Energy deposits for the interaction sequence (keV).
-        positions (torch.Tensor): Interaction positions; first three hits are used (same order as energies).
-        theta_limit (float, optional): Max allowed ``cos(theta)`` magnitude to accept noisy angles. Defaults to 1.10.
-
-    Returns:
-        bool | None: True if the ARM is within threshold, False if rejected, None when not enough hits.
-    """
-
-    def theta_geo(positions: torch.Tensor) -> float | None:
-        """Compute the geometric scatter angle from the first three interaction positions.
-
-        Args:
-            positions (torch.Tensor): Interaction positions (at least three 3D points).
-
-        Returns:
-            float | None: Scatter angle in radians or None for degenerate/invalid geometry.
-        """
         x0, x1, x2 = positions[0], positions[1], positions[2]
 
         v_in = x1 - x0
         v_out = x2 - x1
 
-        # Degenerate geometry -> skip event
-        if torch.norm(v_in) < 1e-6 or torch.norm(v_out) < 1e-6:
-            return None
+        L_in = torch.clamp(torch.norm(v_in), min=1e-3)
+        L_out = torch.clamp(torch.norm(v_out), min=1e-3)
 
-        cos_theta = torch.dot(v_in, v_out) / (torch.norm(v_in) * torch.norm(v_out))
+        cos_theta_geo = torch.dot(v_in, v_out) / (L_in * L_out)
+        cos_theta_geo = torch.clamp(cos_theta_geo, -1.0, 1.0)
+        theta_geo = torch.arccos(cos_theta_geo)
 
-        # Physically impossible -> skip event
-        if torch.abs(cos_theta) > theta_limit:
-            return None
+        sigma_theta_in = torch.sqrt(torch.tensor(2.0, device=positions.device)) * sigma_x / L_in
+        sigma_theta_out = torch.sqrt(torch.tensor(2.0, device=positions.device)) * sigma_x / L_out
 
-        cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
+        _sigma_theta_geo = torch.sqrt(sigma_theta_in**2 + sigma_theta_out**2)
 
-        return torch.arccos(cos_theta)
+        return theta_geo, _sigma_theta_geo
 
-    def theta_kin(energies: torch.Tensor) -> float | None:
-        """Compute the kinematic scatter angle from the deposited energies.
+    def theta_kin(energies: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        def sigma_theta_kin(
+            E_0: float, E: float, electron_mass_energy: float, theta_kin: float, frac_sigma: float = 0.0035
+        ) -> torch.Tensor:
+            sigma_cos_theta_kin = (
+                electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_0) ** 2 + (1.0 / E) ** 2)
+            )
+            sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
 
-        Args:
-            energies (torch.Tensor): Energy deposits (keV) in interaction order.
+            return sigma_cos_theta_kin / sin_theta_kin
 
-        Returns:
-            float | None: Scatter angle in radians or None if energies are unphysical.
-        """
         electron_mass_energy = 511.0  # keV
         E_0 = energies.sum()
         E = energies[1:].sum()
 
-        # Prevent division by zero
-        if E_0 <= 0 or E <= 0:
-            return None
+        cos_theta_kin = 1 - electron_mass_energy * (1 / E - 1 / E_0)
+        cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)
+        theta_kin = torch.arccos(cos_theta_kin)
+        _sigma_theta_kin = sigma_theta_kin(E_0, E, electron_mass_energy, theta_kin)
 
-        cos_theta = 1 - electron_mass_energy * (1 / E - 1 / E_0)
+        return theta_kin, _sigma_theta_kin
 
-        if torch.abs(cos_theta) > theta_limit:
-            return None
+    def arm_gaussian_kernel(arm: torch.Tensor, var_arm: torch.Tensor) -> torch.Tensor:
+        return torch.exp(-(arm**2 / var_arm) / 2)
 
-        cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
+    _theta_geo, _sigma_theta_geo = theta_geo(positions)
+    _theta_kin, _sigma_theta_kin = theta_kin(energies)
 
-        return torch.arccos(cos_theta)
+    arm = _theta_geo - _theta_kin
+    var_arm = _sigma_theta_geo**2 + _sigma_theta_kin**2
+    var_arm = torch.clamp(var_arm, min=1e-6)
 
-    def calculate_arm(theta_geo: float, theta_kin: float) -> float:
-        """Calculate the ARM as the absolute difference between geometric and kinematic angles.
-
-        Args:
-            theta_geo (float): Geometric scatter angle in radians.
-            theta_kin (float): Kinematic scatter angle in radians.
-
-        Returns:
-            float: ARM value in radians.
-        """
-        return torch.abs(theta_geo - theta_kin)
-
-    def classify_arm(arm_calculated: float, arm_threshold: float = 0.05) -> bool:
-        """Classify an event based on its ARM value.
-
-        Args:
-            arm_calculated (float): Computed ARM value in radians.
-            arm_threshold (float, optional): Acceptance threshold in radians. Defaults to 0.3 (17.19°).
-
-        Returns:
-            bool: True if the ARM passes the threshold, otherwise False.
-        """
-        return bool(arm_calculated <= arm_threshold)
-
-    if energies.numel() < 3 or positions.shape[0] < 3:
-        return None
-
-    _theta_geo = theta_geo(positions)
-    _theta_kin = theta_kin(energies)
-
-    if _theta_geo is None or _theta_kin is None:
-        return False
-
-    arm = calculate_arm(_theta_geo, _theta_kin)
-
-    # Fix: return a prior value instead of a boolean
-    return 1
-    return classify_arm(arm)
+    return arm_gaussian_kernel(arm, var_arm)
 
 
 # Add for bg too
