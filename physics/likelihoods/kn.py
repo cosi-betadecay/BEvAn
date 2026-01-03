@@ -55,6 +55,6 @@ def klein_nishina_pdf(energies: torch.Tensor) -> float:
         sigma_s = sigma_scat(electron_mass_energy, E_0, r_e)
         pdf = kn_diff_cross_section / sigma_s
 
-        return float(pdf)
+        return pdf
 
     return pdf(energies)

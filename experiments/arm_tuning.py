@@ -9,10 +9,12 @@ import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.kn import klein_nishina_pdf
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods.arm import angular_resolution_measure_kernel
 from utils.plots import (
     cdf,
     ecdf_slope,
@@ -48,24 +50,24 @@ def detected_511_event_likelihoods(
     if len(energies) == 0:
         return 0.0
 
-    log_terms_arm = []
+    _best = -float("inf")
 
     for r in range(3, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            log_terms_arm.append(torch.log(angular_resolution_measure_kernel(energy_combo, pos_combo)))
+            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo)
+            _kn = klein_nishina_pdf(energy_combo)
 
-    if len(log_terms_arm) == 0:
-        return 0.0
+            _arm = torch.clamp(_arm, min=1e-12)
+            _kn = torch.clamp(_kn, min=1e-12)
 
-    _arm = (
-        torch.logsumexp(torch.stack(log_terms_arm), dim=0)
-        - torch.log(torch.tensor(len(log_terms_arm), device=log_terms_arm[0].device))
-    ).item()
+            score = torch.log(_arm) + 0.5 * torch.log(_kn)  # alpha = 0.5
 
-    return _arm
+            _best = max(_best, score.item())
+
+    return _best
 
 
 def annihilation_extractor_test_kn(
@@ -75,7 +77,7 @@ def annihilation_extractor_test_kn(
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
 
-    arms = []
+    combs = []
     ground_truths = []
 
     for event in tqdm(
@@ -91,17 +93,17 @@ def annihilation_extractor_test_kn(
         else:
             ground_truths.append(0)
 
-        _arm = detected_511_event_likelihoods(
+        _comb = detected_511_event_likelihoods(
             ref_energy,
             event,
         )
 
-        if _arm == -float("inf"):
-            _arm = 0.0
+        if _comb == -float("inf"):
+            _comb = 0.0
 
-        arms.append(_arm)
+        combs.append(_comb)
 
-    return arms, ground_truths
+    return combs, ground_truths
 
 
 ##################################################################################
@@ -111,25 +113,25 @@ if __name__ == "__main__":
     load_dotenv()
 
     (
-        arms,
+        combs,
         ground_truths,
     ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
 
-    true_events_arms = []
-    false_events_arms = []
+    true_events_arm_kns = []
+    false_events_arm_kns = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
-            true_events_arms.append(arms[i])
+            true_events_arm_kns.append(combs[i])
         else:
-            false_events_arms.append(arms[i])
+            false_events_arm_kns.append(combs[i])
 
     runs = [
-        ("arm", arms),
-        ("arm_true_events", true_events_arms),
-        ("arm_false_events", false_events_arms),
+        ("arm-kn", combs),
+        ("arm-kn_true_events", true_events_arm_kns),
+        ("arm-kn_false_events", false_events_arm_kns),
     ]
 
     for label, data in runs:
