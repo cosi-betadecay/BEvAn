@@ -5,16 +5,16 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-from physics.likelihoods.arm import angular_resolution_measure_kernel
-from physics.likelihoods.kn import klein_nishina_pdf
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from physics.annihilation_detection import ground_truth
+from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (
     cdf,
     ecdf_slope,
