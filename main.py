@@ -10,7 +10,6 @@ def main(
     run_name: str,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
 ) -> None:
@@ -26,7 +25,6 @@ def main(
         "data/Activation.sim",
         alpha_energy,
         alpha_compton_kin,
-        alpha_kn,
         alpha_mid,
         alpha_arm,
     )
@@ -43,5 +41,4 @@ if __name__ == "__main__":
 
     wandb.login(key=wandb_api_key)
 
-    main("Likelihood-80p-including:posterior:energy-0.9_kn-0.1", 0.9, 0, 0.1, 0, 0)
-    main("Likelihood-80p-including:posterior:energy-0.95_kn-0.05", 0.9, 0, 0.05, 0, 0)
+    main("Likelihood-80p-including:posterior:energy-1.0", 1.0, 0.0, 0.0, 0.0)

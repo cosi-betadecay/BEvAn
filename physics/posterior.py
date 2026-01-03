@@ -3,7 +3,6 @@ import torch
 from physics.likelihoods.arm import angular_resolution_measure_likelihood
 from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay, compton_kin_heurestic_bg
 from physics.likelihoods.energy import energy_heurestic_bg, energy_pdf_bdecay
-from physics.likelihoods.kn import klein_nishina_pdf
 from physics.likelihoods.mid import mid_heurestic_bdecay, mid_heurestic_bg
 
 
@@ -15,7 +14,6 @@ def posterior_bdecay(
     tolerance: float,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
 ) -> float:
@@ -27,8 +25,8 @@ def posterior_bdecay(
         time (float): Interaction time.
         ref_energy (float): Reference energy (keV).
         tolerance (float): Energy tolerance (keV).
+        alpha_energy (float): Energy PDF weight.
         alpha_compton_kin (float): Compton kinematic angle prior weight.
-        alpha_kn (float): Klein-Nishina prior weight.
         alpha_mid (float): Maximum interaction distance prior weight.
         alpha_arm (float): Angular resolution measure prior weight.
 
@@ -37,14 +35,12 @@ def posterior_bdecay(
     """
     energy_beta = energy_pdf_bdecay(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bdecay(energies)
-    kn_beta = klein_nishina_pdf(energies)
     mid_beta = mid_heurestic_bdecay(positions, time)
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
         alpha_energy * torch.log(energy_beta)
         + alpha_compton_kin * torch.log(compton_kin_beta)
-        + alpha_kn * torch.log(kn_beta)
         + alpha_mid * torch.log(mid_beta)
         + alpha_arm * torch.log(arm_beta)
     )
@@ -60,7 +56,6 @@ def posterior_bg(
     tolerance: float,
     alpha_energy: float,
     alpha_compton_kin: float,
-    alpha_kn: float,
     alpha_mid: float,
     alpha_arm: float,
 ) -> float:
@@ -72,6 +67,7 @@ def posterior_bg(
         time (float): Interaction time.
         ref_energy (float): Reference energy (keV).
         tolerance (float): Energy tolerance (keV).
+        alpha_energy (float): Energy heurestic weight.
         alpha_compton_kin (float): Compton kinematic angle prior weight.
         alpha_kn (float): Klein-Nishina prior weight.
         alpha_mid (float): Maximum interaction distance prior weight.
@@ -82,14 +78,12 @@ def posterior_bg(
     """
     energy_beta = energy_heurestic_bg(energies, ref_energy, tolerance)
     compton_kin_beta = compton_kin_heurestic_bg(energies)
-    kn_beta = klein_nishina_pdf(energies)
     mid_beta = mid_heurestic_bg(positions, time)
     arm_beta = angular_resolution_measure_likelihood(energies, positions)
 
     log_posterior = (
         alpha_energy * torch.log(energy_beta)
         + alpha_compton_kin * torch.log(compton_kin_beta)
-        + alpha_kn * torch.log(kn_beta)
         + alpha_mid * torch.log(mid_beta)
         + alpha_arm * torch.log(arm_beta)
     )
