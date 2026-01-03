@@ -114,6 +114,23 @@ if __name__ == "__main__":
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
 
+    arms = torch.tensor(arms)
+    finite_mask = torch.isfinite(arms)
+
+    if not torch.any(finite_mask):
+        # No valid values → return zeros (or handle however you prefer)
+        arms = torch.zeros_like(arms)
+    else:
+        floor = torch.min(arms[finite_mask])
+        arms = torch.where(finite_mask, arms, floor)
+
+        arms_min = torch.min(arms)
+        arms_max = torch.max(arms)
+
+        arms = (arms - arms_min) / (arms_max - arms_min + 1e-8)
+
+    arms = arms.tolist()
+
     true_events_arms = []
     false_events_arms = []
 
