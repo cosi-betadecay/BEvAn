@@ -40,7 +40,7 @@ def mid_heurestic_bdecay(positions: torch.Tensor, time: float, mid_threshold: fl
 
     n_interactions = positions.shape[0]
     if n_interactions < 2:
-        return None
+        return 1
 
     diffs = positions[1:] - positions[:-1]
     distances = torch.norm(diffs, dim=1)

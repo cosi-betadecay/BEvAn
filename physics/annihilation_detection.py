@@ -2,15 +2,14 @@ import itertools
 from typing import Any
 
 import matplotlib.pyplot as plt
-import numpy as np
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.likelihoods.kn import klein_nishina_pdf
-from physics.posterior import posterior_bdecay, posterior_bg
+from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -61,7 +60,7 @@ def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
     Returns:
         bool: _description_
     """
-    return np.log(posterior_bdecay) - np.log(posterior_bg) >= 0
+    return posterior_bdecay >= 0.8
 
 
 def detected_511_event(
@@ -104,7 +103,7 @@ def detected_511_event(
     _posterior_bg = -float("inf")
     _kn = -float("inf")
 
-    for r in range(2, n_hits + 1):
+    for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
@@ -126,22 +125,26 @@ def detected_511_event(
                 ),
             )
 
-            _posterior_bg = max(
-                _posterior_bg,
-                posterior_bg(
-                    energy_combo,
-                    pos_combo,
-                    t,
-                    ref_energy,
-                    tolerance,
-                    alpha_energy,
-                    alpha_compton_kin,
-                    alpha_mid,
-                    alpha_arm,
-                ),
-            )
+            #_posterior_bg = max(
+            #    _posterior_bg,
+            #    posterior_bg(
+            #        energy_combo,
+            #        pos_combo,
+            #        t,
+            #       ref_energy,
+            #        tolerance,
+            #        alpha_energy,
+            #        alpha_compton_kin,
+            #        alpha_mid,
+            #        alpha_arm,
+            #    ),
+            #)
 
-            _kn = max(_kn, klein_nishina_pdf(energies))
+            if r > 1:
+                _kn = max(_kn, klein_nishina_pdf(energies))
+
+    if _kn == -float("inf"):
+        _kn = 1
 
     return classifier(_posterior_bdecay, _posterior_bg), _kn
 
@@ -192,11 +195,10 @@ def annihilation_extractor(
     predictions = torch.tensor(predictions, dtype=torch.bool)
     gt = torch.tensor(ground_truths, dtype=torch.bool)
 
-    # 5th percentile
-    q05 = torch.quantile(kns, 0.05)
 
     # Apply KN cut and gate predictions
-    kns_pred = kns >= q05
+    quantile = torch.quantile(kns, 0.05)
+    kns_pred = kns >= quantile
     preds = kns_pred & predictions
 
     tp = torch.sum(gt & preds).item()

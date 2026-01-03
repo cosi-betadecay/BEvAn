@@ -5,9 +5,10 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -56,7 +57,7 @@ def detected_511_event_likelihoods(
     _posterior_bdecay = -float("inf")
     _posterior_bg = -float("inf")
 
-    for r in range(1, n_hits + 1):
+    for r in range(2, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
