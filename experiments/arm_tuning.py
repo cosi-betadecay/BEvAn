@@ -74,16 +74,19 @@ def detected_511_event_likelihoods(
 
             alpha_arm = 1
             alpha_energy = 1
-            alpha_kn = 0
-            alpha_compton_kin = 0.0
+            alpha_kn = 0.0
+            alpha_compton_kin = 0
 
             score = (alpha_arm * torch.log(_arm) + 
                      alpha_energy * (_energy) + 
-                     alpha_kn * (_kn) + 
+                     alpha_kn * torch.log(_kn) + 
                      alpha_compton_kin * (_compton_kin)
                      )
 
             _best = max(_best, score.item())
+
+    if _best < 0 or _best > 1:
+        print(_best)
 
     return _best
 
@@ -145,6 +148,10 @@ if __name__ == "__main__":
             true_events_arm_kn_energies.append(combs[i])
         else:
             false_events_arm_kn_energies.append(combs[i])
+
+    print(len(combs))
+    print(len(true_events_arm_kn_energies))
+    print(len(false_events_arm_kn_energies))
 
     runs = [
         ("arm-kn-energy", combs),

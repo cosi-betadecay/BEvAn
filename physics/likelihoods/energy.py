@@ -12,7 +12,7 @@ def energy_pdf_bdecay(energies: torch.Tensor, ref_energy: float, sigma_e: float)
     Returns:
         float: Energy likelihood value.
     """
-    pdf = torch.exp(-(((torch.sum(energies) - ref_energy) / sigma_e) ** 2) / 2)
+    pdf = torch.exp(-(((torch.sum(energies) - ref_energy) / (10 * sigma_e)) ** 2) / 2)
 
     return pdf
 

@@ -4,12 +4,13 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
+from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.energy import energy_pdf_bdecay
 from physics.likelihoods.kn import klein_nishina_pdf
-from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -60,7 +61,7 @@ def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
     Returns:
         bool: _description_
     """
-    return posterior_bdecay >= 0.4
+    return posterior_bdecay >= 0.9
 
 
 def detected_511_event(
@@ -97,52 +98,40 @@ def detected_511_event(
         dtype=torch.float32,
     )
 
-    _posterior_bdecay = -float("inf")
-    _posterior_bg = -float("inf")
+    _best = -float("inf")
     _kn = -float("inf")
+
+    one = torch.tensor(1.0, dtype=energies.dtype, device=energies.device)
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            t = 0  # Find a way of getting time information from MEGAlib events
 
-            _posterior_bdecay = max(
-                _posterior_bdecay,
-                posterior_bdecay(
-                    energy_combo,
-                    pos_combo,
-                    t,
-                    ref_energy,
-                    tolerance,
-                    alpha_energy,
-                    alpha_arm,
-                ),
+            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo) if r > 2 else one
+            _kn = klein_nishina_pdf(energy_combo) if r > 1 else one
+            _energy = energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
+
+            _arm = torch.clamp(_arm, min=1e-12)
+            _kn = torch.clamp(_kn, min=1e-12)
+            _energy = torch.clamp(_energy, min=1e-12)
+
+            alpha_arm = 1
+            alpha_energy = 1
+            alpha_kn = 0
+
+            score = (
+                alpha_arm * torch.log(_arm)
+                + alpha_energy * (_energy)
+                + alpha_kn * torch.log(_kn)
             )
 
-            # _posterior_bg = max(
-            #    _posterior_bg,
-            #    posterior_bg(
-            #        energy_combo,
-            #        pos_combo,
-            #        t,
-            #       ref_energy,
-            #        tolerance,
-            #        alpha_energy,
-            #        alpha_compton_kin,
-            #        alpha_mid,
-            #        alpha_arm,
-            #    ),
-            # )
+            _best = max(_best, score.item())
+    
+    #print(score)
 
-            if r > 1:
-                _kn = max(_kn, klein_nishina_pdf(energies))
-
-    if _kn == -float("inf"):
-        _kn = 1
-
-    return classifier(_posterior_bdecay, _posterior_bg), _kn
+    return classifier(_best, 0), _kn
 
 
 def annihilation_extractor(
@@ -190,7 +179,7 @@ def annihilation_extractor(
     # Apply KN cut and gate predictions
     quantile = torch.quantile(kns, 0.05)
     kns_pred = kns >= quantile
-    preds = kns_pred & predictions
+    preds = predictions
 
     tp = torch.sum(gt & preds).item()
     fp = torch.sum(~gt & preds).item()
