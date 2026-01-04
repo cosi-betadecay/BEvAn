@@ -23,9 +23,6 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
 
         return electron_mass_energy * torch.sqrt(term0 + term1)
 
-    if energies.numel() < 2:
-        return 1.0  # neutral
-
     E0 = energies.sum()
     E = energies[1:].sum()
 
@@ -33,12 +30,12 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
     cos_phi = 1.0 - m_e * (1.0 / E - 1.0 / E0)
     abs_cos = torch.abs(cos_phi)
 
-    sigma = sigma_cos_phi(E0, E)
+    sigma = 3 * sigma_cos_phi(E0, E)
     z = (abs_cos - 1.0) / sigma
 
     weight = torch.where(z <= 0, torch.tensor(1.0, device=z.device), torch.exp(-0.5 * z**2))
 
-    return float(weight)
+    return weight
 
 
 def compton_kin_heurestic_bg(energies: torch.Tensor) -> float:

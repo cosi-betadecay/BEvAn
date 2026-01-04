@@ -15,6 +15,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
 from physics.likelihoods.energy import energy_pdf_bdecay
 from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (
@@ -54,21 +55,33 @@ def detected_511_event_likelihoods(
         return 0.0
 
     _best = -float("inf")
+    one = torch.tensor(1.0, dtype=energies.dtype, device=energies.device)
 
-    for r in range(3, n_hits + 1):
+    for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo)
-            _kn = klein_nishina_pdf(energy_combo)
+            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo) if r > 2 else one
+            _kn = klein_nishina_pdf(energy_combo) if r > 1 else one
             _energy = energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
+            _compton_kin = compton_kin_heurestic_bdecay(energy_combo) if r > 1 else one
 
             _arm = torch.clamp(_arm, min=1e-12)
             _kn = torch.clamp(_kn, min=1e-12)
             _energy = torch.clamp(_energy, min=1e-12)
+            _compton_kin = torch.clamp(_compton_kin, min=1e-12)
 
-            score = torch.log(_arm) + torch.log(_energy) + 0.5 * torch.log(_kn)  # alpha = 0.5
+            alpha_arm = 1
+            alpha_energy = 1
+            alpha_kn = 0
+            alpha_compton_kin = 0.0
+
+            score = (alpha_arm * torch.log(_arm) + 
+                     alpha_energy * (_energy) + 
+                     alpha_kn * (_kn) + 
+                     alpha_compton_kin * (_compton_kin)
+                     )
 
             _best = max(_best, score.item())
 
