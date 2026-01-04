@@ -60,15 +60,13 @@ def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
     Returns:
         bool: _description_
     """
-    return posterior_bdecay >= 0.8
+    return posterior_bdecay >= 0.4
 
 
 def detected_511_event(
     ref_energy: float,
     event: Any,
     alpha_energy: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
     alpha_arm: float,
 ) -> bool:
     """Determine if an event is detected as a 511 keV annihilation event based on posterior probability.
@@ -119,8 +117,6 @@ def detected_511_event(
                     ref_energy,
                     tolerance,
                     alpha_energy,
-                    alpha_compton_kin,
-                    alpha_mid,
                     alpha_arm,
                 ),
             )
@@ -153,8 +149,6 @@ def annihilation_extractor(
     geometry_file: str,
     sim_file: str,
     alpha_energy: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
     alpha_arm: float,
     ref_energy: int = 511,
 ) -> None:
@@ -182,9 +176,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction, _kn = detected_511_event(
-            ref_energy, event, alpha_energy, alpha_compton_kin, alpha_mid, alpha_arm
-        )
+        prediction, _kn = detected_511_event(ref_energy, event, alpha_energy, alpha_arm)
         _ground_truth = ground_truth(event, ref_energy)
 
         predictions.append(prediction)
