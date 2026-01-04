@@ -5,9 +5,10 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -65,6 +66,7 @@ def detected_511_event_likelihoods(
 
             _arm = torch.clamp(_arm, min=1e-12)
             _kn = torch.clamp(_kn, min=1e-12)
+            _energy = torch.clamp(_energy, min=1e-12)
 
             score = torch.log(_arm) + torch.log(_energy) + 0.5 * torch.log(_kn)  # alpha = 0.5
 

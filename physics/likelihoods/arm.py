@@ -3,7 +3,7 @@ import torch
 
 def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
     def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        sigma_x = 0.15  # cm (≈1.5 mm HPGe position resolution), get from paper later on
+        sigma_x = 4.0  # cm (≈4.0 cm HPGe position resolution), get from paper later on
 
         x0, x1, x2 = positions[0], positions[1], positions[2]
 
@@ -33,7 +33,7 @@ def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.T
             )
             sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
 
-            return sigma_cos_theta_kin / sin_theta_kin
+            return 3 * sigma_cos_theta_kin / sin_theta_kin
 
         electron_mass_energy = 511.0  # keV
         E_0 = energies.sum()
