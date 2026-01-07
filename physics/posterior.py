@@ -28,21 +28,11 @@ def posterior_bdecay(
             pos_combo[valid_arm],
         )
 
-    # print("#ARM")
-    # print(valid_arm)
-    # print(arm[valid_arm])
-    # print("-"*20)
-
     # KN
     kn = one.clone()
     valid_kn = sizes > 1
     if valid_kn.any():
         kn[valid_kn] = klein_nishina_pdf(energy_combo[valid_kn])
-
-    # print("KN")
-    # print(valid_kn)
-    # print(kn[valid_kn])
-    # print("-"*20)
 
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
@@ -53,9 +43,6 @@ def posterior_bdecay(
     eng = torch.clamp(eng, min=1e-12)
 
     score = alpha_arm * torch.log(arm) + alpha_energy * eng
-
-    # print("vector score:", score.detach().cpu())
-    # print("-"*100)
 
     return score.max()
 

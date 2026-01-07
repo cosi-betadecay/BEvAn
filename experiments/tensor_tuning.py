@@ -146,12 +146,12 @@ def posterior_torch(
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
     # Numerical stability
-    #arm = torch.clamp(arm, min=1e-12)
-    #kn = torch.clamp(kn, min=1e-12)
-    #eng = torch.clamp(eng, min=1e-12)
+    # arm = torch.clamp(arm, min=1e-12)
+    # kn = torch.clamp(kn, min=1e-12)
+    # eng = torch.clamp(eng, min=1e-12)
 
-    #score = alpha_energy * eng
-    #score = alpha_arm * arm # valid
+    # score = alpha_energy * eng
+    # score = alpha_arm * arm # valid
     score = alpha_energy * eng + alpha_arm * torch.log(arm)
 
     return score.max()
@@ -173,12 +173,12 @@ def posterior(
     arm = angular_resolution_measure_kernel(energies, positions) if r > 2 else one
     kn = klein_nishina_pdf(energies) if r > 1 else one
 
-    #arm = torch.clamp(arm, min=1e-12)
-    #kn = torch.clamp(kn, min=1e-12)
-    #eng = torch.clamp(eng, min=1e-12)
+    # arm = torch.clamp(arm, min=1e-12)
+    # kn = torch.clamp(kn, min=1e-12)
+    # eng = torch.clamp(eng, min=1e-12)
 
-    #score = alpha_energy * eng
-    #score = alpha_arm * arm # valid
+    # score = alpha_energy * eng
+    # score = alpha_arm * arm # valid
 
     score = alpha_energy * eng + alpha_arm * torch.log(arm)
 

@@ -23,8 +23,12 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
 
         return electron_mass_energy * torch.sqrt(term0 + term1)
 
-    E0 = energies.sum()
-    E = energies[1:].sum()
+    if energies.ndim == 1:
+        E0 = energies.sum()
+        E = E0 - energies[0]
+    else:
+        E0 = energies.sum(dim=1)
+        E = E0 - energies[:, 0]
 
     m_e = 511.0
     cos_phi = 1.0 - m_e * (1.0 / E - 1.0 / E0)
