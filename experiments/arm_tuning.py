@@ -5,15 +5,19 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.posterior import posterior_bdecay, posterior_bg
+from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
+from physics.likelihoods.energy import energy_pdf_bdecay
+from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (
     cdf,
     ecdf_slope,
@@ -27,15 +31,12 @@ from utils.reader_extraction import get_reader
 ##################################################################################
 
 
-# Data extraction
-
-
 def detected_511_event_likelihoods(
     ref_energy: float,
     event: Any,
 ):
-    tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
+    tolerance = calculate_tolerance()
 
     energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
     positions = torch.tensor(
@@ -51,37 +52,53 @@ def detected_511_event_likelihoods(
     )
 
     if len(energies) == 0:
-        return 0.0, 0.0
+        return 0.0
 
-    _posterior_bdecay = -float("inf")
-    _posterior_bg = -float("inf")
+    _best = -float("inf")
+    one = torch.tensor(1.0, dtype=energies.dtype, device=energies.device)
 
-    for r in range(2, n_hits + 1):
+    for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            _posterior_bdecay = max(
-                _posterior_bdecay,
-                posterior_bdecay(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0),
-            )
+            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo) if r > 2 else one
+            _kn = klein_nishina_pdf(energy_combo) if r > 1 else one
+            _energy = energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
+            _compton_kin = compton_kin_heurestic_bdecay(energy_combo) if r > 1 else one
 
-            _posterior_bg = max(
-                _posterior_bg, posterior_bg(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0)
-            )
+            _arm = torch.clamp(_arm, min=1e-12)
+            _kn = torch.clamp(_kn, min=1e-12)
+            _energy = torch.clamp(_energy, min=1e-12)
+            _compton_kin = torch.clamp(_compton_kin, min=1e-12)
 
-    return _posterior_bdecay, _posterior_bg
+            alpha_arm = 1
+            alpha_energy = 1
+            alpha_kn = 0.0
+            alpha_compton_kin = 0
+
+            score = (alpha_arm * torch.log(_arm) + 
+                     alpha_energy * (_energy) + 
+                     alpha_kn * torch.log(_kn) + 
+                     alpha_compton_kin * (_compton_kin)
+                     )
+
+            _best = max(_best, score.item())
+
+    if _best < 0 or _best > 1:
+        print(_best)
+
+    return _best
 
 
-def annihilation_extractor_test_likelihoods(
+def annihilation_extractor_test_kn(
     geometry_file: str,
     sim_file: str,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
 
-    posteriors_bdecay = []
-    posteriors_bg = []
+    combs = []
     ground_truths = []
 
     for event in tqdm(
@@ -97,14 +114,17 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        _posterior_bdecay, _posterior_bg = detected_511_event_likelihoods(
+        _comb = detected_511_event_likelihoods(
             ref_energy,
             event,
         )
-        posteriors_bdecay.append(_posterior_bdecay)
-        posteriors_bg.append(_posterior_bg)
 
-    return posteriors_bdecay, posteriors_bg, ground_truths
+        if _comb == -float("inf"):
+            _comb = 0.0
+
+        combs.append(_comb)
+
+    return combs, ground_truths
 
 
 ##################################################################################
@@ -114,30 +134,29 @@ if __name__ == "__main__":
     load_dotenv()
 
     (
-        posteriors_bdecay,
-        posteriors_bg,
+        combs,
         ground_truths,
-    ) = annihilation_extractor_test_likelihoods(
+    ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
     )
-    posteriors_bdecay_true_events = []
-    posteriors_bdecay_false_events = []
-    posteriors_bg_true_events = []
-    posteriors_bg_false_events = []
+
+    true_events_arm_kn_energies = []
+    false_events_arm_kn_energies = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
-            posteriors_bdecay_true_events.append(posteriors_bdecay[i])
-            posteriors_bg_true_events.append(posteriors_bg[i])
+            true_events_arm_kn_energies.append(combs[i])
         else:
-            posteriors_bdecay_false_events.append(posteriors_bdecay[i])
-            posteriors_bg_false_events.append(posteriors_bg[i])
+            false_events_arm_kn_energies.append(combs[i])
+
+    print(len(combs))
+    print(len(true_events_arm_kn_energies))
+    print(len(false_events_arm_kn_energies))
 
     runs = [
-        ("true_events_posterior_bdecay", posteriors_bdecay_true_events),
-        ("false_events_posterior_bdecay", posteriors_bdecay_false_events),
-        ("true_events_posterior_bg", posteriors_bg_true_events),
-        ("false_events_posterior_bg", posteriors_bg_false_events),
+        ("arm-kn-energy", combs),
+        ("arm-kn-energy_true_events", true_events_arm_kn_energies),
+        ("arm-kn-energy_false_events", false_events_arm_kn_energies),
     ]
 
     for label, data in runs:
@@ -145,7 +164,7 @@ if __name__ == "__main__":
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-likelihoods", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-arm", name=label, reinit=True)
 
         histogram(data, label)
         histogram_log(data, label)

@@ -1,16 +1,14 @@
 import os
 
+import wandb
 from dotenv import load_dotenv
 
-import wandb
 from physics.annihilation_detection import annihilation_extractor
 
 
 def main(
     run_name: str,
     alpha_energy: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
     alpha_arm: float,
 ) -> None:
     """Run the annihilation event simulation and evaluate detection performance.
@@ -24,8 +22,6 @@ def main(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup",
         "data/Activation.sim",
         alpha_energy,
-        alpha_compton_kin,
-        alpha_mid,
         alpha_arm,
     )
 
@@ -41,4 +37,4 @@ if __name__ == "__main__":
 
     wandb.login(key=wandb_api_key)
 
-    main("Likelihood-80p-including:posterior:energy-1.0", 1.0, 0.0, 0.0, 0.0)
+    main("Likelihood-80p-including:posterior:energy-1.0", 1.0, 1.0)

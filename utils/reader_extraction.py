@@ -2,6 +2,7 @@ from typing import Any
 
 import ROOT as M
 
+
 def get_reader(geometry_file: str, sim_file: str) -> Any:
     """Initialize a MEGAlib simulation file reader with the specified geometry.
 
