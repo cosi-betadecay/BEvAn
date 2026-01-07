@@ -3,23 +3,60 @@
 This project is part of the Compton Spectrometer and Imager (COSI) program at the
 Space Sciences Laboratory, UC Berkeley. It focuses on detecting and characterizing
 511 keV gamma-ray annihilation photons in high-purity germanium (HPGe) detector
-data, using Compton kinematics and MEGAlib simulations to distinguish true
-beta-plus annihilation events from background.
+data. The goal is to flag each simulated event as either a beta-plus annihilation
+signal or background, using Compton kinematics and likelihood-based scoring.
 
 Positron annihilation following beta-plus decay produces two back-to-back 511 keV
-photons. In COSI, those photons interact primarily via Compton scattering in
-segmented HPGe detectors. By analyzing the energy and spatial distribution of hit
-sequences, the analysis reconstructs event kinematics and evaluates whether an
-event is consistent with a 511 keV annihilation photon.
+photons. In COSI, those photons interact primarily through Compton scattering in
+segmented HPGe detectors. Each interaction leaves a set of energy deposits and hit
+positions. By analyzing the energy and spatial distribution of hits, the analysis
+reconstructs event kinematics and determines whether the event is consistent with
+a 511 keV annihilation photon.
+
+This repository uses MEGAlib simulations to generate realistic interaction chains,
+labels annihilation truth from the simulated interaction history, and evaluates how
+well physics-based likelihoods discriminate beta-plus events from background.
+The scientific motivation is twofold: constrain astrophysical sources of 511 keV
+emission and validate COSI detector response for annihilation radiation, which
+supports both instrument calibration and reconstruction development.
+
+## How events are flagged (beta-plus vs background)
+
+The core pipeline in `physics/annihilation_detection.py` takes each simulated
+event and produces two labels: beta-plus annihilation (beta-decay signal, bdecay)
+or background (bg).
+
+- Ground truth: uses the MEGAlib interaction chain to find ANNI processes,
+  collects their secondary hits, sums the deposited energies, and checks whether
+  the total falls within the 511 keV window defined by
+  `mathematics/calculations.py` (3-sigma tolerance derived from HPGe FWHM).
+- Prediction: scores all hit combinations using Compton-kinematic likelihoods
+  and flags the event as beta-plus if the best score exceeds a threshold; otherwise it is labeled background.
+
+Scoring uses the following components:
+
+- Energy consistency: a Gaussian-like weight on the sum of hit energies relative
+  to 511 keV (`physics/likelihoods/energy.py`).
+- ARM (angular resolution measure): compares geometric and kinematic scatter
+  angles when at least three hits are available
+  (`physics/likelihoods/arm.py`).
+- Klein-Nishina weight: optional Compton cross-section weighting for two or more
+  hits (`physics/likelihoods/kn.py`).
+
+The final score takes the maximum over all hit combinations to allow for
+uncertainty in interaction ordering. The predicted label is then compared to the
+ground-truth label to compute precision, recall, false-positive rate, and F1.
 
 ## What this repository does
 
 - Reads MEGAlib simulation events and marks ground truth annihilation signals
   by tracking ANNI interactions and summing associated hit energies.
-- Scores hit combinations using energy consistency, angular resolution measure
-  (ARM), and Klein-Nishina (KN) weighting to detect candidate 511 keV events.
-- Computes performance metrics (precision, recall, false-positive rate, F1) and
-  logs results and confusion matrices to Weights & Biases (W&B).
+- Scores hit combinations using energy consistency and angular resolution measure
+  (ARM), with optional Klein-Nishina (KN) weighting to detect candidate 511 keV
+  events.
+- Flags events as beta-plus or background and logs performance metrics
+  (precision, recall, false-positive rate, F1) and confusion matrices to
+  Weights & Biases (W&B).
 - Provides tuning scripts to explore likelihood distributions and classifier
   behavior for ARM, KN, and posterior models.
 - Documents the MEGAlib .sim format and expected data layout.
