@@ -5,15 +5,16 @@ from typing import Any
 
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.posterior import posterior_bdecay, posterior_bg
+from physics.posterior import posterior_bdecay
 from utils.plots import (
     cdf,
     ecdf_slope,
@@ -33,11 +34,28 @@ from utils.reader_extraction import get_reader
 def detected_511_event_likelihoods(
     ref_energy: float,
     event: Any,
+    alpha_energy: float,
+    alpha_arm: float,
+    alpha_kn: float,
 ):
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
 
-    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    tolerance = calculate_tolerance()
+    n_hits = event.GetNHTs()
+
+    if n_hits == 0:
+        return False
+
+    # Load event data onto GPU
+    energies = torch.tensor(
+        [event.GetHTAt(i).GetEnergy() for i in range(n_hits)],
+        dtype=torch.float32,
+        device=device,
+    )
+
     positions = torch.tensor(
         [
             (
@@ -48,40 +66,65 @@ def detected_511_event_likelihoods(
             for i in range(n_hits)
         ],
         dtype=torch.float32,
+        device=device,
     )
 
-    if len(energies) == 0:
-        return 0.0, 0.0
+    # Build all hit combinations (CPU once, GPU afterwards)
+    combos = []
+    sizes = []
 
-    _posterior_bdecay = -float("inf")
-    _posterior_bg = -float("inf")
+    for r in range(1, n_hits + 1):
+        for c in itertools.combinations(range(n_hits), r):
+            combos.append(c)
+            sizes.append(r)
 
-    for r in range(2, n_hits + 1):
-        for idx_combo in itertools.combinations(range(n_hits), r):
-            energy_combo = energies[list(idx_combo)]
-            pos_combo = positions[list(idx_combo)]
+    max_r = max(sizes)
+    n_combo = len(combos)
 
-            _posterior_bdecay = max(
-                _posterior_bdecay,
-                posterior_bdecay(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0),
-            )
+    # Pad combinations with -1
+    idx = torch.full((n_combo, max_r), -1, dtype=torch.long)
+    for i, c in enumerate(combos):
+        idx[i, : len(c)] = torch.tensor(c)
 
-            _posterior_bg = max(
-                _posterior_bg, posterior_bg(energy_combo, pos_combo, 0, ref_energy, tolerance, 1.0, 0, 0, 0)
-            )
+    idx = idx.to(device)
+    sizes = torch.tensor(sizes, device=device)
 
-    return _posterior_bdecay, _posterior_bg
+    # Gather energies and positions
+    valid_mask = idx >= 0
+
+    energy_combo = torch.zeros((n_combo, max_r), dtype=energies.dtype, device=device)
+    pos_combo = torch.zeros((n_combo, max_r, 3), dtype=positions.dtype, device=device)
+
+    energy_combo[valid_mask] = energies[idx[valid_mask]]
+    pos_combo[valid_mask] = positions[idx[valid_mask]]
+
+    best_score = posterior_bdecay(
+        energy_combo,
+        pos_combo,
+        ref_energy,
+        tolerance,
+        alpha_energy,
+        alpha_arm,
+        alpha_kn,
+        sizes,
+        n_combo,
+        device,
+    )
+
+    return best_score
 
 
 def annihilation_extractor_test_likelihoods(
     geometry_file: str,
     sim_file: str,
+    alpha_energy: float,
+    alpha_arm: float,
+    alpha_kn: float,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
 
     posteriors_bdecay = []
-    posteriors_bg = []
     ground_truths = []
 
     for event in tqdm(
@@ -97,14 +140,16 @@ def annihilation_extractor_test_likelihoods(
         else:
             ground_truths.append(0)
 
-        _posterior_bdecay, _posterior_bg = detected_511_event_likelihoods(
+        _posterior_bdecay = detected_511_event_likelihoods(
             ref_energy,
             event,
+            alpha_energy,
+            alpha_arm,
+            alpha_kn,
         )
         posteriors_bdecay.append(_posterior_bdecay)
-        posteriors_bg.append(_posterior_bg)
 
-    return posteriors_bdecay, posteriors_bg, ground_truths
+    return posteriors_bdecay, ground_truths
 
 
 ##################################################################################
@@ -115,29 +160,22 @@ if __name__ == "__main__":
 
     (
         posteriors_bdecay,
-        posteriors_bg,
         ground_truths,
     ) = annihilation_extractor_test_likelihoods(
-        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim", 1.0, 1.0, 0.0
     )
     posteriors_bdecay_true_events = []
     posteriors_bdecay_false_events = []
-    posteriors_bg_true_events = []
-    posteriors_bg_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             posteriors_bdecay_true_events.append(posteriors_bdecay[i])
-            posteriors_bg_true_events.append(posteriors_bg[i])
         else:
             posteriors_bdecay_false_events.append(posteriors_bdecay[i])
-            posteriors_bg_false_events.append(posteriors_bg[i])
 
     runs = [
         ("true_events_posterior_bdecay", posteriors_bdecay_true_events),
         ("false_events_posterior_bdecay", posteriors_bdecay_false_events),
-        ("true_events_posterior_bg", posteriors_bg_true_events),
-        ("false_events_posterior_bg", posteriors_bg_false_events),
     ]
 
     for label, data in runs:

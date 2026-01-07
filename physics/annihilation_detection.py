@@ -4,9 +4,9 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
@@ -50,16 +50,7 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
 
 
 def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
-    """_summary_
-
-    Args:
-        posterior_bdecay (float): _description_
-        posterior_bg (float): _description_
-
-    Returns:
-        bool: _description_
-    """
-    return posterior_bdecay >= 0.9
+    return posterior_bdecay >= 0.85
 
 
 def detected_511_event(
@@ -117,14 +108,14 @@ def detected_511_event(
     idx = idx.to(device)
     sizes = torch.tensor(sizes, device=device)
 
-    # Gather energies and positions
-    valid_mask = idx >= 0
+    # idx: (n_combo, max_r), padded with -1
 
-    energy_combo = torch.zeros((n_combo, max_r), dtype=energies.dtype, device=device)
-    pos_combo = torch.zeros((n_combo, max_r, 3), dtype=positions.dtype, device=device)
+    energy_combo = energies[idx]        # (n_combo, max_r)
+    pos_combo    = positions[idx]       # (n_combo, max_r, 3)
 
-    energy_combo[valid_mask] = energies[idx[valid_mask]]
-    pos_combo[valid_mask] = positions[idx[valid_mask]]
+    mask = idx >= 0
+    energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
+    pos_combo    = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
     best_score = posterior_bdecay(
         energy_combo,
@@ -135,8 +126,6 @@ def detected_511_event(
         alpha_arm,
         alpha_kn,
         sizes,
-        n_combo,
-        device,
     )
 
     return classifier(best_score, 0)
