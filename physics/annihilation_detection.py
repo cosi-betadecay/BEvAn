@@ -4,9 +4,9 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
@@ -110,12 +110,12 @@ def detected_511_event(
 
     # idx: (n_combo, max_r), padded with -1
 
-    energy_combo = energies[idx]        # (n_combo, max_r)
-    pos_combo    = positions[idx]       # (n_combo, max_r, 3)
+    energy_combo = energies[idx]  # (n_combo, max_r)
+    pos_combo = positions[idx]  # (n_combo, max_r, 3)
 
     mask = idx >= 0
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
-    pos_combo    = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
     best_score = posterior_bdecay(
         energy_combo,

@@ -70,12 +70,12 @@ def detected_511_event_tensor(
 
     # idx: (n_combo, max_r), padded with -1
 
-    energy_combo = energies[idx]        # (n_combo, max_r)
-    pos_combo    = positions[idx]       # (n_combo, max_r, 3)
+    energy_combo = energies[idx]  # (n_combo, max_r)
+    pos_combo = positions[idx]  # (n_combo, max_r, 3)
 
     mask = idx >= 0
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
-    pos_combo    = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
     return posterior_torch(energy_combo, pos_combo, ref_energy, tolerance, 1.0, 1.0, 0.0, sizes)
 
@@ -116,7 +116,7 @@ def detected_511_event(
             _kn = max(_kn, _kn_)
 
     return _eng, _arm, _kn
-            
+
 
 # --- Posteriors ---
 def posterior_torch(
@@ -129,7 +129,6 @@ def posterior_torch(
     alpha_kn: float,
     sizes: torch.Tensor,
 ) -> float:
-    
     device = energy_combo.device
     n_combo = energy_combo.shape[0]
     one = torch.ones(n_combo, device=device)
@@ -147,16 +146,14 @@ def posterior_torch(
     kn = one.clone()
     valid_kn = sizes > 1
     if valid_kn.any():
-        kn[valid_kn] = klein_nishina_pdf(
-            energy_combo[valid_kn]
-        )
+        kn[valid_kn] = klein_nishina_pdf(energy_combo[valid_kn])
 
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
 
     # Numerical stability
     arm = torch.clamp(arm, min=1e-12)
-    kn  = torch.clamp(kn,  min=1e-12)
+    kn = torch.clamp(kn, min=1e-12)
     eng = torch.clamp(eng, min=1e-12)
 
     score = alpha_arm * torch.log(arm) + alpha_energy * eng
@@ -182,10 +179,11 @@ def posterior(
     kn = klein_nishina_pdf(energies) if r > 1 else one
 
     arm = torch.clamp(arm, min=1e-12)
-    kn  = torch.clamp(kn,  min=1e-12)
+    kn = torch.clamp(kn, min=1e-12)
     eng = torch.clamp(eng, min=1e-12)
 
     return eng, arm, kn
+
 
 # --- Simulation ---
 def annihilation_extractor(
@@ -208,14 +206,14 @@ def annihilation_extractor(
             print("Energy: ", eng_t, eng)
             print("ARM: ", arm_t, arm)
             print("KN: ", kn_t, kn)
-            print("-"*50)
+            print("-" * 50)
             i += 1
 
-        
         if i == 10:
             break
 
+
 if __name__ == "__main__":
     annihilation_extractor(
-        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup",
-        "data/Activation.sim")
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    )
