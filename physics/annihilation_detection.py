@@ -61,7 +61,7 @@ def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
     Returns:
         bool: _description_
     """
-    return posterior_bdecay >= 0.9
+    return posterior_bdecay >= 0.85
 
 
 def detected_511_event(
