@@ -39,12 +39,4 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
 
 
 def compton_kin_heurestic_bg(energies: torch.Tensor) -> float:
-    """_summary_
-
-    Args:
-        energies (torch.Tensor): _description_
-
-    Returns:
-        float: _description_
-    """
-    return 1 - compton_kin_heurestic_bdecay(energies)
+    return

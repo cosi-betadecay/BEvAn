@@ -1,7 +1,7 @@
 import torch
 
 
-def energy_pdf_bdecay(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
+def energy_kernel_bdecay(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
     """Calculate the likelihood of a set of energy deposits given a reference energy and uncertainty.
 
     Args:
@@ -18,14 +18,4 @@ def energy_pdf_bdecay(energies: torch.Tensor, ref_energy: float, sigma_e: float)
 
 
 def energy_heurestic_bg(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
-    """_summary_
-
-    Args:
-        energies (torch.Tensor): _description_
-        ref_energy (float): _description_
-        sigma_e (float): _description_
-
-    Returns:
-        float: _description_
-    """
-    return 1 - energy_pdf_bdecay(energies, ref_energy, sigma_e)
+    return

@@ -10,6 +10,7 @@ def main(
     run_name: str,
     alpha_energy: float,
     alpha_arm: float,
+    alpha_kn: float,
 ) -> None:
     """Run the annihilation event simulation and evaluate detection performance.
 
@@ -23,6 +24,7 @@ def main(
         "data/Activation.sim",
         alpha_energy,
         alpha_arm,
+        alpha_kn,
     )
 
     wandb.finish()
@@ -37,4 +39,4 @@ if __name__ == "__main__":
 
     wandb.login(key=wandb_api_key)
 
-    main("Likelihood-80p-including:posterior:energy-1.0", 1.0, 1.0)
+    main("Likelihood-80p-including:posterior:energy-1.0", 1.0, 1.0, 0.0)
