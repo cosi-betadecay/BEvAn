@@ -100,22 +100,17 @@ def detected_511_event(
         dtype=torch.float32,
     )
 
-    _eng = -float("inf")
-    _arm = -float("inf")
-    _kn = -float("inf")
+    best = -float("inf")
 
     for r in range(1, n_hits + 1):
         for idx_combo in itertools.combinations(range(n_hits), r):
             energy_combo = energies[list(idx_combo)]
             pos_combo = positions[list(idx_combo)]
 
-            _eng_, _arm_, _kn_ = posterior(energy_combo, pos_combo, ref_energy, tolerance, 1.0, 1.0, 0.0, r)
+            score = posterior(energy_combo, pos_combo, ref_energy, tolerance, 1.0, 1.0, 0.0, r)
+            best = max(best, score)
 
-            _eng = max(_eng, _eng_)
-            _arm = max(_arm, _arm_)
-            _kn = max(_kn, _kn_)
-
-    return _eng, _arm, _kn
+    return best
 
 
 # --- Posteriors ---
@@ -150,16 +145,16 @@ def posterior_torch(
 
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
-
     # Numerical stability
-    arm = torch.clamp(arm, min=1e-12)
-    kn = torch.clamp(kn, min=1e-12)
-    eng = torch.clamp(eng, min=1e-12)
+    #arm = torch.clamp(arm, min=1e-12)
+    #kn = torch.clamp(kn, min=1e-12)
+    #eng = torch.clamp(eng, min=1e-12)
 
-    score = alpha_arm * torch.log(arm) + alpha_energy * eng
-    best_idx = torch.argmax(score)
+    #score = alpha_energy * eng
+    #score = alpha_arm * arm # valid
+    score = alpha_energy * eng + alpha_arm * torch.log(arm)
 
-    return eng[best_idx], arm[best_idx], kn[best_idx]
+    return score.max()
 
 
 def posterior(
@@ -178,11 +173,16 @@ def posterior(
     arm = angular_resolution_measure_kernel(energies, positions) if r > 2 else one
     kn = klein_nishina_pdf(energies) if r > 1 else one
 
-    arm = torch.clamp(arm, min=1e-12)
-    kn = torch.clamp(kn, min=1e-12)
-    eng = torch.clamp(eng, min=1e-12)
+    #arm = torch.clamp(arm, min=1e-12)
+    #kn = torch.clamp(kn, min=1e-12)
+    #eng = torch.clamp(eng, min=1e-12)
 
-    return eng, arm, kn
+    #score = alpha_energy * eng
+    #score = alpha_arm * arm # valid
+
+    score = alpha_energy * eng + alpha_arm * torch.log(arm)
+
+    return score.max()
 
 
 # --- Simulation ---
@@ -200,16 +200,15 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
         if event.GetNHTs() > 2:
-            eng_t, arm_t, kn_t = detected_511_event_tensor(event)
-            eng, arm, kn = detected_511_event(event)
+            s_t = detected_511_event_tensor(event)
+            s = detected_511_event(event)
             print(f"Iteration {i}")
-            print("Energy: ", eng_t, eng)
-            print("ARM: ", arm_t, arm)
-            print("KN: ", kn_t, kn)
+            print("Scores: ", s_t, s)
+            if s_t != s:
+                print("pwfwågwegwegwåegwegewågweå")
             print("-" * 50)
             i += 1
-
-        if i == 10:
+        if i == 100:
             break
 
 
