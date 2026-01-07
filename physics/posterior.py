@@ -1,8 +1,10 @@
 import torch
 
 from physics.likelihoods.arm import angular_resolution_measure_kernel
+from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
 from physics.likelihoods.energy import energy_kernel_bdecay
 from physics.likelihoods.kn import klein_nishina_pdf
+from physics.likelihoods.mid import mid_heurestic_bdecay
 
 
 def posterior_bdecay(
@@ -13,6 +15,8 @@ def posterior_bdecay(
     alpha_energy: float,
     alpha_arm: float,
     alpha_kn: float,
+    alpha_compton_kin: float,
+    alpha_mid: float,
     sizes: torch.Tensor,
 ) -> float:
     device = energy_combo.device
@@ -34,6 +38,18 @@ def posterior_bdecay(
     if valid_kn.any():
         kn[valid_kn] = klein_nishina_pdf(energy_combo[valid_kn])
 
+    # Compton Kinematic Angle
+    compton_kin = one.clone()
+    valid_compton_kin = sizes > 1
+    if valid_compton_kin.any():
+        compton_kin[valid_compton_kin] = compton_kin_heurestic_bdecay(energy_combo[valid_compton_kin])
+
+    # MID
+    mid = one.clone()
+    valid_mid = sizes > 1
+    if valid_mid.any():
+        mid[valid_mid] = mid_heurestic_bdecay(pos_combo[valid_mid], 0)  # Need a way of extracting time
+
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
 
@@ -45,8 +61,3 @@ def posterior_bdecay(
     score = alpha_arm * torch.log(arm) + alpha_energy * eng
 
     return score.max()
-
-
-# Not working now
-def posterior_bg():
-    return

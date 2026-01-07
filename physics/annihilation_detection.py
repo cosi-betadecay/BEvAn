@@ -59,6 +59,8 @@ def detected_511_event(
     alpha_energy: float,
     alpha_arm: float,
     alpha_kn: float,
+    alpha_compton_kin: float,
+    alpha_mid: float,
 ) -> bool:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -125,6 +127,8 @@ def detected_511_event(
         alpha_energy,
         alpha_arm,
         alpha_kn,
+        alpha_compton_kin,
+        alpha_mid,
         sizes,
     )
 
@@ -137,6 +141,8 @@ def annihilation_extractor(
     alpha_energy: float,
     alpha_arm: float,
     alpha_kn: float,
+    alpha_compton_kin: float,
+    alpha_mid: float,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
@@ -151,7 +157,9 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(ref_energy, event, alpha_energy, alpha_arm, alpha_kn)
+        prediction = detected_511_event(
+            ref_energy, event, alpha_energy, alpha_arm, alpha_kn, alpha_compton_kin, alpha_mid
+        )
         _ground_truth = ground_truth(event, ref_energy)
 
         predictions.append(prediction)
