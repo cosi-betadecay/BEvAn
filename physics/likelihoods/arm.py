@@ -3,7 +3,7 @@ import torch
 
 def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
     def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        sigma_x = 10.0
+        sigma_x = 4.0
 
         pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
         x0 = pos[:, 0, :]   # (B, 3)

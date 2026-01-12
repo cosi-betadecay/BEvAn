@@ -23,6 +23,8 @@ def posterior_bdecay(
     n_combo = energy_combo.shape[0]
     one = torch.ones(n_combo, device=device)
 
+    sizes = (energy_combo > 0).sum(dim=1)
+
     # ARM
     arm = one.clone()
     valid_arm = sizes > 2

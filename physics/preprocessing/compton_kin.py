@@ -11,7 +11,7 @@ def compton_kin(energies: torch.Tensor) -> bool:
         bool: True if the angle is physically valid, False otherwise.
     """
     # Get's integrated to the beta decay function, that's why we return True for less than 2 hits.
-    if energies.numel() < 2:
+    if torch.Tensor(energies).numel() < 2:
         return True
 
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
@@ -44,5 +44,7 @@ def compton_kin(energies: torch.Tensor) -> bool:
     _sigma_cos_phi = sigma_cos_phi(E_0, E)
 
     limit = 1.0 + _sigma_cos_phi
+
+    #print(energies)
 
     return bool(torch.abs(cos_phi) <= limit)

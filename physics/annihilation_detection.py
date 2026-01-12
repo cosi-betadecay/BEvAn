@@ -4,9 +4,9 @@ from typing import Any
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from physics.preprocessing.preprocesser import preprocesser
@@ -120,12 +120,14 @@ def detected_511_event(
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
     pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
-    if not preprocesser(energy_combo, pos_combo, tolerance):
+    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance)
+
+    if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
         return False
 
     best_score = posterior_bdecay(
-        energy_combo,
-        pos_combo,
+        new_energy_combo,
+        new_pos_combo,
         ref_energy,
         tolerance,
         alpha_energy,
