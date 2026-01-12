@@ -45,6 +45,23 @@ def compton_kin(energies: torch.Tensor) -> bool:
 
     limit = 1.0 + _sigma_cos_phi
 
-    #print(energies)
+    # print(energies)
 
     return bool(torch.abs(cos_phi) <= limit)
+
+
+def compton_kin_preprocessing(
+    energies: torch.Tensor, positions: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    # Build validity mask per sequence
+    valid_mask = torch.tensor(
+        [compton_kin(energies[i]) for i in range(energies.shape[0])],
+        device=energies.device,
+        dtype=torch.bool,
+    )
+
+    # Apply mask
+    valid_energies = energies[valid_mask]
+    valid_positions = positions[valid_mask]
+
+    return valid_energies, valid_positions
