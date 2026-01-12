@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
+from physics.preprocessing.preprocesser import preprocesser
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -118,6 +119,9 @@ def detected_511_event(
     mask = idx >= 0
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
     pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+
+    if not preprocesser(energy_combo, pos_combo, tolerance):
+        return False
 
     best_score = posterior_bdecay(
         energy_combo,
