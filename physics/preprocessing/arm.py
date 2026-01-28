@@ -1,14 +1,14 @@
 import torch
 
 
-def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+def arm(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
     def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         sigma_x = 4.0
 
         pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
-        x0 = pos[:, 0, :]   # (B, 3)
-        x1 = pos[:, 1, :]   # (B, 3)
-        x2 = pos[:, 2, :]   # (B, 3)
+        x0 = pos[:, 0, :]  # (B, 3)
+        x1 = pos[:, 1, :]  # (B, 3)
+        x2 = pos[:, 2, :]  # (B, 3)
         x0, x1, x2 = x0[0], x1[0], x2[0]
 
         v_in = x1 - x0
@@ -42,10 +42,10 @@ def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.T
         electron_mass_energy = 511.0  # keV
         if energies.ndim == 1:
             E_0 = energies.sum()
-            E   = E_0 - energies[0]
+            E = E_0 - energies[0]
         else:
             E_0 = energies.sum(dim=1)
-            E   = E_0 - energies[:, 0]
+            E = E_0 - energies[:, 0]
 
         cos_theta_kin = 1 - electron_mass_energy * (1 / E - 1 / E_0)
         cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)
@@ -54,17 +54,21 @@ def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.T
 
         return theta_kin, _sigma_theta_kin
 
-    def arm_gaussian_kernel(arm: torch.Tensor, var_arm: torch.Tensor) -> torch.Tensor:
-        return torch.exp(-(arm**2 / var_arm) / 2)
-
-    _theta_geo, _sigma_theta_geo = theta_geo(positions)
     _theta_kin, _sigma_theta_kin = theta_kin(energies)
+    _theta_geo, _sigma_theta_geo = theta_geo(positions)
 
     arm = _theta_geo - _theta_kin
-    var_arm = _sigma_theta_geo**2 + _sigma_theta_kin**2
-    var_arm = torch.clamp(var_arm, min=1e-6)
 
-    return arm_gaussian_kernel(arm, var_arm)
+    return torch.abs(arm) <= 0.5236  # 30 degrees
 
 
-# Add for bg too
+def arm_preprocessing(energies: torch.Tensor, positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    valid_mask = torch.tensor(
+        [arm(energies[i], positions[i]) for i in range(energies.shape[0], positions.shape[0])],
+        device=energies.device,
+        dtype=torch.bool,
+    )
+    valid_energies = energies[valid_mask]
+    valid_positions = positions[valid_mask]
+
+    return valid_energies, valid_positions
