@@ -2,9 +2,9 @@ import os
 
 import hydra
 import omegaconf
+import wandb
 from dotenv import load_dotenv
 
-import wandb
 from physics.annihilation_detection import annihilation_extractor
 
 
