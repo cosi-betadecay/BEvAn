@@ -2,11 +2,12 @@ import itertools
 from typing import Any
 
 import matplotlib.pyplot as plt
+import omegaconf
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from physics.preprocessing.preprocesser import preprocesser
@@ -57,11 +58,7 @@ def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
 def detected_511_event(
     ref_energy: float,
     event: Any,
-    alpha_energy: float,
-    alpha_arm: float,
-    alpha_kn: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
+    cfg: omegaconf.dictconfig.DictConfig,
 ) -> bool:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -130,11 +127,7 @@ def detected_511_event(
         new_pos_combo,
         ref_energy,
         tolerance,
-        alpha_energy,
-        alpha_arm,
-        alpha_kn,
-        alpha_compton_kin,
-        alpha_mid,
+        cfg,
         sizes,
     )
 
@@ -142,16 +135,10 @@ def detected_511_event(
 
 
 def annihilation_extractor(
-    geometry_file: str,
-    sim_file: str,
-    alpha_energy: float,
-    alpha_arm: float,
-    alpha_kn: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
+    cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,
 ) -> None:
-    reader = get_reader(geometry_file, sim_file)
+    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
     ground_truths = []
     predictions = []
@@ -163,9 +150,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(
-            ref_energy, event, alpha_energy, alpha_arm, alpha_kn, alpha_compton_kin, alpha_mid
-        )
+        prediction = detected_511_event(ref_energy, event, cfg)
         _ground_truth = ground_truth(event, ref_energy)
 
         predictions.append(prediction)

@@ -24,3 +24,6 @@ Activation.tra
 
 # Weights & Biases
 wandb
+
+# Hydra
+outputs/

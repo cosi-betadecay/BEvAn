@@ -1,0 +1,15 @@
+preprocessing:
+  energy:
+    n_std: 20
+
+  arm:
+    sigma_x: 4.0
+    n_sigma_cos_theta_kin: 3
+
+  mid:
+    mid_threshold: 7.0
+
+  compton_kin:
+    n_sigma_cos_phi: 3.0
+    frac_sigma: 0.0035
+    
