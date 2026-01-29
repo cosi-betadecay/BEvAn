@@ -1,7 +1,8 @@
+import omegaconf
 import torch
 
 
-def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor, cfg_likelihoods: omegaconf.dictconfig.DictConfig) -> torch.Tensor:
     def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         sigma_x = 4.0
 
@@ -36,7 +37,7 @@ def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.T
                 electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_0) ** 2 + (1.0 / E) ** 2)
             )
             sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
-            n_sigma_cos_theta_kin = 3
+            n_sigma_cos_theta_kin = cfg_likelihoods.arm.n_sigma_cos_theta_kin
 
             return n_sigma_cos_theta_kin * sigma_cos_theta_kin / sin_theta_kin
 

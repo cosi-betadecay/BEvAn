@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import omegaconf
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from physics.preprocessing.preprocesser import preprocesser
@@ -52,7 +52,7 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
 
 
 def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
-    return posterior_bdecay >= 0.85
+    return posterior_bdecay >= 0.5
 
 
 def detected_511_event(
@@ -117,7 +117,7 @@ def detected_511_event(
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
     pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
-    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance)
+    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
         return False
@@ -127,7 +127,7 @@ def detected_511_event(
         new_pos_combo,
         ref_energy,
         tolerance,
-        cfg,
+        cfg.likelihoods,
         sizes,
     )
 

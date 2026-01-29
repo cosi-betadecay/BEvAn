@@ -1,3 +1,4 @@
+import omegaconf
 import torch
 
 
@@ -62,12 +63,13 @@ def arm(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
     return torch.abs(arm) <= 0.5236  # 30 degrees
 
 
-def arm_preprocessing(energies: torch.Tensor, positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def arm_preprocessing(energies: torch.Tensor, positions: torch.Tensor, cfg_preprocessing: omegaconf.dictconfig.DictConfig) -> tuple[torch.Tensor, torch.Tensor]:
     valid_mask = torch.tensor(
-        [arm(energies[i], positions[i]) for i in range(energies.shape[0], positions.shape[0])],
+        [arm(energies[i], positions[i]) for i in range(energies.shape[0])],
         device=energies.device,
         dtype=torch.bool,
     )
+
     valid_energies = energies[valid_mask]
     valid_positions = positions[valid_mask]
 
