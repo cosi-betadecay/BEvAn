@@ -1,11 +1,16 @@
+import omegaconf
 import torch
 
 
-def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.Tensor, cfg_likelihoods: omegaconf.dictconfig.DictConfig) -> torch.Tensor:
     def theta_geo(positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         sigma_x = 4.0
 
-        x0, x1, x2 = positions[0], positions[1], positions[2]
+        pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
+        x0 = pos[:, 0, :]  # (B, 3)
+        x1 = pos[:, 1, :]  # (B, 3)
+        x2 = pos[:, 2, :]  # (B, 3)
+        x0, x1, x2 = x0[0], x1[0], x2[0]
 
         v_in = x1 - x0
         v_out = x2 - x1
@@ -32,12 +37,17 @@ def angular_resolution_measure_kernel(energies: torch.Tensor, positions: torch.T
                 electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_0) ** 2 + (1.0 / E) ** 2)
             )
             sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
+            n_sigma_cos_theta_kin = cfg_likelihoods.arm.n_sigma_cos_theta_kin
 
-            return 3 * sigma_cos_theta_kin / sin_theta_kin
+            return n_sigma_cos_theta_kin * sigma_cos_theta_kin / sin_theta_kin
 
         electron_mass_energy = 511.0  # keV
-        E_0 = energies.sum()
-        E = energies[1:].sum()
+        if energies.ndim == 1:
+            E_0 = energies.sum()
+            E = E_0 - energies[0]
+        else:
+            E_0 = energies.sum(dim=1)
+            E = E_0 - energies[:, 0]
 
         cos_theta_kin = 1 - electron_mass_energy * (1 / E - 1 / E_0)
         cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)

@@ -48,8 +48,13 @@ def klein_nishina_pdf(energies: torch.Tensor) -> float:
     def pdf(energies: torch.Tensor) -> float:
         electron_mass_energy = 511.0  # keV
         r_e = 2.8179403227e-15  # meters (classical electron radius)
-        E_0 = energies.sum()
-        E = E_0 - energies[0]
+
+        if energies.ndim == 1:
+            E_0 = energies.sum()
+            E   = E_0 - energies[0]
+        else:
+            E_0 = energies.sum(dim=1)
+            E   = E_0 - energies[:, 0]
 
         kn_diff_cross_section = kn_cross_section(E_0, r_e, E, electron_mass_energy)
         sigma_s = sigma_scat(electron_mass_energy, E_0, r_e)

@@ -1,4 +1,4 @@
-def calculate_tolerance() -> float:
+def calculate_tolerance(n_std: int = 1) -> float:
     """Calculate the physically motivated energy tolerance for 511 keV detection.
 
     This function converts the detector's energy resolution, given as a full width
@@ -10,15 +10,10 @@ def calculate_tolerance() -> float:
 
     Therefore, sigma = FWHM / 2.355.
 
-    A ±3σ window is used as the tolerance because ~99.7% of all measurements from
-    a true 511 keV photon fall within this range. This provides a physically
-    justified and statistically robust threshold for classifying annihilation
-    events without excessively increasing false positives.
-
     Returns:
-        float: The energy tolerance in keV (3σ).
+        float: The energy tolerance in keV (1σ = default).
     """
     fwhm = 2.25
     sigma = fwhm / 2.355
-    tolerance = 3 * sigma
+    tolerance = n_std * sigma
     return tolerance

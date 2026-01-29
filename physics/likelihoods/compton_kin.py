@@ -3,16 +3,6 @@ import torch
 
 def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
     def sigma_cos_phi(E_0: torch.Tensor, E: torch.Tensor, frac_sigma: float = 0.0035) -> float | None:
-        """Calculate the uncertainty in the cosine of the Compton scattering angle.
-
-        Args:
-            E_0 (torch.Tensor): Sum of all energy deposits.
-            E (torch.Tensor): Sum of all but the first energy deposit.
-            frac_sigma (float): Fractional uncertainty. Defaults to 0.35% (due to HPGe detector resolution).
-
-        Returns:
-            float: Uncertainty in the cosine of the Compton scattering angle.
-        """
         electron_mass_energy = 511.0  # keV
 
         sigma_E_0 = frac_sigma * E_0
@@ -23,8 +13,12 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
 
         return electron_mass_energy * torch.sqrt(term0 + term1)
 
-    E0 = energies.sum()
-    E = energies[1:].sum()
+    if energies.ndim == 1:
+        E0 = energies.sum()
+        E = E0 - energies[0]
+    else:
+        E0 = energies.sum(dim=1)
+        E = E0 - energies[:, 0]
 
     m_e = 511.0
     cos_phi = 1.0 - m_e * (1.0 / E - 1.0 / E0)
@@ -39,12 +33,4 @@ def compton_kin_heurestic_bdecay(energies: torch.Tensor) -> float:
 
 
 def compton_kin_heurestic_bg(energies: torch.Tensor) -> float:
-    """_summary_
-
-    Args:
-        energies (torch.Tensor): _description_
-
-    Returns:
-        float: _description_
-    """
-    return 1 - compton_kin_heurestic_bdecay(energies)
+    return
