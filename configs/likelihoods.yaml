@@ -4,7 +4,7 @@ likelihoods:
 
   arm:
     sigma_x: 4.0
-    n_sigma_cos_theta_kin: 3
+    n_sigma_cos_theta_kin: 1
 
   posterior:
     alpha_energy: 1.0
