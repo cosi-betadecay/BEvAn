@@ -14,12 +14,12 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.energy import energy_kernel_bdecay
+from utils.calculations import log_calculations
 from utils.plots import (
     cdf,
     ecdf_slope,
     histogram,
     histogram_log,
-    log_calculations,
     violin_plot,
 )
 from utils.reader_extraction import get_reader

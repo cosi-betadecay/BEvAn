@@ -1,7 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import torch
 import wandb
+from matplotlib.colors import LogNorm
+
+from utils.calculations import as_np
 
 
 def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
@@ -24,14 +28,13 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
     return fig
 
 
-def as_np(vals) -> np.ndarray:
-    arr = np.asarray(vals, dtype=np.float64)
-    arr = arr[np.isfinite(arr)]
-    return arr
-
-
 def _log_image(key: str, fig: plt.Figure) -> None:
-    # Log image and pin to summary so it shows up immediately on the dashboard.
+    """_summary_
+
+    Args:
+        key (str): _description_
+        fig (plt.Figure): _description_
+    """
     img = wandb.Image(fig)
     wandb.log({key: img})
     if wandb.run is not None:
@@ -40,6 +43,13 @@ def _log_image(key: str, fig: plt.Figure) -> None:
 
 
 def histogram(likelihoods: list[float], key: str, bins: int = 50):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 50.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -55,6 +65,13 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 50.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -70,6 +87,12 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
 
 
 def cdf(likelihoods: list[float], key: str):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+    """
     x = np.sort(as_np(likelihoods))
     if x.size == 0:
         return
@@ -86,6 +109,12 @@ def cdf(likelihoods: list[float], key: str):
 
 
 def violin_plot(likelihoods: list[float], key: str):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+    """
     vals = np.asarray(likelihoods, dtype=np.float64)
     vals = vals[np.isfinite(vals)]
 
@@ -102,7 +131,13 @@ def violin_plot(likelihoods: list[float], key: str):
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
-    # Approximate ECDF slope as a density estimate (histogram normalized).
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 80.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -119,68 +154,108 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     _log_image("ecdf_slope", fig)
 
 
-# Calculations
+def energy_kernel_vs_total_energy(energy_kernels: torch.Tensor, total_energies: torch.Tensor) -> None:
+    """2D log-histogram plot of energy kernels vs total energies.
 
+    Args:
+        energy_kernels (torch.Tensor): A tensor of energy kernels.
+        total_energies (torch.Tensor): A tensor of total energies.
+    """
+    kernels = energy_kernels.detach().cpu().numpy().reshape(-1)
+    totals = total_energies.detach().cpu().numpy().reshape(-1)
 
-def log_calculations(likelihoods: list[float], key: str):
-    x = as_np(likelihoods)
-    valid_count = x.size
+    valid = np.isfinite(kernels) & np.isfinite(totals) & (totals > 0)
+    kernels = kernels[valid]
+    totals = totals[valid]
 
-    if valid_count == 0:
+    if kernels.size == 0:
         return
 
-    mean = np.mean(x)
-    median = np.median(x)
-    std = np.std(x)
-    var = np.var(x)
+    num_kernel_bins = 60
+    num_energy_bins = 80
 
-    percentiles = np.percentile(x, [1, 5, 10, 25, 75, 90, 95, 99])
-    q01, q05, q10, q25, q75, q90, q95, q99 = percentiles
-    iqr = q75 - q25
+    x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
+    y_min = totals.min()
+    y_max = totals.max()
+    if y_min == y_max:
+        y_min *= 0.9
+        y_max *= 1.1
+        if y_min <= 0:
+            y_min = y_max * 0.9
+    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_energy_bins + 1)
 
-    mad = np.median(np.abs(x - median))
-    mean_abs_dev = np.mean(np.abs(x - mean))
-    coeff_var = std / mean if mean != 0 else np.nan
+    counts, x_edges, y_edges = np.histogram2d(kernels, totals, bins=[x_bins, y_bins])
+    counts = np.ma.masked_where(counts <= 0, counts)
 
-    centered = x - mean
-    m2 = np.mean(centered**2)
-    m3 = np.mean(centered**3)
-    m4 = np.mean(centered**4)
-    skewness = m3 / (m2**1.5) if m2 > 0 else np.nan
-    kurtosis_excess = m4 / (m2 * m2) - 3 if m2 > 0 else np.nan
-
-    trimmed_mask = (x >= q05) & (x <= q95)
-    trimmed_mean = np.mean(x[trimmed_mask]) if np.any(trimmed_mask) else mean
-
-    thresholds = [0.1, 0.5, 0.9, 0.99]
-    fraction_ge = {thr: float(np.mean(x >= thr)) for thr in thresholds}
-    fraction_le_10 = float(np.mean(x <= 0.1))
-
-    wandb.log(
-        {
-            "mean": mean,
-            "median": median,
-            "trimmed_mean_5_95": trimmed_mean,
-            "std": std,
-            "var": var,
-            "coeff_var": coeff_var,
-            "mad": mad,
-            "mean_abs_dev": mean_abs_dev,
-            "q01": q01,
-            "q05": q05,
-            "q10": q10,
-            "q25": q25,
-            "q75": q75,
-            "q90": q90,
-            "q95": q95,
-            "q99": q99,
-            "iqr": iqr,
-            "skewness": skewness,
-            "kurtosis_excess": kurtosis_excess,
-            "frac_ge_10pct": fraction_ge[0.1],
-            "frac_ge_50pct": fraction_ge[0.5],
-            "frac_ge_90pct": fraction_ge[0.9],
-            "frac_ge_99pct": fraction_ge[0.99],
-            "frac_le_10pct": fraction_le_10,
-        }
+    fig, ax = plt.subplots(figsize=(6.2, 4.8))
+    mesh = ax.pcolormesh(
+        x_edges,
+        y_edges,
+        counts.T,
+        cmap="turbo",
+        norm=LogNorm(),
+        shading="auto",
     )
+    ax.set_xlabel("Energy kernel")
+    ax.set_ylabel("Total energy [keV]")
+    ax.set_xlim(0.0, 1.0)
+    ax.set_yscale("log")
+
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label("counts")
+
+    fig.tight_layout()
+    plt.show()
+    _log_image("energy_kernel_vs_total_energy", fig)
+
+
+def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor) -> None:
+    """2D log-histogram plot of arm kernels vs arms.
+
+    Args:
+        arm_kernels (torch.Tensor): A tensor of arm kernels.
+        arms (torch.Tensor): A tensor of arms.
+    """
+    kernels = arm_kernels.detach().cpu().numpy().reshape(-1)
+    arm_vals = arms.detach().cpu().numpy().reshape(-1)
+
+    valid = np.isfinite(kernels) & np.isfinite(arm_vals)
+    kernels = kernels[valid]
+    arm_vals = arm_vals[valid]
+
+    if kernels.size == 0:
+        return
+
+    num_kernel_bins = 60
+    num_arm_bins = 80
+
+    x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
+    y_min = arm_vals.min()
+    y_max = arm_vals.max()
+    if y_min == y_max:
+        y_min -= 1e-3
+        y_max += 1e-3
+    y_bins = np.linspace(y_min, y_max, num_arm_bins + 1)
+
+    counts, x_edges, y_edges = np.histogram2d(kernels, arm_vals, bins=[x_bins, y_bins])
+    counts = np.ma.masked_where(counts <= 0, counts)
+
+    fig, ax = plt.subplots(figsize=(6.2, 4.8))
+    mesh = ax.pcolormesh(
+        x_edges,
+        y_edges,
+        counts.T,
+        cmap="turbo",
+        norm=LogNorm(),
+        shading="auto",
+    )
+    ax.set_xlabel("ARM kernel")
+    ax.set_ylabel("ARM [rad]")
+    ax.set_xlim(0.0, 1.0)
+
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label("counts")
+
+    fig.tight_layout()
+    plt.show()
+    _log_image("arm_kernel_vs_arm", fig)
