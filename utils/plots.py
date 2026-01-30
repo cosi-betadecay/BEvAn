@@ -154,7 +154,9 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     _log_image("ecdf_slope", fig)
 
 
-def energy_kernel_vs_total_energy(energy_kernels: torch.Tensor, total_energies: torch.Tensor) -> None:
+def energy_kernel_vs_total_energy(
+    energy_kernels: torch.Tensor, total_energies: torch.Tensor, label: str
+) -> None:
     """2D log-histogram plot of energy kernels vs total energies.
 
     Args:
@@ -206,7 +208,7 @@ def energy_kernel_vs_total_energy(energy_kernels: torch.Tensor, total_energies: 
 
     fig.tight_layout()
     plt.show()
-    _log_image("energy_kernel_vs_total_energy", fig)
+    _log_image(label, fig)
 
 
 def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor) -> None:

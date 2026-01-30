@@ -15,13 +15,7 @@ from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.energy import energy_kernel_bdecay
 from utils.calculations import log_calculations
-from utils.plots import (
-    cdf,
-    ecdf_slope,
-    histogram,
-    histogram_log,
-    violin_plot,
-)
+from utils.plots import cdf, ecdf_slope, energy_kernel_vs_total_energy, histogram, histogram_log, violin_plot
 from utils.reader_extraction import get_reader
 
 ##################################################################################
@@ -92,7 +86,15 @@ def detected_511_event_likelihoods(
 
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
 
-    return eng.max()
+    imax = torch.argmax(eng)
+    best_kernel = eng[imax]
+
+    best_energy_combo = energy_combo[imax]
+    best_idx = idx[imax]
+    valid = best_idx >= 0
+    best_energy_combo = best_energy_combo[valid]
+
+    return best_kernel.item(), best_energy_combo.cpu().numpy()
 
 
 def annihilation_extractor_test_kn(
@@ -103,6 +105,7 @@ def annihilation_extractor_test_kn(
     reader = get_reader(geometry_file, sim_file)
 
     combs = []
+    energy_combos = []
     ground_truths = []
 
     for event in tqdm(
@@ -118,7 +121,7 @@ def annihilation_extractor_test_kn(
         else:
             ground_truths.append(0)
 
-        _comb = detected_511_event_likelihoods(
+        _comb, energy_combo = detected_511_event_likelihoods(
             ref_energy,
             event,
         )
@@ -127,8 +130,9 @@ def annihilation_extractor_test_kn(
             _comb = 0.0
 
         combs.append(_comb)
+        energy_combos.append(energy_combo)
 
-    return combs, ground_truths
+    return combs, energy_combos, ground_truths
 
 
 ##################################################################################
@@ -139,6 +143,7 @@ if __name__ == "__main__":
 
     (
         combs,
+        energy_combos,
         ground_truths,
     ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
@@ -146,18 +151,27 @@ if __name__ == "__main__":
 
     true_events_energy = []
     false_events_energy = []
+    energy_combos_true = []
+    energy_combos_false = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             true_events_energy.append(combs[i])
+            energy_combos_true.append(energy_combos[i])
         else:
             false_events_energy.append(combs[i])
+            energy_combos_false.append(energy_combos[i])
 
     runs = [
         ("energy", combs),
         ("energy_true_events", true_events_energy),
         ("energy_false_events", false_events_energy),
     ]
+
+    # Energy kernel vs total energy plots
+    energy_kernel_vs_total_energy(combs, energy_combos, "all_events_energy")
+    energy_kernel_vs_total_energy(true_events_energy, energy_combos_true, "true_events_energy")
+    energy_kernel_vs_total_energy(false_events_energy, energy_combos_false, "false_events_energy")
 
     for label, data in runs:
         wandb_api_key = os.getenv("WANDB_API_KEY")
