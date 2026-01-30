@@ -1,12 +1,13 @@
+import omegaconf
 import torch
 
 
-def compton_kin(energies: torch.Tensor) -> bool:
+def compton_kin(energies: torch.Tensor, cfg_preprocessing: omegaconf.dictconfig.DictConfig) -> bool:
     """Calculate the Compton scattering angle from two energy deposits.
 
     Args:
         energies (list): List of energy values for a Compton sequence.
-
+        cfg_preprocessing (omegaconf.dictconfig.DictConfig): Configuration for preprocessing.
     Returns:
         bool: True if the angle is physically valid, False otherwise.
     """
@@ -43,7 +44,8 @@ def compton_kin(energies: torch.Tensor) -> bool:
     electron_mass_energy = 511.0  # keV
     cos_phi = 1 - electron_mass_energy * (1 / E - 1 / E_0)
 
-    _sigma_cos_phi = 75 * sigma_cos_phi(E_0, E)
+    n_sigma_cos_phi = cfg_preprocessing.compton_kin.n_sigma_cos_phi
+    _sigma_cos_phi = n_sigma_cos_phi * sigma_cos_phi(E_0, E)
 
     limit = 1.0 + _sigma_cos_phi
 
@@ -51,10 +53,10 @@ def compton_kin(energies: torch.Tensor) -> bool:
 
 
 def compton_kin_preprocessing(
-    energies: torch.Tensor, positions: torch.Tensor
+    energies: torch.Tensor, positions: torch.Tensor, cfg_preprocessing: omegaconf.dictconfig.DictConfig
 ) -> tuple[torch.Tensor, torch.Tensor]:
     valid_mask = torch.tensor(
-        [compton_kin(energies[i]) for i in range(energies.shape[0])],
+        [compton_kin(energies[i], cfg_preprocessing) for i in range(energies.shape[0])],
         device=energies.device,
         dtype=torch.bool,
     )

@@ -1,7 +1,10 @@
+import omegaconf
 import torch
 
 
-def maximum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: float = 4.0) -> bool:
+def maximum_interaction_distance_filter(
+    positions: torch.Tensor, cfg_preprocessing: omegaconf.dictconfig.DictConfig
+) -> bool:
     if positions.shape[0] < 2:
         return True
 
@@ -11,12 +14,17 @@ def maximum_interaction_distance_filter(positions: torch.Tensor, mid_threshold: 
     if torch.isnan(distances).any():
         return False
 
-    return bool(torch.all(distances <= mid_threshold))
+    return bool(torch.all(distances <= cfg_preprocessing.mid.mid_threshold))
 
 
-def mid_preprocessing(energies: torch.Tensor, positions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def mid_preprocessing(
+    energies: torch.Tensor, positions: torch.Tensor, cfg_preprocessing: omegaconf.dictconfig.DictConfig
+) -> tuple[torch.Tensor, torch.Tensor]:
     valid_mask = torch.tensor(
-        [maximum_interaction_distance_filter(energies[i]) for i in range(positions.shape[0])],
+        [
+            maximum_interaction_distance_filter(positions[i], cfg_preprocessing)
+            for i in range(positions.shape[0])
+        ],
         device=energies.device,
         dtype=torch.bool,
     )

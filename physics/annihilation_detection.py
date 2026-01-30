@@ -2,6 +2,7 @@ import itertools
 from typing import Any
 
 import matplotlib.pyplot as plt
+import omegaconf
 import ROOT as M
 import torch
 from tqdm import tqdm
@@ -51,17 +52,13 @@ def ground_truth(event: Any, ref_energy: float) -> bool:
 
 
 def classifier(posterior_bdecay: float, posterior_bg: float) -> bool:
-    return posterior_bdecay >= 0.85
+    return posterior_bdecay >= 0.5
 
 
 def detected_511_event(
     ref_energy: float,
     event: Any,
-    alpha_energy: float,
-    alpha_arm: float,
-    alpha_kn: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
+    cfg: omegaconf.dictconfig.DictConfig,
 ) -> bool:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -120,7 +117,7 @@ def detected_511_event(
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
     pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
-    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance)
+    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
         return False
@@ -130,11 +127,7 @@ def detected_511_event(
         new_pos_combo,
         ref_energy,
         tolerance,
-        alpha_energy,
-        alpha_arm,
-        alpha_kn,
-        alpha_compton_kin,
-        alpha_mid,
+        cfg.likelihoods,
         sizes,
     )
 
@@ -142,16 +135,10 @@ def detected_511_event(
 
 
 def annihilation_extractor(
-    geometry_file: str,
-    sim_file: str,
-    alpha_energy: float,
-    alpha_arm: float,
-    alpha_kn: float,
-    alpha_compton_kin: float,
-    alpha_mid: float,
+    cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,
 ) -> None:
-    reader = get_reader(geometry_file, sim_file)
+    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
     ground_truths = []
     predictions = []
@@ -163,9 +150,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(
-            ref_energy, event, alpha_energy, alpha_arm, alpha_kn, alpha_compton_kin, alpha_mid
-        )
+        prediction = detected_511_event(ref_energy, event, cfg)
         _ground_truth = ground_truth(event, ref_energy)
 
         predictions.append(prediction)
