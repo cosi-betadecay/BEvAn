@@ -5,12 +5,11 @@ from typing import Any
 
 import ROOT as M
 import torch
+import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-import wandb
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
@@ -77,11 +76,12 @@ def detected_511_event_likelihoods(
             alpha_kn = 0.0
             alpha_compton_kin = 0
 
-            score = (alpha_arm * torch.log(_arm) + 
-                     alpha_energy * (_energy) + 
-                     alpha_kn * torch.log(_kn) + 
-                     alpha_compton_kin * (_compton_kin)
-                     )
+            score = (
+                alpha_arm * torch.log(_arm)
+                + alpha_energy * (_energy)
+                + alpha_kn * torch.log(_kn)
+                + alpha_compton_kin * (_compton_kin)
+            )
 
             _best = max(_best, score.item())
 

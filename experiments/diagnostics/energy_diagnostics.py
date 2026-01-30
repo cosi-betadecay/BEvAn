@@ -9,19 +9,16 @@ import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.energy import energy_kernel_bdecay
-from utils.calculations import log_calculations
-from utils.plots import cdf, ecdf_slope, energy_kernel_vs_total_energy, histogram, histogram_log, violin_plot
+from utils.plots import energy_kernel_vs_total_energy
 from utils.reader_extraction import get_reader
 
-##################################################################################
 
-
-def detected_511_event_likelihoods(
+def detected_511_event(
     ref_energy: float,
     event: Any,
 ):
@@ -105,7 +102,7 @@ def annihilation_extractor_test_kn(
     reader = get_reader(geometry_file, sim_file)
 
     combs = []
-    energy_combos = []
+    sums = []
     ground_truths = []
 
     for event in tqdm(
@@ -121,7 +118,7 @@ def annihilation_extractor_test_kn(
         else:
             ground_truths.append(0)
 
-        _comb, energy_combo = detected_511_event_likelihoods(
+        _comb, _sum = detected_511_event(
             ref_energy,
             event,
         )
@@ -130,9 +127,9 @@ def annihilation_extractor_test_kn(
             _comb = 0.0
 
         combs.append(_comb)
-        energy_combos.append(energy_combo)
+        sums.append(_sum)
 
-    return combs, energy_combos, ground_truths
+    return combs, sums, ground_truths
 
 
 ##################################################################################
@@ -143,7 +140,7 @@ if __name__ == "__main__":
 
     (
         combs,
-        energy_combos,
+        sums,
         ground_truths,
     ) = annihilation_extractor_test_kn(
         "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
@@ -151,49 +148,30 @@ if __name__ == "__main__":
 
     true_events_energy = []
     false_events_energy = []
-    energy_combos_true = []
-    energy_combos_false = []
+    sums_true_events = []
+    sums_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
             true_events_energy.append(combs[i])
-            energy_combos_true.append(energy_combos[i])
+            sums_true_events.append(sums[i])
         else:
             false_events_energy.append(combs[i])
-            energy_combos_false.append(energy_combos[i])
+            sums_false_events.append(sums[i])
 
     runs = [
-        ("energy", combs),
-        ("energy_true_events", true_events_energy),
-        ("energy_false_events", false_events_energy),
+        ("energy", combs, sums),
+        ("energy_true_events", true_events_energy, sums_true_events),
+        ("energy_false_events", false_events_energy, sums_false_events),
     ]
 
-    _combs = torch.tensor(combs)
-    _energy_combos = torch.tensor(energy_combos)
-    _true_events_energy = torch.tensor(true_events_energy)
-    _false_events_energy = torch.tensor(false_events_energy)
-
-    # Energy kernel vs total energy plots
-    energy_kernel_vs_total_energy(_combs, _energy_combos, "all_events_energy")
-    energy_kernel_vs_total_energy(
-        _true_events_energy, _energy_combos[torch.where(_combs > 0)[0]], "true_events_energy"
-    )
-    energy_kernel_vs_total_energy(
-        _false_events_energy, _energy_combos[torch.where(_combs == 0)[0]], "false_events_energy"
-    )
-
-    for label, data in runs:
+    for label, data, sums in runs:
         wandb_api_key = os.getenv("WANDB_API_KEY")
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-energy", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-energy-diagnostics", name=label, reinit=True)
 
-        histogram(data, label)
-        histogram_log(data, label)
-        cdf(data, label)
-        violin_plot(data, label)
-        ecdf_slope(data, label)
-        log_calculations(data, label)
+        energy_kernel_vs_total_energy(torch.tensor(data), torch.tensor(sums), label)
 
         wandb.finish()

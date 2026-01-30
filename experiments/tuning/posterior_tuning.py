@@ -5,12 +5,11 @@ from typing import Any
 
 import ROOT as M
 import torch
+import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-import wandb
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
