@@ -31,7 +31,7 @@ def detected_511_event_likelihoods(
     ref_energy = 511.0
 
     if n_hits == 0:
-        return False
+        return False, False
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -94,7 +94,7 @@ def detected_511_event_likelihoods(
     valid = best_idx >= 0
     best_energy_combo = best_energy_combo[valid]
 
-    return best_kernel.item(), best_energy_combo.cpu().numpy()
+    return best_kernel.item(), torch.sum(best_energy_combo).item()
 
 
 def annihilation_extractor_test_kn(
@@ -168,10 +168,19 @@ if __name__ == "__main__":
         ("energy_false_events", false_events_energy),
     ]
 
+    _combs = torch.tensor(combs)
+    _energy_combos = torch.tensor(energy_combos)
+    _true_events_energy = torch.tensor(true_events_energy)
+    _false_events_energy = torch.tensor(false_events_energy)
+
     # Energy kernel vs total energy plots
-    energy_kernel_vs_total_energy(combs, energy_combos, "all_events_energy")
-    energy_kernel_vs_total_energy(true_events_energy, energy_combos_true, "true_events_energy")
-    energy_kernel_vs_total_energy(false_events_energy, energy_combos_false, "false_events_energy")
+    energy_kernel_vs_total_energy(_combs, _energy_combos, "all_events_energy")
+    energy_kernel_vs_total_energy(
+        _true_events_energy, _energy_combos[torch.where(_combs > 0)[0]], "true_events_energy"
+    )
+    energy_kernel_vs_total_energy(
+        _false_events_energy, _energy_combos[torch.where(_combs == 0)[0]], "false_events_energy"
+    )
 
     for label, data in runs:
         wandb_api_key = os.getenv("WANDB_API_KEY")

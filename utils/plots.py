@@ -211,7 +211,7 @@ def energy_kernel_vs_total_energy(
     _log_image(label, fig)
 
 
-def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor) -> None:
+def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str) -> None:
     """2D log-histogram plot of arm kernels vs arms.
 
     Args:
