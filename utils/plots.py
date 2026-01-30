@@ -177,8 +177,8 @@ def energy_kernel_vs_total_energy(
     if kernels.size == 0:
         return
 
-    num_kernel_bins = 40
-    num_energy_bins = 40
+    num_kernel_bins = 1000
+    num_energy_bins = 1000
 
     x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
     y_bins = np.logspace(np.log10(30.0), np.log10(2000.0), num_energy_bins + 1)
@@ -230,8 +230,8 @@ def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str)
     if kernels.size == 0:
         return
 
-    num_kernel_bins = 40
-    num_arm_bins = 40
+    num_kernel_bins = 1000
+    num_arm_bins = 1000
 
     x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
     y_min = arm_vals.min()
@@ -262,4 +262,4 @@ def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str)
 
     fig.tight_layout()
     plt.show()
-    _log_image("arm_kernel_vs_arm", fig)
+    _log_image(label, fig)
