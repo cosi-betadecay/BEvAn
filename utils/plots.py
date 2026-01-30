@@ -206,7 +206,6 @@ def energy_kernel_vs_total_energy(
     cbar.set_label("counts")
 
     fig.tight_layout()
-    plt.show()
     _log_image(label, fig)
 
 
@@ -255,5 +254,4 @@ def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str)
     cbar.set_label("counts")
 
     fig.tight_layout()
-    plt.show()
     _log_image(label, fig)

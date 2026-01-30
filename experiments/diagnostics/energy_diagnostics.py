@@ -28,7 +28,7 @@ def detected_511_event(
     ref_energy = 511.0
 
     if n_hits == 0:
-        return False, False
+        return None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -79,19 +79,14 @@ def detected_511_event(
     energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
     pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
 
-    one = torch.ones(n_combo, device=device)
-
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
+    total_energy = torch.sum(energy_combo, dim=1)
+    valid = torch.isfinite(eng) & torch.isfinite(total_energy) & (total_energy > 0)
 
-    imax = torch.argmax(eng)
-    best_kernel = eng[imax]
+    eng = eng[valid].detach().cpu()
+    total_energy = total_energy[valid].detach().cpu()
 
-    best_energy_combo = energy_combo[imax]
-    best_idx = idx[imax]
-    valid = best_idx >= 1e-3
-    best_energy_combo = best_energy_combo[valid]
-
-    return best_kernel.item(), torch.sum(best_energy_combo).item()
+    return eng, total_energy
 
 
 def annihilation_extractor_test_kn(
@@ -123,8 +118,9 @@ def annihilation_extractor_test_kn(
             event,
         )
 
-        if _comb == -float("inf"):
-            _comb = 0.0
+        if _comb is None:
+            _comb = torch.empty(0)
+            _sum = torch.empty(0)
 
         combs.append(_comb)
         sums.append(_sum)
@@ -172,6 +168,8 @@ if __name__ == "__main__":
         wandb.login(key=wandb_api_key)
         wandb.init(project="cosi-betadecay-energy-diagnostics", name=label, reinit=True)
 
-        energy_kernel_vs_total_energy(torch.tensor(data), torch.tensor(sums), label)
+        data_tensor = torch.cat(data) if len(data) > 0 else torch.empty(0)
+        sums_tensor = torch.cat(sums) if len(sums) > 0 else torch.empty(0)
+        energy_kernel_vs_total_energy(data_tensor, sums_tensor, label)
 
         wandb.finish()
