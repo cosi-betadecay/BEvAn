@@ -165,23 +165,20 @@ def energy_kernel_vs_total_energy(
     """
     kernels = energy_kernels.detach().cpu().numpy().reshape(-1)
     totals = total_energies.detach().cpu().numpy().reshape(-1)
-
-    valid = np.isfinite(kernels) & np.isfinite(totals) & (totals > 0)
-    kernels = kernels[valid]
-    totals = totals[valid]
-    kernel_cut = 1e-4
-    mask = kernels > kernel_cut
+    mask = np.isfinite(kernels) & np.isfinite(totals) & (totals > 0)
     kernels = kernels[mask]
     totals = totals[mask]
 
-    if kernels.size == 0:
-        return
+    num_kernel_bins = 20
+    num_energy_bins = 20
 
-    num_kernel_bins = 1000
-    num_energy_bins = 1000
+    x_min = np.nanpercentile(kernels, 1)
+    x_max = np.nanpercentile(kernels, 99)
+    y_min = np.nanpercentile(totals[totals > 0], 1)
+    y_max = np.nanpercentile(totals, 99)
 
-    x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
-    y_bins = np.logspace(np.log10(30.0), np.log10(2000.0), num_energy_bins + 1)
+    x_bins = np.linspace(x_min, x_max, num_kernel_bins + 1)
+    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_energy_bins + 1)
 
     counts, x_edges, y_edges = np.histogram2d(
         kernels,
@@ -227,19 +224,16 @@ def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str)
     kernels = kernels[valid]
     arm_vals = arm_vals[valid]
 
-    if kernels.size == 0:
-        return
+    num_kernel_bins = 20
+    num_arm_bins = 20
 
-    num_kernel_bins = 1000
-    num_arm_bins = 1000
+    x_min = np.nanpercentile(kernels, 1)
+    x_max = np.nanpercentile(kernels, 99)
+    y_min = np.nanpercentile(arm_vals[arm_vals > 0], 1)
+    y_max = np.nanpercentile(arm_vals, 99)
 
-    x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
-    y_min = arm_vals.min()
-    y_max = arm_vals.max()
-    if y_min == y_max:
-        y_min -= 1e-3
-        y_max += 1e-3
-    y_bins = np.linspace(y_min, y_max, num_arm_bins + 1)
+    x_bins = np.linspace(x_min, x_max, num_kernel_bins + 1)
+    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_arm_bins + 1)
 
     counts, x_edges, y_edges = np.histogram2d(kernels, arm_vals, bins=[x_bins, y_bins])
     counts = np.ma.masked_where(counts <= 0, counts)
