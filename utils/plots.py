@@ -169,24 +169,26 @@ def energy_kernel_vs_total_energy(
     valid = np.isfinite(kernels) & np.isfinite(totals) & (totals > 0)
     kernels = kernels[valid]
     totals = totals[valid]
+    kernel_cut = 1e-4
+    mask = kernels > kernel_cut
+    kernels = kernels[mask]
+    totals = totals[mask]
 
     if kernels.size == 0:
         return
 
-    num_kernel_bins = 60
-    num_energy_bins = 80
+    num_kernel_bins = 40
+    num_energy_bins = 40
 
     x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
-    y_min = totals.min()
-    y_max = totals.max()
-    if y_min == y_max:
-        y_min *= 0.9
-        y_max *= 1.1
-        if y_min <= 0:
-            y_min = y_max * 0.9
-    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_energy_bins + 1)
+    y_bins = np.logspace(np.log10(30.0), np.log10(2000.0), num_energy_bins + 1)
 
-    counts, x_edges, y_edges = np.histogram2d(kernels, totals, bins=[x_bins, y_bins])
+    counts, x_edges, y_edges = np.histogram2d(
+        kernels,
+        totals,
+        bins=[x_bins, y_bins],
+        weights=kernels,
+    )
     counts = np.ma.masked_where(counts <= 0, counts)
 
     fig, ax = plt.subplots(figsize=(6.2, 4.8))
@@ -228,8 +230,8 @@ def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str)
     if kernels.size == 0:
         return
 
-    num_kernel_bins = 60
-    num_arm_bins = 80
+    num_kernel_bins = 40
+    num_arm_bins = 40
 
     x_bins = np.linspace(0.0, 1.0, num_kernel_bins + 1)
     y_min = arm_vals.min()

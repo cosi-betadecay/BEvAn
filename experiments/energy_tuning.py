@@ -91,7 +91,7 @@ def detected_511_event_likelihoods(
 
     best_energy_combo = energy_combo[imax]
     best_idx = idx[imax]
-    valid = best_idx >= 0
+    valid = best_idx >= 1e-3
     best_energy_combo = best_energy_combo[valid]
 
     return best_kernel.item(), torch.sum(best_energy_combo).item()
