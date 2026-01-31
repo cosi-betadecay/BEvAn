@@ -1,9 +1,8 @@
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import torch
 import wandb
-from matplotlib.colors import LogNorm
 
 from utils.calculations import as_np
 
@@ -154,104 +153,74 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     _log_image("ecdf_slope", fig)
 
 
-def energy_kernel_vs_total_energy(
-    energy_kernels: torch.Tensor, total_energies: torch.Tensor, label: str
-) -> None:
-    """2D log-histogram plot of energy kernels vs total energies.
+def plot_energy_vs_arm(prediction_scores, energy_sums, arms, label: str):
+    energy = as_np(energy_sums).ravel()
+    arm = as_np(arms).ravel()
+    scores = as_np(prediction_scores).ravel()
 
-    Args:
-        energy_kernels (torch.Tensor): A tensor of energy kernels.
-        total_energies (torch.Tensor): A tensor of total energies.
-    """
-    kernels = energy_kernels.detach().cpu().numpy().reshape(-1)
-    totals = total_energies.detach().cpu().numpy().reshape(-1)
-    mask = np.isfinite(kernels) & np.isfinite(totals) & (totals > 0)
-    kernels = kernels[mask]
-    totals = totals[mask]
+    mask = np.isfinite(energy) & np.isfinite(arm) & np.isfinite(scores)
 
-    num_kernel_bins = 20
-    num_energy_bins = 20
+    energy = energy[mask]
+    arm = arm[mask]
+    scores = scores[mask]
 
-    x_min = np.nanpercentile(kernels, 1)
-    x_max = np.nanpercentile(kernels, 99)
-    y_min = np.nanpercentile(totals[totals > 0], 1)
-    y_max = np.nanpercentile(totals, 99)
+    if energy.size == 0:
+        return None
 
-    x_bins = np.linspace(x_min, x_max, num_kernel_bins + 1)
-    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_energy_bins + 1)
+    weights = np.exp(scores)
 
-    counts, x_edges, y_edges = np.histogram2d(
-        kernels,
-        totals,
-        bins=[x_bins, y_bins],
-        weights=kernels,
+    e_min, e_max = energy.min(), energy.max()
+    e_pad = max(1.0, 0.02 * (e_max - e_min))
+    energy_range = (e_min - e_pad, e_max + e_pad)
+
+    # ARM (symmetric around 0)
+    arm_max = np.max(np.abs(arm))
+    arm_pad = max(1e-3, 0.02 * arm_max) if arm_max > 0 else 1.0
+    arm_range = (-arm_max - arm_pad, arm_max + arm_pad)
+
+    # --- Binning ---
+    n = energy.size
+    bins = int(np.clip(np.sqrt(n), 50, 200))
+
+    # --- Posterior-weighted histogram ---
+    H, xedges, yedges = np.histogram2d(
+        energy,
+        arm,
+        bins=bins,
+        range=[energy_range, arm_range],
+        weights=weights,
     )
-    counts = np.ma.masked_where(counts <= 0, counts)
 
-    fig, ax = plt.subplots(figsize=(6.2, 4.8))
+    # LogNorm requires strictly positive values
+    if not np.any(H > 0):
+        return None
+
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(6.5, 4.8))
+
     mesh = ax.pcolormesh(
-        x_edges,
-        y_edges,
-        counts.T,
-        cmap="turbo",
-        norm=LogNorm(),
+        xedges,
+        yedges,
+        H.T,
+        norm=mcolors.LogNorm(
+            vmin=np.min(H[H > 0]),
+            vmax=np.max(H),
+        ),
+        cmap="cividis",
         shading="auto",
     )
-    ax.set_xlabel("Energy kernel")
-    ax.set_ylabel("Total energy [keV]")
-    ax.set_xlim(0.0, 1.0)
-    ax.set_yscale("log")
 
-    cbar = fig.colorbar(mesh, ax=ax)
-    cbar.set_label("counts")
+    # Reference lines (physics anchors)
+    ax.axvline(511.0, color="tab:orange", linestyle="--", linewidth=1.5)
+    ax.axhline(0.0, color="tab:blue", linestyle="--", linewidth=1.5)
 
-    fig.tight_layout()
-    _log_image(label, fig)
-
-
-def arm_kernel_vs_arm(arm_kernels: torch.Tensor, arms: torch.Tensor, label: str) -> None:
-    """2D log-histogram plot of arm kernels vs arms.
-
-    Args:
-        arm_kernels (torch.Tensor): A tensor of arm kernels.
-        arms (torch.Tensor): A tensor of arms.
-    """
-    kernels = arm_kernels.detach().cpu().numpy().reshape(-1)
-    arm_vals = arms.detach().cpu().numpy().reshape(-1)
-
-    valid = np.isfinite(kernels) & np.isfinite(arm_vals)
-    kernels = kernels[valid]
-    arm_vals = arm_vals[valid]
-
-    num_kernel_bins = 20
-    num_arm_bins = 20
-
-    x_min = np.nanpercentile(kernels, 1)
-    x_max = np.nanpercentile(kernels, 99)
-    y_min = np.nanpercentile(arm_vals[arm_vals > 0], 1)
-    y_max = np.nanpercentile(arm_vals, 99)
-
-    x_bins = np.linspace(x_min, x_max, num_kernel_bins + 1)
-    y_bins = np.logspace(np.log10(y_min), np.log10(y_max), num_arm_bins + 1)
-
-    counts, x_edges, y_edges = np.histogram2d(kernels, arm_vals, bins=[x_bins, y_bins])
-    counts = np.ma.masked_where(counts <= 0, counts)
-
-    fig, ax = plt.subplots(figsize=(6.2, 4.8))
-    mesh = ax.pcolormesh(
-        x_edges,
-        y_edges,
-        counts.T,
-        cmap="turbo",
-        norm=LogNorm(),
-        shading="auto",
-    )
-    ax.set_xlabel("ARM kernel")
+    ax.set_xlabel("Reconstructed Energy [keV]")
     ax.set_ylabel("ARM [rad]")
-    ax.set_xlim(0.0, 1.0)
+    ax.set_title(label)
+    ax.set_xlim(energy_range)
+    ax.set_ylim(arm_range)
 
     cbar = fig.colorbar(mesh, ax=ax)
-    cbar.set_label("counts")
+    cbar.set_label("Posterior mass")
 
-    fig.tight_layout()
-    _log_image(label, fig)
+    _log_image("energy_vs_arm", fig)
