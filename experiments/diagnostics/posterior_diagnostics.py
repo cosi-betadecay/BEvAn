@@ -7,8 +7,10 @@ import hydra
 import omegaconf
 import ROOT as M
 import torch
-import wandb
+from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -77,7 +79,7 @@ def detected_511_event(
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return False
+        return False, False, False
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -98,6 +100,7 @@ def detected_511_event(
         dtype=torch.float32,
         device=device,
     )
+    
 
     # Build all hit combinations (CPU once, GPU afterwards)
     combos = []
@@ -131,10 +134,11 @@ def detected_511_event(
     new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
-        return False
+        return False, False, False
 
     sizes = (energy_combo > 0).sum(dim=1)
-    one = torch.ones(n_combo, device=torch.device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    one = torch.ones(n_combo, device=device)
 
     # ARM
     _arm = one.clone()
@@ -158,12 +162,21 @@ def detected_511_event(
     alpha_arm = cfg.likelihoods.posterior.alpha_arm
 
     score = alpha_arm * torch.log(_arm) + alpha_energy * _eng
-    arm = arm(energy_combo, pos_combo, cfg.likelihoods)
+
+    arm_ = torch.zeros(n_combo, device=device, dtype=torch.float32)
+
+    valid_arm = sizes >= 3
+    if valid_arm.any():
+        arm_[valid_arm] = arm(
+            energy_combo[valid_arm],
+            pos_combo[valid_arm],
+            cfg.likelihoods,
+        )
 
     imax = torch.argmax(score)
 
     best_score = score[imax]
-    best_arm = arm[imax]
+    best_arm = arm_[imax]
 
     energy_sum = energy_combo.sum(dim=1)
     best_energy_sum = energy_sum[imax]
@@ -189,6 +202,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
+
         prediction, arm, energy_sum = detected_511_event(ref_energy, event, cfg)
         _ground_truth = ground_truth(event, ref_energy)
 
@@ -206,11 +220,13 @@ def annihilation_extractor(
 
 
 @hydra.main(
-    config_path="configs",
+    config_path="../../configs",
     config_name="config",
     version_base=None,
 )
 def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
+    load_dotenv()
+    
     prediction_scores, gt, arms, energy_sums = annihilation_extractor(cfg)
 
     prediction_scores_true_events = prediction_scores[gt]
@@ -242,7 +258,7 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-energy", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-diagnostics", name=label, reinit=True)
 
         plot_energy_vs_arm(preds, energy_sums, arms, label)
 

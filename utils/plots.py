@@ -2,8 +2,8 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import wandb
 
+import wandb
 from utils.calculations import as_np
 
 
@@ -178,25 +178,39 @@ def plot_energy_vs_arm(prediction_scores, energy_sums, arms, label: str):
     arm_pad = max(1e-3, 0.02 * arm_max) if arm_max > 0 else 1.0
     arm_range = (-arm_max - arm_pad, arm_max + arm_pad)
 
-    # --- Binning ---
-    n = energy.size
-    bins = int(np.clip(np.sqrt(n), 50, 200))
+    # --- Binning (explicit, physical) ---
 
-    # --- Posterior-weighted histogram ---
+    # Energy bins: fine around 511 keV
+    n_energy_bins = 20
+    energy_bins = np.linspace(
+        energy_range[0],
+        energy_range[1],
+        n_energy_bins + 1,
+    )
+
+    # ARM bins: symmetric around 0
+    n_arm_bins = 20
+    arm_bins = np.linspace(
+        arm_range[0],
+        arm_range[1],
+        n_arm_bins + 1,
+    )
+
     H, xedges, yedges = np.histogram2d(
         energy,
         arm,
-        bins=bins,
-        range=[energy_range, arm_range],
+        bins=[energy_bins, arm_bins],
         weights=weights,
     )
+
+    #H = gaussian_filter(H, sigma=1.0)
 
     # LogNorm requires strictly positive values
     if not np.any(H > 0):
         return None
 
     # --- Plot ---
-    fig, ax = plt.subplots(figsize=(6.5, 4.8))
+    fig, ax = plt.subplots(figsize=(10, 10))
 
     mesh = ax.pcolormesh(
         xedges,
