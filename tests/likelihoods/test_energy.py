@@ -5,7 +5,16 @@ import torch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from synthetic_data_generator import SyntheticDataGenerator
+from data_generator_config import (
+    gen_200_8_false,
+    gen_200_8_true,
+    gen_1000_2_false,
+    gen_1000_2_true,
+    gen_100000_24_false,
+    gen_100000_24_true,
+    gen_2000000_4_false,
+    gen_2000000_4_true,
+)
 
 from mathematics.calculations import calculate_tolerance
 from physics.likelihoods.energy import energy_kernel_bdecay
@@ -13,7 +22,7 @@ from physics.likelihoods.energy import energy_kernel_bdecay
 
 # -- True Events Tests -- #
 def test_1000_2_true_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_true
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -31,7 +40,7 @@ def test_1000_2_true_events_mean():
 
 
 def test_1000_2_true_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_true
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -49,7 +58,7 @@ def test_1000_2_true_events_max():
 
 
 def test_1000_2_true_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_true
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -67,7 +76,7 @@ def test_1000_2_true_events_min():
 
 
 def test_2000000_4_true_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_true
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -85,7 +94,7 @@ def test_2000000_4_true_events_mean():
 
 
 def test_2000000_4_true_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_true
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -103,7 +112,7 @@ def test_2000000_4_true_events_max():
 
 
 def test_2000000_4_true_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_true
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -121,7 +130,7 @@ def test_2000000_4_true_events_min():
 
 
 def test_200_8_true_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_true
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -139,7 +148,7 @@ def test_200_8_true_events_mean():
 
 
 def test_200_8_true_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_true
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -157,7 +166,7 @@ def test_200_8_true_events_max():
 
 
 def test_200_8_true_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_true
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -175,7 +184,7 @@ def test_200_8_true_events_min():
 
 
 def test_100000_24_true_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_true
 
     energies, _ = gen.generate(
         num_samples=100000,
@@ -193,7 +202,7 @@ def test_100000_24_true_events_mean():
 
 
 def test_100000_24_true_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_true
 
     energies, _ = gen.generate(
         num_samples=100000,
@@ -211,7 +220,7 @@ def test_100000_24_true_events_max():
 
 
 def test_100000_24_true_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_true
 
     energies, _ = gen.generate(
         num_samples=100000,
@@ -230,7 +239,7 @@ def test_100000_24_true_events_min():
 
 # -- False Events Tests -- #
 def test_1000_2_false_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_false
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -248,7 +257,7 @@ def test_1000_2_false_events_mean():
 
 
 def test_1000_2_false_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_false
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -266,7 +275,7 @@ def test_1000_2_false_events_max():
 
 
 def test_1000_2_false_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=2, seed=0)
+    gen = gen_1000_2_false
 
     energies, _ = gen.generate(
         num_samples=1000,
@@ -284,7 +293,7 @@ def test_1000_2_false_events_min():
 
 
 def test_2000000_4_false_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_false
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -302,7 +311,7 @@ def test_2000000_4_false_events_mean():
 
 
 def test_2000000_4_false_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_false
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -320,7 +329,7 @@ def test_2000000_4_false_events_max():
 
 
 def test_2000000_4_false_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=4, seed=0)
+    gen = gen_2000000_4_false
 
     energies, _ = gen.generate(
         num_samples=2000000,
@@ -338,7 +347,7 @@ def test_2000000_4_false_events_min():
 
 
 def test_200_8_false_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_false
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -356,7 +365,7 @@ def test_200_8_false_events_mean():
 
 
 def test_200_8_false_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_false
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -374,7 +383,7 @@ def test_200_8_false_events_max():
 
 
 def test_200_8_false_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=8, seed=0)
+    gen = gen_200_8_false
 
     energies, _ = gen.generate(
         num_samples=200,
@@ -392,7 +401,7 @@ def test_200_8_false_events_min():
 
 
 def test_100000_24_false_events_mean():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_false
 
     energies, _ = gen.generate(
         num_samples=100000,
@@ -410,7 +419,7 @@ def test_100000_24_false_events_mean():
 
 
 def test_100000_24_false_events_max():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_false
 
     energies, _ = gen.generate(
         num_samples=100000,
@@ -428,7 +437,7 @@ def test_100000_24_false_events_max():
 
 
 def test_100000_24_false_events_min():
-    gen = SyntheticDataGenerator(max_hits_per_sequence=24, seed=0)
+    gen = gen_100000_24_false
 
     energies, _ = gen.generate(
         num_samples=100000,

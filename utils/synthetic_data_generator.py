@@ -2,7 +2,6 @@ import random as rd
 
 import numpy as np
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 
 
@@ -45,6 +44,7 @@ class SyntheticDataGenerator:
     ):
         self.max_hits = max_hits_per_sequence
         self.MEC2 = 511.0  # keV
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         rd.seed(seed)
         torch.manual_seed(seed)
@@ -222,20 +222,37 @@ class SyntheticDataGenerator:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: Energies and positions of all generated events.
         """
-        energies = []
-        positions = []
+        energies = torch.zeros(
+            (num_samples, self.max_hits),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        positions = torch.zeros(
+            (num_samples, self.max_hits, 3),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        lengths = torch.zeros(num_samples, dtype=torch.long, device=self.device)
 
-        iterator = range(num_samples)
-        iterator = tqdm(iterator, desc="Generating synthetic events")
+        iterator = tqdm(range(num_samples), desc="Generating synthetic events")
 
-        for _ in iterator:
+        for i in iterator:
             n_hits = rd.randint(2, self.max_hits)
-            E0 = self.sample_initial_energy(mode)
-            e, p = self.generate_single_event(E0, n_hits, mode)
-            energies.append(e)
-            positions.append(p)
+            lengths[i] = n_hits
 
-        energies = pad_sequence(energies, batch_first=True, padding_value=0.0)
-        positions = pad_sequence(positions, batch_first=True, padding_value=0.0)
+            E = self.sample_initial_energy(mode)
+            pos = torch.zeros(3, device=self.device)
+
+            for j in range(n_hits - 1):
+                dE, E, pos = self.compton_step(E, pos)
+                energies[i, j] = dE
+                positions[i, j] = pos
+
+            energies[i, n_hits - 1] = E
+            positions[i, n_hits - 1] = pos
+
+            if mode == 2:
+                perm = torch.randperm(n_hits, device=self.device)
+                energies[i, :n_hits] = energies[i, perm]
 
         return energies, positions
