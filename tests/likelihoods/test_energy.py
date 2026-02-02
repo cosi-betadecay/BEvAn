@@ -17,7 +17,7 @@ def test_1000_2_true_events_mean():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -35,7 +35,7 @@ def test_1000_2_true_events_max():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -53,7 +53,7 @@ def test_1000_2_true_events_min():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -71,7 +71,7 @@ def test_2000000_4_true_events_mean():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -89,7 +89,7 @@ def test_2000000_4_true_events_max():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -107,7 +107,7 @@ def test_2000000_4_true_events_min():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -125,7 +125,7 @@ def test_200_8_true_events_mean():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -143,7 +143,7 @@ def test_200_8_true_events_max():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -161,7 +161,7 @@ def test_200_8_true_events_min():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -179,7 +179,7 @@ def test_100000_24_true_events_mean():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -197,7 +197,7 @@ def test_100000_24_true_events_max():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -215,7 +215,7 @@ def test_100000_24_true_events_min():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=True,
+        mode=1,
     )
 
     vals = energy_kernel_bdecay(
@@ -234,7 +234,7 @@ def test_1000_2_false_events_mean():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -252,7 +252,7 @@ def test_1000_2_false_events_max():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -270,7 +270,7 @@ def test_1000_2_false_events_min():
 
     energies, _ = gen.generate(
         num_samples=1000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -288,7 +288,7 @@ def test_2000000_4_false_events_mean():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -306,7 +306,7 @@ def test_2000000_4_false_events_max():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -324,7 +324,7 @@ def test_2000000_4_false_events_min():
 
     energies, _ = gen.generate(
         num_samples=2000000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -342,7 +342,7 @@ def test_200_8_false_events_mean():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -360,7 +360,7 @@ def test_200_8_false_events_max():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -378,7 +378,7 @@ def test_200_8_false_events_min():
 
     energies, _ = gen.generate(
         num_samples=200,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -396,7 +396,7 @@ def test_100000_24_false_events_mean():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -414,7 +414,7 @@ def test_100000_24_false_events_max():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
@@ -432,7 +432,7 @@ def test_100000_24_false_events_min():
 
     energies, _ = gen.generate(
         num_samples=100000,
-        mode=False,
+        mode=2,
     )
 
     vals = energy_kernel_bdecay(
