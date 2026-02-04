@@ -1,7 +1,10 @@
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+
 import wandb
+from utils.calculations import as_np
 
 
 def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
@@ -24,14 +27,13 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
     return fig
 
 
-def as_np(vals) -> np.ndarray:
-    arr = np.asarray(vals, dtype=np.float64)
-    arr = arr[np.isfinite(arr)]
-    return arr
-
-
 def _log_image(key: str, fig: plt.Figure) -> None:
-    # Log image and pin to summary so it shows up immediately on the dashboard.
+    """_summary_
+
+    Args:
+        key (str): _description_
+        fig (plt.Figure): _description_
+    """
     img = wandb.Image(fig)
     wandb.log({key: img})
     if wandb.run is not None:
@@ -40,6 +42,13 @@ def _log_image(key: str, fig: plt.Figure) -> None:
 
 
 def histogram(likelihoods: list[float], key: str, bins: int = 50):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 50.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -55,6 +64,13 @@ def histogram(likelihoods: list[float], key: str, bins: int = 50):
 
 
 def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 50.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -70,6 +86,12 @@ def histogram_log(likelihoods: list[float], key: str, bins: int = 50):
 
 
 def cdf(likelihoods: list[float], key: str):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+    """
     x = np.sort(as_np(likelihoods))
     if x.size == 0:
         return
@@ -86,6 +108,12 @@ def cdf(likelihoods: list[float], key: str):
 
 
 def violin_plot(likelihoods: list[float], key: str):
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+    """
     vals = np.asarray(likelihoods, dtype=np.float64)
     vals = vals[np.isfinite(vals)]
 
@@ -102,7 +130,13 @@ def violin_plot(likelihoods: list[float], key: str):
 
 
 def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
-    # Approximate ECDF slope as a density estimate (histogram normalized).
+    """_summary_
+
+    Args:
+        likelihoods (list[float]): _description_
+        key (str): _description_
+        bins (int, optional): _description_. Defaults to 80.
+    """
     x = as_np(likelihoods)
     if x.size == 0:
         return
@@ -119,68 +153,88 @@ def ecdf_slope(likelihoods: list[float], key: str, bins: int = 80):
     _log_image("ecdf_slope", fig)
 
 
-# Calculations
+def plot_energy_vs_arm(prediction_scores, energy_sums, arms, label: str):
+    energy = as_np(energy_sums).ravel()
+    arm = as_np(arms).ravel()
+    scores = as_np(prediction_scores).ravel()
 
+    mask = np.isfinite(energy) & np.isfinite(arm) & np.isfinite(scores)
 
-def log_calculations(likelihoods: list[float], key: str):
-    x = as_np(likelihoods)
-    valid_count = x.size
+    energy = energy[mask]
+    arm = arm[mask]
+    scores = scores[mask]
 
-    if valid_count == 0:
-        return
+    if energy.size == 0:
+        return None
 
-    mean = np.mean(x)
-    median = np.median(x)
-    std = np.std(x)
-    var = np.var(x)
+    weights = np.exp(scores)
 
-    percentiles = np.percentile(x, [1, 5, 10, 25, 75, 90, 95, 99])
-    q01, q05, q10, q25, q75, q90, q95, q99 = percentiles
-    iqr = q75 - q25
+    e_min, e_max = energy.min(), energy.max()
+    e_pad = max(1.0, 0.02 * (e_max - e_min))
+    energy_range = (e_min - e_pad, e_max + e_pad)
 
-    mad = np.median(np.abs(x - median))
-    mean_abs_dev = np.mean(np.abs(x - mean))
-    coeff_var = std / mean if mean != 0 else np.nan
+    # ARM (symmetric around 0)
+    arm_max = np.max(np.abs(arm))
+    arm_pad = max(1e-3, 0.02 * arm_max) if arm_max > 0 else 1.0
+    arm_range = (-arm_max - arm_pad, arm_max + arm_pad)
 
-    centered = x - mean
-    m2 = np.mean(centered**2)
-    m3 = np.mean(centered**3)
-    m4 = np.mean(centered**4)
-    skewness = m3 / (m2**1.5) if m2 > 0 else np.nan
-    kurtosis_excess = m4 / (m2 * m2) - 3 if m2 > 0 else np.nan
+    # --- Binning (explicit, physical) ---
 
-    trimmed_mask = (x >= q05) & (x <= q95)
-    trimmed_mean = np.mean(x[trimmed_mask]) if np.any(trimmed_mask) else mean
-
-    thresholds = [0.1, 0.5, 0.9, 0.99]
-    fraction_ge = {thr: float(np.mean(x >= thr)) for thr in thresholds}
-    fraction_le_10 = float(np.mean(x <= 0.1))
-
-    wandb.log(
-        {
-            "mean": mean,
-            "median": median,
-            "trimmed_mean_5_95": trimmed_mean,
-            "std": std,
-            "var": var,
-            "coeff_var": coeff_var,
-            "mad": mad,
-            "mean_abs_dev": mean_abs_dev,
-            "q01": q01,
-            "q05": q05,
-            "q10": q10,
-            "q25": q25,
-            "q75": q75,
-            "q90": q90,
-            "q95": q95,
-            "q99": q99,
-            "iqr": iqr,
-            "skewness": skewness,
-            "kurtosis_excess": kurtosis_excess,
-            "frac_ge_10pct": fraction_ge[0.1],
-            "frac_ge_50pct": fraction_ge[0.5],
-            "frac_ge_90pct": fraction_ge[0.9],
-            "frac_ge_99pct": fraction_ge[0.99],
-            "frac_le_10pct": fraction_le_10,
-        }
+    # Energy bins: fine around 511 keV
+    n_energy_bins = 20
+    energy_bins = np.linspace(
+        energy_range[0],
+        energy_range[1],
+        n_energy_bins + 1,
     )
+
+    # ARM bins: symmetric around 0
+    n_arm_bins = 20
+    arm_bins = np.linspace(
+        arm_range[0],
+        arm_range[1],
+        n_arm_bins + 1,
+    )
+
+    H, xedges, yedges = np.histogram2d(
+        energy,
+        arm,
+        bins=[energy_bins, arm_bins],
+        weights=weights,
+    )
+
+    #H = gaussian_filter(H, sigma=1.0)
+
+    # LogNorm requires strictly positive values
+    if not np.any(H > 0):
+        return None
+
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    mesh = ax.pcolormesh(
+        xedges,
+        yedges,
+        H.T,
+        norm=mcolors.LogNorm(
+            vmin=np.min(H[H > 0]),
+            vmax=np.max(H),
+        ),
+        cmap="cividis",
+        shading="auto",
+    )
+
+    # Reference lines (physics anchors)
+    ax.axvline(511.0, color="tab:orange", linestyle="--", linewidth=1.5)
+    ax.axhline(0.0, color="tab:blue", linestyle="--", linewidth=1.5)
+
+    ax.set_xlabel("Reconstructed Energy [keV]")
+    ax.set_ylabel("ARM [rad]")
+    ax.set_title(label)
+    ax.set_xlim(energy_range)
+    ax.set_ylim(arm_range)
+
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label("Posterior mass")
+
+    _log_image("energy_vs_arm", fig)

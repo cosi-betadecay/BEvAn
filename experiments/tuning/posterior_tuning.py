@@ -9,11 +9,11 @@ import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
-from physics.likelihoods.energy import energy_kernel_bdecay
+from physics.posterior import posterior_bdecay
 from utils.plots import (
     cdf,
     ecdf_slope,
@@ -27,14 +27,23 @@ from utils.reader_extraction import get_reader
 ##################################################################################
 
 
+# Data extraction
+
+
 def detected_511_event_likelihoods(
     ref_energy: float,
     event: Any,
+    alpha_energy: float,
+    alpha_arm: float,
+    alpha_kn: float,
 ):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
-    ref_energy = 511.0
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    tolerance = calculate_tolerance()
+    n_hits = event.GetNHTs()
 
     if n_hits == 0:
         return False
@@ -79,30 +88,42 @@ def detected_511_event_likelihoods(
     idx = idx.to(device)
     sizes = torch.tensor(sizes, device=device)
 
-    # idx: (n_combo, max_r), padded with -1
+    # Gather energies and positions
+    valid_mask = idx >= 0
 
-    energy_combo = energies[idx]  # (n_combo, max_r)
-    pos_combo = positions[idx]  # (n_combo, max_r, 3)
+    energy_combo = torch.zeros((n_combo, max_r), dtype=energies.dtype, device=device)
+    pos_combo = torch.zeros((n_combo, max_r, 3), dtype=positions.dtype, device=device)
 
-    mask = idx >= 0
-    energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
-    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+    energy_combo[valid_mask] = energies[idx[valid_mask]]
+    pos_combo[valid_mask] = positions[idx[valid_mask]]
 
-    one = torch.ones(n_combo, device=device)
+    best_score = posterior_bdecay(
+        energy_combo,
+        pos_combo,
+        ref_energy,
+        tolerance,
+        alpha_energy,
+        alpha_arm,
+        alpha_kn,
+        sizes,
+        n_combo,
+        device,
+    )
 
-    eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
-
-    return eng.max()
+    return best_score
 
 
-def annihilation_extractor_test_kn(
+def annihilation_extractor_test_likelihoods(
     geometry_file: str,
     sim_file: str,
+    alpha_energy: float,
+    alpha_arm: float,
+    alpha_kn: float,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
 
-    combs = []
+    posteriors_bdecay = []
     ground_truths = []
 
     for event in tqdm(
@@ -118,17 +139,16 @@ def annihilation_extractor_test_kn(
         else:
             ground_truths.append(0)
 
-        _comb = detected_511_event_likelihoods(
+        _posterior_bdecay = detected_511_event_likelihoods(
             ref_energy,
             event,
+            alpha_energy,
+            alpha_arm,
+            alpha_kn,
         )
+        posteriors_bdecay.append(_posterior_bdecay)
 
-        if _comb == -float("inf"):
-            _comb = 0.0
-
-        combs.append(_comb)
-
-    return combs, ground_truths
+    return posteriors_bdecay, ground_truths
 
 
 ##################################################################################
@@ -138,25 +158,23 @@ if __name__ == "__main__":
     load_dotenv()
 
     (
-        combs,
+        posteriors_bdecay,
         ground_truths,
-    ) = annihilation_extractor_test_kn(
-        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    ) = annihilation_extractor_test_likelihoods(
+        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim", 1.0, 1.0, 0.0
     )
-
-    true_events_energy = []
-    false_events_energy = []
+    posteriors_bdecay_true_events = []
+    posteriors_bdecay_false_events = []
 
     for i in range(len(ground_truths)):
         if ground_truths[i] == 1:
-            true_events_energy.append(combs[i])
+            posteriors_bdecay_true_events.append(posteriors_bdecay[i])
         else:
-            false_events_energy.append(combs[i])
+            posteriors_bdecay_false_events.append(posteriors_bdecay[i])
 
     runs = [
-        ("energy", combs),
-        ("energy_true_events", true_events_energy),
-        ("energy_false_events", false_events_energy),
+        ("true_events_posterior_bdecay", posteriors_bdecay_true_events),
+        ("false_events_posterior_bdecay", posteriors_bdecay_false_events),
     ]
 
     for label, data in runs:
@@ -164,7 +182,7 @@ if __name__ == "__main__":
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-energy", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-likelihoods", name=label, reinit=True)
 
         histogram(data, label)
         histogram_log(data, label)
