@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import omegaconf
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
 from physics.preprocessing.preprocesser import preprocesser

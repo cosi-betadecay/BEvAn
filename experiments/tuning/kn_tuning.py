@@ -10,7 +10,7 @@ import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.kn import klein_nishina_pdf
