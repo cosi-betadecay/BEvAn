@@ -64,6 +64,9 @@ def detected_511_event(
 
     tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
+    event_id = event.GetID()
+
+    print(event_id)
 
     if n_hits == 0:
         return False
@@ -131,7 +134,10 @@ def detected_511_event(
         sizes,
     )
 
-    return classifier(best_score, 0)
+    classification = classifier(best_score, 0)
+    index = 0 if classification else -1
+
+    return classification
 
 
 def annihilation_extractor(
