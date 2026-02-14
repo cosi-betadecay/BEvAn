@@ -165,34 +165,8 @@ def annihilation_extractor(
             predicted_true_indicies.append(index)
 
     predictions = torch.tensor(predictions, dtype=torch.bool)
-    gt = torch.tensor(ground_truths, dtype=torch.bool)
+    ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
     predicted_true_indicies = torch.tensor(predicted_true_indicies, dtype=torch.int32)
-
-    tp = torch.sum(gt & predictions).item()
-    fp = torch.sum(~gt & predictions).item()
-    fn = torch.sum(gt & ~predictions).item()
-    tn = torch.sum(~gt & ~predictions).item()
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
-    f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-
-    fig = plot_confusion_matrix(tp, fp, fn, tn)
-    wandb.log(
-        {
-            "TP": tp,
-            "FP": fp,
-            "FN": fn,
-            "TN": tn,
-            "precision": precision,
-            "recall": recall,
-            "false_positive_rate": fpr,
-            "f1_score": f1_score,
-            "confusion_matrix": wandb.Image(fig),
-        }
-    )
-    plt.close(fig)
 
     return predictions, ground_truths, predicted_true_indicies
 
@@ -245,3 +219,34 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
             predictions.append((positions_total_tensor[i][1], positions_total_tensor[best_j][1]))
 
     print(len(predictions))
+    print(predictions)
+
+    mapping = []
+    for i in tqdm(range(len(ground_truths)), desc="Creating full prediction mapping"):
+        mapping.append(True) if i in predictions else mapping.append(False)
+
+    tp = torch.sum(ground_truths & predictions).item()
+    fp = torch.sum(~ground_truths & predictions).item()
+    fn = torch.sum(ground_truths).item()
+    tn = torch.sum(~ground_truths & ~predictions).item()
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+    f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+
+    fig = plot_confusion_matrix(tp, fp, fn, tn)
+    wandb.log(
+        {
+            "TP": tp,
+            "FP": fp,
+            "FN": fn,
+            "TN": tn,
+            "precision": precision,
+            "recall": recall,
+            "false_positive_rate": fpr,
+            "f1_score": f1_score,
+            "confusion_matrix": wandb.Image(fig),
+        }
+    )
+    plt.close(fig)
