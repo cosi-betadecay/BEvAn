@@ -205,11 +205,7 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
         best_score = -float("inf")
         best_j = None
 
-        predictions_set = set(predictions)
-
         for j in range(i + 1, len(positions_total_tensor)):
-            if positions_total_tensor[j][1] in predictions_set:
-                pass
             pos_i = positions_total_tensor[i][0]
             pos_j = positions_total_tensor[j][0]
 
@@ -219,16 +215,14 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
                 best_score = _score
                 best_j = j
 
-        if best_score >= 0.9 and best_j is not None:
+        if best_score >= 0.90 and best_j is not None:
             predictions.append(positions_total_tensor[i][1])
             predictions.append(positions_total_tensor[best_j][1])
 
-    print(len(predictions))
-    print(predictions)
-
     mapping = []
     for i in tqdm(range(len(ground_truths)), desc="Creating full prediction mapping"):
-        mapping.append(True) if i in predictions else mapping.append(False)
+        mapping.append(True) if i + 1 in predictions else mapping.append(False)
+    mapping = torch.tensor(mapping, dtype=torch.bool)
 
     tp = torch.sum(ground_truths & mapping).item()
     fp = torch.sum(~ground_truths & mapping).item()
