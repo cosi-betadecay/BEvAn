@@ -228,11 +228,20 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
 
     predictions = []
     for i in tqdm(range(len(positions_total_tensor)), desc="Pairing annihilation candidates"):
-        score = -float("inf")
-        for j in range(i + 1, len(positions_total_tensor)):
-            _score = annihilation_kernel(positions_total_tensor[0][i], positions_total_tensor[0][j])
-            score = max(_score, score)
+        best_score = -float("inf")
+        best_j = None
 
-        predictions.append(True) if score >= 0.9 else predictions.append(False)
+        for j in range(i + 1, len(positions_total_tensor)):
+            pos_i = positions_total_tensor[i][0]
+            pos_j = positions_total_tensor[j][0]
+
+            _score = annihilation_kernel(pos_i, pos_j).item()
+
+            if _score > best_score:
+                best_score = _score
+                best_j = j
+
+        if best_score >= 0.9 and best_j is not None:
+            predictions.append((positions_total_tensor[i][1], positions_total_tensor[best_j][1]))
 
     print(len(predictions))
