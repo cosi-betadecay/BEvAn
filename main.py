@@ -1,3 +1,4 @@
+import logging
 import os
 
 import hydra
@@ -5,7 +6,8 @@ import omegaconf
 import wandb
 from dotenv import load_dotenv
 
-from physics.annihilation_detection import annihilation_extractor
+from physics.annihilation_detection import postprocessor
+from utils.logger import setup_logger
 
 
 @hydra.main(
@@ -23,7 +25,7 @@ def main(
     """
     wandb.init(project=cfg.project_names[0])
 
-    annihilation_extractor(cfg)
+    postprocessor(cfg)
 
     wandb.finish()
 
@@ -36,5 +38,7 @@ if __name__ == "__main__":
         raise RuntimeError("WANDB_API_KEY not found in .env")
 
     wandb.login(key=wandb_api_key)
+
+    logger = setup_logger(logging.INFO)
 
     main()
