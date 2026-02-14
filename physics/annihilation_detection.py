@@ -1,6 +1,5 @@
 import itertools
 import logging
-from itertools import combinations
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -208,10 +207,11 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
     positions_total_tensor = []
     reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
-    for event in tqdm(range(total=len(ground_truths)), desc="Extracting data from predicted true events"):
+    for event in tqdm(range(len(ground_truths)), desc="Extracting data from predicted true events"):
         event = reader.GetNextEvent()
-        if event.GetID() in predicted_true_indicies:
-            n_hits = event.GetNHTs()
+        n_hits = event.GetNHTs()
+        event_id = event.GetID()
+        if event_id in predicted_true_indicies and n_hits >= 2:
             positions = torch.tensor(
                 [
                     (
@@ -224,12 +224,15 @@ def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
                 dtype=torch.float32,
                 device=device,
             )
-            positions_total_tensor.append(positions)
+            positions_total_tensor.append((positions, event_id))
 
-    total_pairs = len(positions_total_tensor) * (len(positions_total_tensor) - 1) // 2
-    for pos_i, pos_j in tqdm(
-        combinations(positions_total_tensor, 2), total=total_pairs, desc="Pairing annihilation candidates"
-    ):
-        score = annihilation_kernel(pos_i, pos_j)
+    predictions = []
+    for i in tqdm(range(len(positions_total_tensor)), desc="Pairing annihilation candidates"):
+        score = -float("inf")
+        for j in range(i + 1, len(positions_total_tensor)):
+            _score = annihilation_kernel(positions_total_tensor[0][i], positions_total_tensor[0][j])
+            score = max(_score, score)
 
-        print(score)
+        predictions.append(True) if score >= 0.9 else predictions.append(False)
+
+    print(len(predictions))
