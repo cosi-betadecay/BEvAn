@@ -11,10 +11,11 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
+
 from mathematics.calculations import calculate_tolerance
 from physics.annihilation_detection import ground_truth
 from physics.likelihoods.arm import angular_resolution_measure_kernel
-from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
 from physics.likelihoods.energy import energy_pdf_bdecay
 from physics.likelihoods.kn import klein_nishina_pdf
 from utils.plots import (

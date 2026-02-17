@@ -35,10 +35,10 @@ def theta_kin(
     energies: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
 ) -> tuple[torch.Tensor, torch.Tensor]:
     def sigma_theta_kin(
-        E_0: float, E: float, electron_mass_energy: float, theta_kin: float, frac_sigma: float = 0.0035
+        E_1: float, E_2: float, electron_mass_energy: float, theta_kin: float, frac_sigma: float = 0.0035
     ) -> torch.Tensor:
         sigma_cos_theta_kin = (
-            electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_0) ** 2 + (1.0 / E) ** 2)
+            electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_1) ** 2 + (1.0 / E_2) ** 2)
         )
         sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
         n_sigma_cos_theta_kin = cfg.arm.n_sigma_cos_theta_kin
@@ -47,15 +47,15 @@ def theta_kin(
 
     electron_mass_energy = 511.0  # keV
     if energies.ndim == 1:
-        E_0 = energies.sum()
-        E = E_0 - energies[0]
+        E_1 = energies[1:].sum()
+        E_2 = energies[2:].sum()
     else:
-        E_0 = energies.sum(dim=1)
-        E = E_0 - energies[:, 0]
+        E_1 = energies[:, 1:].sum(dim=1)
+        E_2 = energies[:, 2:].sum(dim=1)
 
-    cos_theta_kin = 1 - electron_mass_energy * (1 / E - 1 / E_0)
+    cos_theta_kin = 1 - electron_mass_energy * (1 / E_2 - 1 / E_1)
     cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)
     theta_kin = torch.arccos(cos_theta_kin)
-    _sigma_theta_kin = sigma_theta_kin(E_0, E, electron_mass_energy, theta_kin)
+    _sigma_theta_kin = sigma_theta_kin(E_1, E_2, electron_mass_energy, theta_kin)
 
     return theta_kin, _sigma_theta_kin
