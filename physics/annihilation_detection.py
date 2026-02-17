@@ -1,4 +1,5 @@
 import itertools
+import logging
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -10,6 +11,7 @@ from tqdm import tqdm
 
 from mathematics.calculations import calculate_tolerance
 from physics.posterior import posterior_bdecay
+from physics.postprocessing.annihilation import annihilation_kernel
 from physics.preprocessing.preprocesser import preprocesser
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
@@ -66,7 +68,7 @@ def detected_511_event(
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return False
+        return False, -1
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -120,7 +122,7 @@ def detected_511_event(
     new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
-        return False
+        return False, -1
 
     best_score = posterior_bdecay(
         new_energy_combo,
@@ -131,7 +133,10 @@ def detected_511_event(
         sizes,
     )
 
-    return classifier(best_score, 0)
+    classification = classifier(best_score, 0)
+    index = event.GetID() if classification else -1
+
+    return classification, index
 
 
 def annihilation_extractor(
@@ -142,6 +147,7 @@ def annihilation_extractor(
 
     ground_truths = []
     predictions = []
+    predicted_true_indicies = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -150,19 +156,78 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        prediction = detected_511_event(ref_energy, event, cfg)
+        prediction, index = detected_511_event(ref_energy, event, cfg)
         _ground_truth = ground_truth(event, ref_energy)
 
         predictions.append(prediction)
         ground_truths.append(_ground_truth)
+        if prediction:
+            predicted_true_indicies.append(index)
 
     predictions = torch.tensor(predictions, dtype=torch.bool)
-    gt = torch.tensor(ground_truths, dtype=torch.bool)
+    ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
+    predicted_true_indicies = torch.tensor(predicted_true_indicies, dtype=torch.int32)
 
-    tp = torch.sum(gt & predictions).item()
-    fp = torch.sum(~gt & predictions).item()
-    fn = torch.sum(gt & ~predictions).item()
-    tn = torch.sum(~gt & ~predictions).item()
+    return predictions, ground_truths, predicted_true_indicies
+
+
+def postprocessor(cfg: omegaconf.dictconfig.DictConfig) -> None:
+    predictions, ground_truths, predicted_true_indicies = annihilation_extractor(cfg)
+    logger = logging.getLogger(__name__)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    logger.info("Done with naive Bayesian model, now over to the postprocessing stage.")
+
+    positions_total_tensor = []
+    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
+
+    for event in tqdm(range(len(ground_truths)), desc="Extracting data from predicted true events"):
+        event = reader.GetNextEvent()
+        n_hits = event.GetNHTs()
+        event_id = event.GetID()
+        if event_id in predicted_true_indicies and n_hits >= 2:
+            positions = torch.tensor(
+                [
+                    (
+                        event.GetHTAt(i).GetPosition().X(),
+                        event.GetHTAt(i).GetPosition().Y(),
+                        event.GetHTAt(i).GetPosition().Z(),
+                    )
+                    for i in range(n_hits)
+                ],
+                dtype=torch.float32,
+                device=device,
+            )
+            positions_total_tensor.append((positions, event_id))
+
+    predictions = []
+    for i in tqdm(range(len(positions_total_tensor)), desc="Pairing annihilation candidates"):
+        best_score = -float("inf")
+        best_j = None
+
+        for j in range(i + 1, len(positions_total_tensor)):
+            pos_i = positions_total_tensor[i][0]
+            pos_j = positions_total_tensor[j][0]
+
+            _score = annihilation_kernel(pos_i, pos_j).item()
+
+            if _score > best_score:
+                best_score = _score
+                best_j = j
+
+        if best_score >= 0.90 and best_j is not None:
+            predictions.append(positions_total_tensor[i][1])
+            predictions.append(positions_total_tensor[best_j][1])
+
+    mapping = []
+    for i in tqdm(range(len(ground_truths)), desc="Creating full prediction mapping"):
+        mapping.append(True) if i + 1 in predictions else mapping.append(False)
+    mapping = torch.tensor(mapping, dtype=torch.bool)
+
+    tp = torch.sum(ground_truths & mapping).item()
+    fp = torch.sum(~ground_truths & mapping).item()
+    fn = torch.sum(ground_truths & ~mapping).item()
+    tn = torch.sum(~ground_truths & ~mapping).item()
 
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
