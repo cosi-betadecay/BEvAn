@@ -6,7 +6,7 @@ import omegaconf
 import wandb
 from dotenv import load_dotenv
 
-from physics.annihilation_detection import postprocessor
+from physics.annihilation_detection import annihilation_extractor
 from utils.logger import setup_logger
 
 
@@ -25,7 +25,7 @@ def main(
     """
     wandb.init(project=cfg.project_names[0])
 
-    postprocessor(cfg)
+    annihilation_extractor(cfg)
 
     wandb.finish()
 
