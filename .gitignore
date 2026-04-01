@@ -27,3 +27,6 @@ wandb
 
 # Hydra
 outputs/
+
+# UV
+uv.lock

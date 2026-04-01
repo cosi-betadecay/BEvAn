@@ -3,11 +3,11 @@ import omegaconf
 import ROOT as M
 import torch
 import wandb
-from event_processing import detected_511_event
 from tqdm import tqdm
 
 from mathematics.calculations import min_max_norm
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
+from physics.event_processing import detected_511_event
 from physics.ground_truths import ground_truth_bdecay
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
