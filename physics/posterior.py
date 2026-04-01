@@ -3,7 +3,6 @@ import torch
 
 from physics.likelihoods.arm import angular_resolution_measure_kernel
 from physics.likelihoods.energy import energy_kernel_bdecay
-from physics.likelihoods.kn import klein_nishina_pdf
 
 
 def posterior_bdecay(
@@ -30,24 +29,16 @@ def posterior_bdecay(
             cfg_likelihoods,
         )
 
-    # KN
-    kn = one.clone()
-    valid_kn = sizes > 1
-    if valid_kn.any():
-        kn[valid_kn] = klein_nishina_pdf(energy_combo[valid_kn])
-
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, cfg_likelihoods.energy.n_std)
 
     # Numerical stability
     arm = torch.clamp(arm, min=1e-12)
-    kn = torch.clamp(kn, min=1e-12)
     eng = torch.clamp(eng, min=1e-12)
 
     # Weights
     alpha_energy = cfg_likelihoods.posterior.alpha_energy
     alpha_arm = cfg_likelihoods.posterior.alpha_arm
-    alpha_kn = cfg_likelihoods.posterior.alpha_kn
 
     score = alpha_arm * torch.log(arm) + alpha_energy * eng
 

@@ -6,7 +6,3 @@ def energy_kernel_bdecay(energies: torch.Tensor, ref_energy: float, sigma_e: flo
     kernel = torch.exp(-(((E - ref_energy) / (sigma_e)) ** 2) / 2)
 
     return torch.clamp(kernel, min=1e-12)
-
-
-def energy_heurestic_bg(energies: torch.Tensor, ref_energy: float, sigma_e: float) -> float:
-    return
