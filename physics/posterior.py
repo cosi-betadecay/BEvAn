@@ -1,6 +1,7 @@
 import omegaconf
 import torch
 
+from physics.likelihoods.annihilation import annihilation_kernel
 from physics.likelihoods.arm import angular_resolution_measure_kernel
 from physics.likelihoods.energy import energy_kernel_bdecay
 
@@ -29,6 +30,22 @@ def posterior_bdecay(
             cfg_likelihoods,
         )
 
+    # Annihilation
+    anni = one.clone()
+    valid_anni = sizes > 3
+    if valid_anni.any():
+        anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
+
+    # ARM
+    arm = one.clone()
+    valid_arm = sizes > 2
+    if valid_arm.any():
+        arm[valid_arm] = angular_resolution_measure_kernel(
+            energy_combo[valid_arm],
+            pos_combo[valid_arm],
+            cfg_likelihoods,
+        )
+
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, cfg_likelihoods.energy.n_std)
 
@@ -40,6 +57,6 @@ def posterior_bdecay(
     alpha_energy = cfg_likelihoods.posterior.alpha_energy
     alpha_arm = cfg_likelihoods.posterior.alpha_arm
 
-    score = alpha_arm * torch.log(arm) + alpha_energy * eng
+    score = alpha_arm * torch.log(arm) + alpha_energy * eng + 1 * anni
 
     return score.max()

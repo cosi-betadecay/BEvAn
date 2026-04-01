@@ -5,6 +5,7 @@ import torch
 import wandb
 from tqdm import tqdm
 
+from mathematics.calculations import min_max_norm
 from physics.event_processing import detected_511_event
 from physics.ground_truths import ground_truth_bdecay
 from utils.plots import plot_confusion_matrix
@@ -36,6 +37,7 @@ def annihilation_extractor(
         ground_truths.append(_ground_truth)
 
     scores_bdecay = torch.tensor(scores_bdecay, dtype=torch.float32)
+    scores_bdecay = min_max_norm(scores_bdecay, basis=scores_bdecay)
     # scores_bg = torch.tensor(scores_bg, dtype=torch.float32)
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
     # joined_scores = torch.stack([scores_bdecay, scores_bg], dim=1)
