@@ -10,9 +10,8 @@ def posterior_bdecay(
     energy_combo: torch.Tensor,
     pos_combo: torch.Tensor,
     ref_energy: float,
-    tolerance: float,
     cfg_likelihoods: omegaconf.dictconfig.DictConfig,
-    sizes: torch.Tensor,
+    tolerance: float,
 ) -> float:
     device = energy_combo.device
     n_combo = energy_combo.shape[0]
@@ -37,7 +36,7 @@ def posterior_bdecay(
         anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
 
     # Energy
-    eng = energy_kernel_bdecay(energy_combo, ref_energy, cfg_likelihoods.energy.n_std)
+    eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
 
     # Numerical stability
     arm = torch.clamp(arm, min=1e-12)

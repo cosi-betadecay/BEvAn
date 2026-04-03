@@ -5,12 +5,10 @@ import omegaconf
 import torch
 
 from mathematics.calculations import calculate_tolerance
-from physics.posterior import posterior_bdecay
 from physics.preprocessing.preprocesser import preprocesser
 
 
-def detected_511_event(
-    ref_energy: float,
+def event_data_processing(
     event: Any,
     cfg: omegaconf.dictconfig.DictConfig,
 ) -> bool:
@@ -20,7 +18,7 @@ def detected_511_event(
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return 0.0, 0.0
+        return None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -74,17 +72,6 @@ def detected_511_event(
     new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
-        return False, -1
+        return None, None
 
-    best_score_bdecay = posterior_bdecay(
-        new_energy_combo,
-        new_pos_combo,
-        ref_energy,
-        tolerance,
-        cfg.likelihoods,
-        sizes,
-    )
-
-    best_score_bg = 1 - best_score_bdecay
-
-    return best_score_bdecay, best_score_bg
+    return new_energy_combo, new_pos_combo

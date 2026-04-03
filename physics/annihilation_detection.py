@@ -5,9 +5,10 @@ import torch
 import wandb
 from tqdm import tqdm
 
-from mathematics.calculations import min_max_norm
-from physics.event_processing import detected_511_event
+from mathematics.calculations import calculate_tolerance, min_max_norm
+from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
+from physics.posterior import posterior_bdecay
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -17,10 +18,10 @@ def annihilation_extractor(
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
+    tolerance = calculate_tolerance()
 
     ground_truths = []
     scores_bdecay = []
-    scores_bg = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -29,19 +30,16 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        score_bdecay, score_bg = detected_511_event(ref_energy, event, cfg)
+        energies, positions = event_data_processing(ref_energy, event, cfg)
+        score = posterior_bdecay(energies, positions, ref_energy, tolerance, cfg.likelihoods, tolerance)
         _ground_truth = ground_truth_bdecay(event, ref_energy)
 
-        scores_bdecay.append(score_bdecay)
-        scores_bg.append(score_bg)
+        scores_bdecay.append(score)
         ground_truths.append(_ground_truth)
 
     scores_bdecay = torch.tensor(scores_bdecay, dtype=torch.float32)
     scores_bdecay = min_max_norm(scores_bdecay, basis=scores_bdecay)
-    # scores_bg = torch.tensor(scores_bg, dtype=torch.float32)
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
-    # joined_scores = torch.stack([scores_bdecay, scores_bg], dim=1)
-    # scores_bg = min_max_norm(scores_bg, basis=joined_scores)
 
     # predictions = BayesianAnnihiliationModel(scores_bdecay, scores_bg, 1, 1).inference()
     predictions = torch.tensor([score >= 0.5 for score in scores_bdecay], dtype=torch.bool)
