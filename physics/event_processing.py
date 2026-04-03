@@ -73,5 +73,7 @@ def event_data_processing(
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
         return None, None
+    
+    print(new_energy_combo, new_pos_combo)
 
     return new_energy_combo, new_pos_combo

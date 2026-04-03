@@ -6,9 +6,10 @@ import hydra
 import omegaconf
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
+
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -28,9 +29,12 @@ from utils.reader_extraction import get_reader
 
 def detected_511_event_anni(
     event: Any,
+    cfg: omegaconf.dictconfig.DictConfig,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    energies, positions = event_data_processing(event)
+    energies, positions = event_data_processing(event, cfg)
+    if energies is None:
+        return 0.0
     n_combo = energies.shape[0]
 
     sizes = (energies > 0).sum(dim=1)
@@ -67,7 +71,7 @@ def annihilation_extractor_anni(
     ):
         M.SetOwnership(event, True)
 
-        score_anni = detected_511_event_anni(event)
+        score_anni = detected_511_event_anni(event, cfg)
         _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy)
         _ground_truth_anni = ground_truth_annihilation(event)
         _ground_truth_compton = ground_truth_compton(event)
