@@ -8,6 +8,7 @@ import omegaconf
 import ROOT as M
 import torch
 import wandb
+from dotenv import load_dotenv
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -182,6 +183,8 @@ def main(
         ("anni_true_events_compton", true_events_anni_compton),
         ("anni_false_events_compton", false_events_anni_compton),
     ]
+
+    load_dotenv()
 
     for label, data in runs:
         wandb_api_key = os.getenv("WANDB_API_KEY")
