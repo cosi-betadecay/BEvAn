@@ -59,12 +59,10 @@ def detected_511_event_arm(
 
 
 def annihilation_extractor_arm(
-    geometry_file: str,
-    sim_file: str,
     cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,
 ) -> None:
-    reader = get_reader(geometry_file, sim_file)
+    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
     scores_arm = []
     ground_truths_beta_decay = []
