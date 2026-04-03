@@ -1,4 +1,3 @@
-import itertools
 import os
 import sys
 from typing import Any
@@ -32,14 +31,7 @@ def detected_511_event_anni(
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return False
-
-    # Load event data onto GPU
-    energies = torch.tensor(
-        [event.GetHTAt(i).GetEnergy() for i in range(n_hits)],
-        dtype=torch.float32,
-        device=device,
-    )
+        return 0.0
 
     positions = torch.tensor(
         [
@@ -54,40 +46,9 @@ def detected_511_event_anni(
         device=device,
     )
 
-    # Build all hit combinations (CPU once, GPU afterwards)
-    combos = []
-    sizes = []
-
-    for r in range(1, n_hits + 1):
-        for c in itertools.combinations(range(n_hits), r):
-            combos.append(c)
-            sizes.append(r)
-
-    max_r = max(sizes)
-    n_combo = len(combos)
-
-    # Pad combinations with -1
-    idx = torch.full((n_combo, max_r), -1, dtype=torch.long)
-    for i, c in enumerate(combos):
-        idx[i, : len(c)] = torch.tensor(c)
-
-    idx = idx.to(device)
-    sizes = torch.tensor(sizes, device=device)
-
-    # idx: (n_combo, max_r), padded with -1
-
-    energy_combo = energies[idx]  # (n_combo, max_r)
-    pos_combo = positions[idx]  # (n_combo, max_r, 3)
-
-    mask = idx >= 0
-    energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
-    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
-
-    one = torch.ones(n_combo, device=device)
+    one = torch.ones(len(positions), device=device)
     anni = one.clone()
-    valid_anni = sizes > 3
-    if valid_anni.any():
-        anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
+    anni = annihilation_kernel(positions)
 
     return anni.max()
 
