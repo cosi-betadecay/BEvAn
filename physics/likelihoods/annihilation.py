@@ -10,7 +10,13 @@ def annihilation_kernel(positions: torch.Tensor) -> torch.Tensor:
 
         centered = points - points.mean(dim=0, keepdim=True)
         cov = centered.T @ centered
-        eigvals, eigvecs = torch.linalg.eigh(cov)
+
+        # Robust eigh path: run in float64, then cast back
+        cov64 = cov.to(torch.float64)
+        eigvals, eigvecs = torch.linalg.eigh(cov64)
+        eigvals = eigvals.to(points.dtype)
+        eigvecs = eigvecs.to(points.dtype)
+
         direction = eigvecs[:, torch.argmax(eigvals)]
         return direction / torch.clamp(torch.norm(direction), min=1e-6)
 
