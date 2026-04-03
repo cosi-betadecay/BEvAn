@@ -20,7 +20,7 @@ def detected_511_event(
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return False, -1
+        return 0.0, 0.0
 
     # Load event data onto GPU
     energies = torch.tensor(

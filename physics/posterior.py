@@ -36,27 +36,18 @@ def posterior_bdecay(
     if valid_anni.any():
         anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
 
-    # ARM
-    arm = one.clone()
-    valid_arm = sizes > 2
-    if valid_arm.any():
-        arm[valid_arm] = angular_resolution_measure_kernel(
-            energy_combo[valid_arm],
-            pos_combo[valid_arm],
-            cfg_likelihoods,
-        )
-
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, cfg_likelihoods.energy.n_std)
 
     # Numerical stability
     arm = torch.clamp(arm, min=1e-12)
+    anni = torch.clamp(anni, min=1e-12)
     eng = torch.clamp(eng, min=1e-12)
 
     # Weights
     alpha_energy = cfg_likelihoods.posterior.alpha_energy
     alpha_arm = cfg_likelihoods.posterior.alpha_arm
 
-    score = alpha_arm * torch.log(arm) + alpha_energy * eng + 1 * anni
+    score = alpha_arm * torch.log(arm) + alpha_energy * eng
 
     return score.max()
