@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from mathematics.calculations import calculate_tolerance, min_max_norm
+from mathematics.calculations import min_max_norm
 from physics.ground_truths import (
     ground_truth_annihilation,
     ground_truth_bdecay,
@@ -25,13 +25,10 @@ from utils.reader_extraction import get_reader
 
 
 def detected_511_event_anni(
-    ref_energy: float,
     event: Any,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
-    ref_energy = 511.0
 
     if n_hits == 0:
         return False
@@ -112,7 +109,7 @@ def annihilation_extractor_anni(
     ):
         M.SetOwnership(event, True)
 
-        score_anni = detected_511_event_anni(ref_energy, event, cfg)
+        score_anni = detected_511_event_anni(event)
         _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy)
         _ground_truth_anni = ground_truth_annihilation(event, ref_energy)
         _ground_truth_compton = ground_truth_compton(event, ref_energy)
