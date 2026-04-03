@@ -163,3 +163,7 @@ def main(
         log_calculations(data, label)
 
     wandb.finish()
+
+
+if __name__ == "__main__":
+    main()
