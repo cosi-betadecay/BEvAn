@@ -111,8 +111,8 @@ def annihilation_extractor_anni(
 
         score_anni = detected_511_event_anni(event)
         _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy)
-        _ground_truth_anni = ground_truth_annihilation(event, ref_energy)
-        _ground_truth_compton = ground_truth_compton(event, ref_energy)
+        _ground_truth_anni = ground_truth_annihilation(event)
+        _ground_truth_compton = ground_truth_compton(event)
 
         scores_bdecay.append(score_anni)
         ground_truths_beta_decay.append(_ground_truth_bdecay)
