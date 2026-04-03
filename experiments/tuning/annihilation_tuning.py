@@ -163,7 +163,7 @@ def main(
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-energy", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-annihilation", name=label, reinit=True)
 
         histogram(data, label)
         histogram_log(data, label)
