@@ -52,28 +52,24 @@ def event_data_processing(
     max_r = max(sizes)
     n_combo = len(combos)
 
-    # Pad combinations with -1
-    idx = torch.full((n_combo, max_r), -1, dtype=torch.long)
+    # Pad combinations with sentinel index n_hits (maps to appended zero row)
+    idx = torch.full((n_combo, max_r), n_hits, dtype=torch.long)
     for i, c in enumerate(combos):
         idx[i, : len(c)] = torch.tensor(c)
 
     idx = idx.to(device)
     sizes = torch.tensor(sizes, device=device)
 
-    # idx: (n_combo, max_r), padded with -1
+    # Append one all-zero entry so padded indices gather zeros directly.
+    energies_ext = torch.cat([energies, energies.new_zeros(1)], dim=0)  # (n_hits + 1,)
+    positions_ext = torch.cat([positions, positions.new_zeros((1, 3))], dim=0)  # (n_hits + 1, 3)
 
-    energy_combo = energies[idx]  # (n_combo, max_r)
-    pos_combo = positions[idx]  # (n_combo, max_r, 3)
-
-    mask = idx >= 0
-    energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
-    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+    energy_combo = energies_ext[idx]  # (n_combo, max_r)
+    pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
 
     new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
 
     if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
         return None, None
-    
-    print(new_energy_combo, new_pos_combo)
 
     return new_energy_combo, new_pos_combo
