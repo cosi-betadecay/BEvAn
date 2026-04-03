@@ -7,19 +7,21 @@ import hydra
 import omegaconf
 import ROOT as M
 import torch
-import wandb
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+import wandb
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from mathematics.calculations import min_max_norm
+from mathematics.calculations import calculate_tolerance, min_max_norm
 from physics.ground_truths import (
     ground_truth_annihilation,
     ground_truth_bdecay,
     ground_truth_compton,
 )
 from physics.likelihoods.annihilation import annihilation_kernel
+from physics.likelihoods.energy import energy_kernel_bdecay
 from utils.calculations import log_calculations
 from utils.plots import cdf, ecdf_slope, histogram, histogram_log, violin_plot
 from utils.reader_extraction import get_reader
@@ -29,10 +31,19 @@ def detected_511_event_anni(
     event: Any,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
+    ref_energy = 511.0
 
     if n_hits == 0:
-        return 0.0
+        return False
+
+    # Load event data onto GPU
+    energies = torch.tensor(
+        [event.GetHTAt(i).GetEnergy() for i in range(n_hits)],
+        dtype=torch.float32,
+        device=device,
+    )
 
     positions = torch.tensor(
         [
@@ -47,13 +58,47 @@ def detected_511_event_anni(
         device=device,
     )
 
-    anni = -float("inf")
-    for r in range(1, n_hits + 1):
-        for combo in itertools.combinations(positions, r):
-            _anni = annihilation_kernel(positions)
-            anni = max(anni, _anni.item())
+    # Build all hit combinations (CPU once, GPU afterwards)
+    combos = []
+    sizes = []
 
-    return anni
+    for r in range(1, n_hits + 1):
+        for c in itertools.combinations(range(n_hits), r):
+            combos.append(c)
+            sizes.append(r)
+
+    max_r = max(sizes)
+    n_combo = len(combos)
+
+    # Pad combinations with -1
+    idx = torch.full((n_combo, max_r), -1, dtype=torch.long)
+    for i, c in enumerate(combos):
+        idx[i, : len(c)] = torch.tensor(c)
+
+    idx = idx.to(device)
+    sizes = torch.tensor(sizes, device=device)
+
+    # idx: (n_combo, max_r), padded with -1
+
+    energy_combo = energies[idx]  # (n_combo, max_r)
+    pos_combo = positions[idx]  # (n_combo, max_r, 3)
+
+    mask = idx >= 0
+    energy_combo = torch.where(mask, energy_combo, torch.zeros_like(energy_combo))
+    pos_combo = torch.where(mask[..., None], pos_combo, torch.zeros_like(pos_combo))
+
+    one = torch.ones(n_combo, device=device)
+
+    anni = one.clone()
+    valid_anni = sizes > 3
+    if valid_anni.any():
+        anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
+
+    eng = energy_kernel_bdecay(energy_combo, ref_energy, 1)
+
+    score = eng * anni
+
+    return score.max()
 
 
 def annihilation_extractor_anni(
