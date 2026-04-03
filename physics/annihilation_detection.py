@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import omegaconf
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from mathematics.calculations import calculate_tolerance, min_max_norm
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
@@ -31,9 +31,9 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
 
-        energies, positions = event_data_processing(ref_energy, event, cfg)
+        energies, positions = event_data_processing(event, cfg)
         score_bdecay, score_bg = posterior(
-            energies, positions, ref_energy, tolerance, cfg.likelihoods, tolerance
+            energies, positions, ref_energy, cfg.likelihoods, tolerance
         )
         _ground_truth = ground_truth_bdecay(event, ref_energy)
 
