@@ -57,7 +57,7 @@ def detected_511_event_anni(
 
     eng = energy_kernel_bdecay(energies, 511, tolerance)
 
-    score = 2 * eng + 2 * arm + anni
+    score = eng * anni
 
     return score.max()
 
