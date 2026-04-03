@@ -20,6 +20,7 @@ from physics.ground_truths import (
     ground_truth_compton,
 )
 from physics.likelihoods.annihilation import annihilation_kernel
+from physics.likelihoods.arm import angular_resolution_measure_kernel
 from physics.likelihoods.energy import energy_kernel_bdecay
 from utils.calculations import log_calculations
 from utils.plots import cdf, ecdf_slope, histogram, histogram_log, violin_plot
@@ -40,6 +41,15 @@ def detected_511_event_anni(
     one = torch.ones(n_combo, device=device)
     tolerance = calculate_tolerance()
 
+    arm = one.clone()
+    valid_arm = sizes > 2
+    if valid_arm.any():
+        arm[valid_arm] = angular_resolution_measure_kernel(
+            energies[valid_arm],
+            positions[valid_arm],
+            cfg.likelihoods,
+        )
+
     anni = one.clone()
     valid_anni = sizes > 3
     if valid_anni.any():
@@ -47,7 +57,7 @@ def detected_511_event_anni(
 
     eng = energy_kernel_bdecay(energies, 511, tolerance)
 
-    score = eng * anni
+    score = 2 * eng + 2 * arm + anni
 
     return score.max()
 
