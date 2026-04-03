@@ -55,6 +55,8 @@ def ground_truth_annihilation(event: Any) -> bool:
         if event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
             return True
 
+    return False
+
 
 def ground_truth_compton(event: Any) -> bool:
     """Determine if an event contains a Compton scattering interaction.
