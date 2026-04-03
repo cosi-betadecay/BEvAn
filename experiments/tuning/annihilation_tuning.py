@@ -101,7 +101,7 @@ def main(
     Args:
         cfg (omegaconf.dictconfig.DictConfig): Configuration object.
     """
-    wandb.init(project=cfg.project_names[4])
+    wandb.init(project="cosi-betadecay-annihilation")
 
     scores_bdecay, ground_truths_bdecay, ground_truths_annihilation, ground_truths_compton = (
         annihilation_extractor_anni(cfg)
