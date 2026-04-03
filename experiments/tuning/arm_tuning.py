@@ -77,9 +77,9 @@ def annihilation_extractor_arm(
         M.SetOwnership(event, True)
 
         score_arm = detected_511_event_arm(ref_energy, event, cfg)
-        _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy, cfg)
-        _ground_truth_anni = ground_truth_annihilation(event, cfg)
-        _ground_truth_compton = ground_truth_compton(event, cfg)
+        _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy)
+        _ground_truth_anni = ground_truth_annihilation(event)
+        _ground_truth_compton = ground_truth_compton(event)
 
         scores_arm.append(score_arm)
         ground_truths_beta_decay.append(_ground_truth_bdecay)
