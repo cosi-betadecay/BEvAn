@@ -130,7 +130,7 @@ def annihilation_extractor_anni(
 
 
 @hydra.main(
-    config_path="configs",
+    config_path="../../configs",
     config_name="config",
     version_base=None,
 )
