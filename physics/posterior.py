@@ -6,7 +6,7 @@ from physics.likelihoods.arm import angular_resolution_measure_kernel
 from physics.likelihoods.energy import energy_kernel_bdecay
 
 
-def posterior_bdecay(
+def posterior(
     energy_combo: torch.Tensor,
     pos_combo: torch.Tensor,
     ref_energy: float,
@@ -47,6 +47,7 @@ def posterior_bdecay(
     alpha_energy = cfg_likelihoods.posterior.alpha_energy
     alpha_arm = cfg_likelihoods.posterior.alpha_arm
 
-    score = 2 * arm + 2 * eng + anni
+    score_bdecay = torch.log(arm) + eng
+    score_bg = anni
 
-    return score.max()
+    return score_bdecay.max(), score_bg.max()
