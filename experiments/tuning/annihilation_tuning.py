@@ -1,3 +1,4 @@
+import itertools
 import os
 import sys
 from typing import Any
@@ -46,11 +47,13 @@ def detected_511_event_anni(
         device=device,
     )
 
-    one = torch.ones(len(positions), device=device)
-    anni = one.clone()
-    anni = annihilation_kernel(positions)
+    anni = -float("inf")
+    for r in range(1, n_hits + 1):
+        for combo in itertools.combinations(positions, r):
+            _anni = annihilation_kernel(positions)
+            anni = max(anni, _anni.item())
 
-    return anni.max()
+    return anni
 
 
 def annihilation_extractor_anni(
