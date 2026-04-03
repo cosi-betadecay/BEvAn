@@ -47,7 +47,7 @@ def posterior(
     alpha_energy = cfg_likelihoods.posterior.alpha_energy
     alpha_arm = cfg_likelihoods.posterior.alpha_arm
 
-    score_bdecay = torch.log(arm) + eng
+    score_bdecay = eng * anni
     score_bg = anni
 
     return score_bdecay.max(), score_bg.max()
