@@ -83,6 +83,8 @@ def annihilation_extractor_anni(
     scores_bdecay = torch.tensor(scores_bdecay, dtype=torch.float32)
     scores_bdecay = min_max_norm(scores_bdecay, basis=scores_bdecay)
     ground_truths_beta_decay = torch.tensor(ground_truths_beta_decay, dtype=torch.bool)
+    ground_truths_annihilation = torch.tensor(ground_truths_annihilation, dtype=torch.bool)
+    ground_truths_compton = torch.tensor(ground_truths_compton, dtype=torch.bool)
 
     return scores_bdecay, ground_truths_beta_decay, ground_truths_annihilation, ground_truths_compton
 

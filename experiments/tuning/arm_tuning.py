@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from mathematics.calculations import min_max_norm
 from physics.event_processing import event_data_processing
 from physics.ground_truths import (
     ground_truth_annihilation,
@@ -85,6 +86,12 @@ def annihilation_extractor_arm(
         ground_truths_beta_decay.append(_ground_truth_bdecay)
         ground_truths_annihilation.append(_ground_truth_anni)
         ground_truths_compton.append(_ground_truth_compton)
+
+    scores_arm = torch.tensor(scores_arm, dtype=torch.float32)
+    scores_arm = min_max_norm(scores_arm, basis=scores_arm)
+    ground_truths_beta_decay = torch.tensor(ground_truths_beta_decay, dtype=torch.bool)
+    ground_truths_annihilation = torch.tensor(ground_truths_annihilation, dtype=torch.bool)
+    ground_truths_compton = torch.tensor(ground_truths_compton, dtype=torch.bool)
 
     return scores_arm, ground_truths_beta_decay, ground_truths_annihilation, ground_truths_compton
 
