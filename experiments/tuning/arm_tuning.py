@@ -1,8 +1,9 @@
-import itertools
 import os
 import sys
 from typing import Any
 
+import hydra
+import omegaconf
 import ROOT as M
 import torch
 import wandb
@@ -11,19 +12,19 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from physics.likelihoods.compton_kin import compton_kin_heurestic_bdecay
-
-from mathematics.calculations import calculate_tolerance
-from physics.annihilation_detection import ground_truth
+from physics.event_processing import event_data_processing
+from physics.ground_truths import (
+    ground_truth_annihilation,
+    ground_truth_bdecay,
+    ground_truth_compton,
+)
 from physics.likelihoods.arm import angular_resolution_measure_kernel
-from physics.likelihoods.energy import energy_pdf_bdecay
-from physics.likelihoods.kn import klein_nishina_pdf
+from utils.calculations import log_calculations
 from utils.plots import (
     cdf,
     ecdf_slope,
     histogram,
     histogram_log,
-    log_calculations,
     violin_plot,
 )
 from utils.reader_extraction import get_reader
@@ -31,76 +32,44 @@ from utils.reader_extraction import get_reader
 ##################################################################################
 
 
-def detected_511_event_likelihoods(
+def detected_511_event_arm(
     ref_energy: float,
     event: Any,
+    cfg: omegaconf.dictconfig.DictConfig,
 ):
-    n_hits = event.GetNHTs()
-    tolerance = calculate_tolerance()
-
-    energies = torch.tensor([event.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32)
-    positions = torch.tensor(
-        [
-            (
-                event.GetHTAt(i).GetPosition().X(),
-                event.GetHTAt(i).GetPosition().Y(),
-                event.GetHTAt(i).GetPosition().Z(),
-            )
-            for i in range(n_hits)
-        ],
-        dtype=torch.float32,
-    )
-
-    if len(energies) == 0:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    energies, positions = event_data_processing(event, cfg)
+    if energies is None:
         return 0.0
+    n_combo = energies.shape[0]
 
-    _best = -float("inf")
-    one = torch.tensor(1.0, dtype=energies.dtype, device=energies.device)
+    sizes = (energies > 0).sum(dim=1)
+    one = torch.ones(n_combo, device=device)
 
-    for r in range(1, n_hits + 1):
-        for idx_combo in itertools.combinations(range(n_hits), r):
-            energy_combo = energies[list(idx_combo)]
-            pos_combo = positions[list(idx_combo)]
+    arm = one.clone()
+    valid_arm = sizes > 2
+    if valid_arm.any():
+        arm[valid_arm] = angular_resolution_measure_kernel(
+            energies[valid_arm],
+            positions[valid_arm],
+            cfg.likelihoods,
+        )
 
-            _arm = angular_resolution_measure_kernel(energy_combo, pos_combo) if r > 2 else one
-            _kn = klein_nishina_pdf(energy_combo) if r > 1 else one
-            _energy = energy_pdf_bdecay(energy_combo, ref_energy, tolerance)
-            _compton_kin = compton_kin_heurestic_bdecay(energy_combo) if r > 1 else one
-
-            _arm = torch.clamp(_arm, min=1e-12)
-            _kn = torch.clamp(_kn, min=1e-12)
-            _energy = torch.clamp(_energy, min=1e-12)
-            _compton_kin = torch.clamp(_compton_kin, min=1e-12)
-
-            alpha_arm = 1
-            alpha_energy = 1
-            alpha_kn = 0.0
-            alpha_compton_kin = 0
-
-            score = (
-                alpha_arm * torch.log(_arm)
-                + alpha_energy * (_energy)
-                + alpha_kn * torch.log(_kn)
-                + alpha_compton_kin * (_compton_kin)
-            )
-
-            _best = max(_best, score.item())
-
-    if _best < 0 or _best > 1:
-        print(_best)
-
-    return _best
+    return arm.max()
 
 
-def annihilation_extractor_test_kn(
+def annihilation_extractor_arm(
     geometry_file: str,
     sim_file: str,
+    cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(geometry_file, sim_file)
 
-    combs = []
-    ground_truths = []
+    scores_arm = []
+    ground_truths_beta_decay = []
+    ground_truths_annihilation = []
+    ground_truths_compton = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -109,56 +78,75 @@ def annihilation_extractor_test_kn(
     ):
         M.SetOwnership(event, True)
 
-        is_annihilation = ground_truth(event, ref_energy)
-        if is_annihilation:
-            ground_truths.append(1)
-        else:
-            ground_truths.append(0)
+        score_arm = detected_511_event_arm(ref_energy, event, cfg)
+        _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy, cfg)
+        _ground_truth_anni = ground_truth_annihilation(event, cfg)
+        _ground_truth_compton = ground_truth_compton(event, cfg)
 
-        _comb = detected_511_event_likelihoods(
-            ref_energy,
-            event,
-        )
+        scores_arm.append(score_arm)
+        ground_truths_beta_decay.append(_ground_truth_bdecay)
+        ground_truths_annihilation.append(_ground_truth_anni)
+        ground_truths_compton.append(_ground_truth_compton)
 
-        if _comb == -float("inf"):
-            _comb = 0.0
-
-        combs.append(_comb)
-
-    return combs, ground_truths
+    return scores_arm, ground_truths_beta_decay, ground_truths_annihilation, ground_truths_compton
 
 
-##################################################################################
+@hydra.main(
+    config_path="../../configs",
+    config_name="config",
+    version_base=None,
+)
+def main(
+    cfg: omegaconf.dictconfig.DictConfig,
+) -> None:
+    """Run annihilation detection extraction.
 
-
-if __name__ == "__main__":
-    load_dotenv()
-
-    (
-        combs,
-        ground_truths,
-    ) = annihilation_extractor_test_kn(
-        "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup", "data/Activation.sim"
+    Args:
+        cfg (omegaconf.dictconfig.DictConfig): Configuration object.
+    """
+    scores_arm, ground_truths_bdecay, ground_truths_annihilation, ground_truths_compton = (
+        annihilation_extractor_arm(cfg)
     )
 
-    true_events_arm_kn_energies = []
-    false_events_arm_kn_energies = []
+    # Beta decay
+    true_events_arm_bdecay = []
+    false_events_arm_bdecay = []
+    # Annihilations
+    true_events_arm_annihilation = []
+    false_events_arm_annihilation = []
+    # Compton
+    true_events_arm_compton = []
+    false_events_arm_compton = []
 
-    for i in range(len(ground_truths)):
-        if ground_truths[i] == 1:
-            true_events_arm_kn_energies.append(combs[i])
+    # Mapping runs
+    for i in tqdm(range(len(ground_truths_bdecay)), desc="Creating results", unit=" events"):
+        if ground_truths_bdecay[i]:
+            true_events_arm_bdecay.append(scores_arm[i].item())
         else:
-            false_events_arm_kn_energies.append(combs[i])
+            false_events_arm_bdecay.append(scores_arm[i].item())
+        if ground_truths_annihilation[i]:
+            true_events_arm_annihilation.append(scores_arm[i].item())
+        else:
+            false_events_arm_annihilation.append(scores_arm[i].item())
+        if ground_truths_compton[i]:
+            true_events_arm_compton.append(scores_arm[i].item())
+        else:
+            false_events_arm_compton.append(scores_arm[i].item())
 
-    print(len(combs))
-    print(len(true_events_arm_kn_energies))
-    print(len(false_events_arm_kn_energies))
-
+    # Creating runs
     runs = [
-        ("arm-kn-energy", combs),
-        ("arm-kn-energy_true_events", true_events_arm_kn_energies),
-        ("arm-kn-energy_false_events", false_events_arm_kn_energies),
+        ("arm_bdecay", scores_arm.cpu().numpy()),
+        ("arm_true_events_bdecay", true_events_arm_bdecay),
+        ("arm_false_events_bdecay", false_events_arm_bdecay),
+        ("arm_annihilation", scores_arm.cpu().numpy()),
+        ("arm_true_events_annihilation", true_events_arm_annihilation),
+        ("arm_false_events_annihilation", false_events_arm_annihilation),
+        ("arm_compton", scores_arm.cpu().numpy()),
+        ("arm_true_events_compton", true_events_arm_compton),
+        ("arm_false_events_compton", false_events_arm_compton),
     ]
+
+    load_dotenv()
 
     for label, data in runs:
         wandb_api_key = os.getenv("WANDB_API_KEY")
@@ -174,4 +162,4 @@ if __name__ == "__main__":
         ecdf_slope(data, label)
         log_calculations(data, label)
 
-        wandb.finish()
+    wandb.finish()
