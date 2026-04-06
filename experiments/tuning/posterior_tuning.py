@@ -100,7 +100,7 @@ def main(
     Args:
         cfg (omegaconf.dictconfig.DictConfig): Configuration object.
     """
-    wandb.init(project="cosi-betadecay-posteriorhilation")
+    wandb.init(project="cosi-betadecay-posterior")
 
     scores_bdecay, ground_truths_bdecay, ground_truths_annihilation, ground_truths_compton = (
         posteriorhilation_extractor_posterior(cfg)
@@ -151,7 +151,7 @@ def main(
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-        wandb.init(project="cosi-betadecay-posteriorhilation", name=label, reinit=True)
+        wandb.init(project="cosi-betadecay-posterior", name=label, reinit=True)
 
         histogram(data, label)
         histogram_log(data, label)
