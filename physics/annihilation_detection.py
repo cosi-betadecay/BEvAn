@@ -51,10 +51,11 @@ def annihilation_extractor(
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
 
     # predictions = BayesianAnnihiliationModel(scores_bdecay, scores_bg, 1, 1).inference()
-    predictions = torch.tensor(
-        [bdecay_score >= bg_score for bdecay_score, bg_score in zip(scores_bdecay, scores_bg)],
-        dtype=torch.bool,
-    )
+    # predictions = torch.tensor(
+    #    [bdecay_score >= bg_score for bdecay_score, bg_score in zip(scores_bdecay, scores_bg)],
+    #    dtype=torch.bool,
+    # )
+    predictions = scores_bdecay >= 0.5
 
     tp = torch.sum(ground_truths & predictions).item()
     fp = torch.sum(~ground_truths & predictions).item()
