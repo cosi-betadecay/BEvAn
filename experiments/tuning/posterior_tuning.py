@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from mathematics.calculations import min_max_norm
+from mathematics.calculations import calculate_tolerance, min_max_norm
 from physics.event_processing import event_data_processing
 from physics.ground_truths import (
     ground_truth_annihilation,
@@ -39,7 +39,15 @@ def detected_511_event_posterior(
     if energies is None:
         return 0.0
 
-    return posterior.max()
+    _posterior, _ = posterior(
+        energies,
+        positions,
+        511,
+        cfg_likelihoods=cfg.likelihoods,
+        tolerance=calculate_tolerance(),
+    )
+
+    return _posterior.max()
 
 
 def posteriorhilation_extractor_posterior(
