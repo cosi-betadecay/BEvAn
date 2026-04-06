@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from mathematics.calculations import calculate_tolerance, min_max_norm
+from mathematics.calculations import min_max_norm
 from physics.event_processing import event_data_processing
 from physics.ground_truths import (
     ground_truth_annihilation,
@@ -20,8 +20,6 @@ from physics.ground_truths import (
     ground_truth_compton,
 )
 from physics.likelihoods.annihilation import annihilation_kernel
-from physics.likelihoods.arm import angular_resolution_measure_kernel
-from physics.likelihoods.energy import energy_kernel_bdecay
 from utils.calculations import log_calculations
 from utils.plots import cdf, ecdf_slope, histogram, histogram_log, violin_plot
 from utils.reader_extraction import get_reader
@@ -39,27 +37,13 @@ def detected_511_event_anni(
 
     sizes = (energies > 0).sum(dim=1)
     one = torch.ones(n_combo, device=device)
-    tolerance = calculate_tolerance()
-
-    arm = one.clone()
-    valid_arm = sizes > 2
-    if valid_arm.any():
-        arm[valid_arm] = angular_resolution_measure_kernel(
-            energies[valid_arm],
-            positions[valid_arm],
-            cfg.likelihoods,
-        )
 
     anni = one.clone()
     valid_anni = sizes > 3
     if valid_anni.any():
         anni[valid_anni] = annihilation_kernel(positions[valid_anni])
 
-    eng = energy_kernel_bdecay(energies, 511, tolerance)
-
-    score = eng * anni
-
-    return score.max()
+    return anni.max()
 
 
 def annihilation_extractor_anni(
