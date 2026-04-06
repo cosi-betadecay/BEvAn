@@ -9,4 +9,7 @@ likelihoods:
   posterior:
     alpha_energy: 1.0
     alpha_arm: 1.0
+    alpha_anni: 1.0
     alpha_kn: 1.0
+    p_bdecay: 1.0
+    p_bg: 1.0
