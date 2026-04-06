@@ -32,7 +32,6 @@ def annihilation_extractor(
         M.SetOwnership(event, True)
 
         energies, positions = event_data_processing(event, cfg)
-        score_bdecay, score_bg = posterior(energies, positions, ref_energy, cfg.likelihoods, tolerance)
 
         if energies is None or positions is None:
             score_bdecay = 0.0
