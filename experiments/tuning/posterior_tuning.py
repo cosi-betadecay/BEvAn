@@ -60,7 +60,7 @@ def posteriorhilation_extractor_posterior(
     ):
         M.SetOwnership(event, True)
 
-        score_posterior = detected_511_event_posterior(event, cfg)
+        score_posterior, _ = detected_511_event_posterior(event, cfg)
         _ground_truth_bdecay = ground_truth_bdecay(event, ref_energy)
         _ground_truth_annihilation = ground_truth_annihilation(event)
         _ground_truth_compton = ground_truth_compton(event)
