@@ -33,7 +33,7 @@ def posterior(
     anni = one.clone()
     valid_anni = sizes > 3
     if valid_anni.any():
-        anni[valid_anni] = annihilation_kernel(pos_combo[valid_anni])
+        anni[valid_anni] = max(annihilation_kernel(pos_combo[valid_anni]))
 
     # Energy
     eng = energy_kernel_bdecay(energy_combo, ref_energy, tolerance)
