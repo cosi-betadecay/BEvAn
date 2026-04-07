@@ -5,7 +5,6 @@ import omegaconf
 import torch
 
 from mathematics.calculations import calculate_tolerance
-from physics.preprocessing.preprocesser import preprocesser
 
 
 def event_data_processing(
@@ -67,9 +66,7 @@ def event_data_processing(
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
 
-    new_energy_combo, new_pos_combo = preprocesser(energy_combo, pos_combo, tolerance, cfg.preprocessing)
-
-    if new_energy_combo.numel() == 0 or new_pos_combo.numel() == 0:
+    if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None
 
-    return new_energy_combo, new_pos_combo
+    return energy_combo, pos_combo

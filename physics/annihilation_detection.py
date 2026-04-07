@@ -5,10 +5,9 @@ import torch
 import wandb
 from tqdm import tqdm
 
-from mathematics.calculations import calculate_tolerance, min_max_norm
+from mathematics.calculations import calculate_tolerance
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
-from physics.posterior import posterior
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -21,8 +20,8 @@ def annihilation_extractor(
     tolerance = calculate_tolerance()
 
     ground_truths = []
-    scores_bdecay = []
-    scores_bg = []
+    bdecay_matrix = []
+    bg_matrix = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -32,30 +31,16 @@ def annihilation_extractor(
         M.SetOwnership(event, True)
 
         energies, positions = event_data_processing(event, cfg)
+        gt = ground_truth_bdecay(event, ref_energy)
+        ground_truths.append(gt)
+        # TODO: put the different energies and positions into the matrix calculations
+        # TODO: add the scores from the matrix calculations to the matrices
 
-        if energies is None or positions is None:
-            score_bdecay = 0.0
-            score_bg = 0.0
-        else:
-            score_bdecay, score_bg = posterior(energies, positions, ref_energy, cfg.likelihoods, tolerance)
-        _ground_truth = ground_truth_bdecay(event, ref_energy)
-
-        scores_bdecay.append(score_bdecay)
-        scores_bg.append(score_bg)
-        ground_truths.append(_ground_truth)
-
-    scores_bdecay = torch.tensor(scores_bdecay, dtype=torch.float32)
-    scores_bdecay = min_max_norm(scores_bdecay, basis=scores_bdecay)
-    scores_bg = torch.tensor(scores_bg, dtype=torch.float32)
-    scores_bg = min_max_norm(scores_bg, basis=scores_bg)
+    # TODO: convert the matrices to 2D tensors
+    # TODO: compute R using the matrices with vectorized operations. R should be a 1D tensor.
+    # TODO: compute the predictions using the Bayesian classifier by using R (batched)
+    predictions = None
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
-
-    # predictions = BayesianAnnihiliationModel(scores_bdecay, scores_bg, 1, 1).inference()
-    # predictions = torch.tensor(
-    #    [bdecay_score >= bg_score for bdecay_score, bg_score in zip(scores_bdecay, scores_bg)],
-    #    dtype=torch.bool,
-    # )
-    predictions = scores_bdecay >= 0.5
 
     tp = torch.sum(ground_truths & predictions).item()
     fp = torch.sum(~ground_truths & predictions).item()

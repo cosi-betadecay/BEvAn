@@ -39,36 +39,3 @@ def ground_truth_bdecay(event: Any, ref_energy: float) -> bool:
                 number_good_events += 1
 
     return number_good_events > 0
-
-
-def ground_truth_annihilation(event: Any) -> bool:
-    """Determine if an event contains an annihilation interaction with energy near 511 keV.
-
-    Args:
-        event (Any): MEGAlib event object containing interactions and hits.
-        ref_energy (float): Reference energy for annihilation events (e.g., 511 keV).
-
-    Returns:
-        bool: True if an annihilation interaction is present with energy near ref_energy, else False.
-    """
-    for i in range(event.GetNIAs()):
-        if event.GetIAAt(i).GetProcess() == M.MString("ANNI"):
-            return True
-
-    return False
-
-
-def ground_truth_compton(event: Any) -> bool:
-    """Determine if an event contains a Compton scattering interaction.
-
-    Args:
-        event (Any): MEGAlib event object containing interactions and hits.
-
-    Returns:
-        bool: True if a Compton scattering interaction is present, else False.
-    """
-    for i in range(event.GetNIAs()):
-        if event.GetIAAt(i).GetProcess() == M.MString("COMP"):
-            return True
-
-    return False
