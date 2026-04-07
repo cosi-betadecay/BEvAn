@@ -1,9 +1,13 @@
+import os
+import sys
 from typing import Any
 
 import hydra
 import omegaconf
 import ROOT as M
 from tqdm import tqdm
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from utils.reader_extraction import get_reader
 
