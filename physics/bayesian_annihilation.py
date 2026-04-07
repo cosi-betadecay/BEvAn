@@ -120,3 +120,6 @@ class BayesianAnnihiliationModel:
         return self.beta_decay_given_data_probability(
             self.scores_beta_decay, self.scores_bg
         ) >= self.background_given_data_probability(self.scores_beta_decay, self.scores_bg)
+
+
+# delta E (1) and 180 degrees flying way (2) if 511 how close the compton cone (3)
