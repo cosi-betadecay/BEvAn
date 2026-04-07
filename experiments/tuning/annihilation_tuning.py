@@ -46,6 +46,10 @@ def detected_511_event_anni(
     return anni.max()
 
 
+def find_distance_from_true_annihilation_vectors(event: Any):
+    return
+
+
 def annihilation_extractor_anni(
     cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,

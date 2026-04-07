@@ -34,11 +34,8 @@ def annihilation_kernel(positions: torch.Tensor) -> torch.Tensor:
             return torch.tensor(0.0, device=positions.device, dtype=positions.dtype)
         return torch.zeros(positions.shape[0], device=positions.device, dtype=positions.dtype)
 
-    mu = 0
+    mu = -1
     sigma = 0.05
     kernels = torch.exp(-0.5 * ((cosines - mu) / sigma) ** 2)
 
-    if cosines.ndim == 1:
-        return kernels.max()
-
-    return kernels.max(dim=-1).values
+    return kernels
