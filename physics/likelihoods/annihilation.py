@@ -38,4 +38,7 @@ def annihilation_kernel(positions: torch.Tensor) -> torch.Tensor:
     sigma = 0.05
     kernels = torch.exp(-0.5 * ((cosines - mu) / sigma) ** 2)
 
-    return kernels
+    if cosines.ndim == 1:
+        return kernels.max()
+
+    return kernels.reshape(-1)
