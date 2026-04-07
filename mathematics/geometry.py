@@ -11,15 +11,14 @@ def theta_geo(
     x0 = pos[:, 0, :]  # (B, 3)
     x1 = pos[:, 1, :]  # (B, 3)
     x2 = pos[:, 2, :]  # (B, 3)
-    x0, x1, x2 = x0[0], x1[0], x2[0]
 
     v_in = x1 - x0
     v_out = x2 - x1
 
-    L_in = torch.clamp(torch.norm(v_in), min=1e-3)
-    L_out = torch.clamp(torch.norm(v_out), min=1e-3)
+    L_in = torch.clamp(torch.norm(v_in, dim=1), min=1e-3)
+    L_out = torch.clamp(torch.norm(v_out, dim=1), min=1e-3)
 
-    cos_theta_geo = torch.dot(v_in, v_out) / (L_in * L_out)
+    cos_theta_geo = (v_in * v_out).sum(dim=1) / (L_in * L_out)
     cos_theta_geo = torch.clamp(cos_theta_geo, -1.0, 1.0)
     theta_geo = torch.arccos(cos_theta_geo)
 
