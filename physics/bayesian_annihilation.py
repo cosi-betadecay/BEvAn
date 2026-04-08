@@ -20,14 +20,11 @@ class BayesianAnnihiliationModel:
 
     def __init__(
         self,
-        scores_beta_decay: torch.Tensor | float,
-        scores_bg: torch.Tensor | float,
+        ratio: torch.Tensor,
         n_beta_decay: int,
         n_bg: int,
     ):
-        self.scores_beta_decay = scores_beta_decay
-        self.scores_bg = scores_bg
-
+        self.ratio = ratio
         # We should compute these two with other datasets
         self.n_beta_decay = n_beta_decay
         self.n_bg = n_bg
@@ -48,31 +45,15 @@ class BayesianAnnihiliationModel:
         """
         return self.n_bg / (self.n_beta_decay + self.n_bg)
 
-    def data_given_beta_decay_probability(
-        self, scores_beta_decay: torch.Tensor | float
-    ) -> torch.Tensor | float:
-        """Return the likelihood of the observed data under the β⁺ hypothesis.
+    def data_given_beta_decay_probability(self) -> torch.Tensor:
+        return self.ratio / (self.ratio + 1)
 
-        Returns:
-            torch.Tensor | float: Likelihood score P(D | β⁺), either scalar (single event)
-            or tensor (batched events).
+    def data_given_background_probability(self) -> torch.Tensor:
+        return 1 / (self.ratio + 1)
+
+    def beta_decay_given_data_probability(self) -> torch.Tensor:
         """
-        return scores_beta_decay
-
-    def data_given_background_probability(self, scores_bg: torch.Tensor | float) -> torch.Tensor | float:
-        """Return the likelihood of the observed data under the background hypothesis.
-
-        Returns:
-            torch.Tensor | float: Likelihood score P(D | bg), either scalar (single event)
-            or tensor (batched events).
-        """
-        return scores_bg
-
-    def beta_decay_given_data_probability(
-        self, scores_beta_decay: torch.Tensor | float, scores_bg: torch.Tensor | float
-    ) -> torch.Tensor | float:
-        """
-        Compute the posterior probability of a β⁺ event given the observed data.
+        Compute the probability of a β⁺ event given the observed data.
 
         Applies Bayes' theorem:
 
@@ -81,45 +62,40 @@ class BayesianAnnihiliationModel:
                 [P(D | β⁺) P(β⁺) + P(D | bg) P(bg)]
 
         Returns:
-            torch.Tensor | float: Posterior probability P(β⁺ | D), scalar for single-event
-            input or tensor for batched input.
+            torch.Tensor: Probability tensor P(β⁺ | D)
         """
-        numerator = self.data_given_beta_decay_probability(scores_beta_decay) * self.beta_decay_probability()
+        numerator = self.data_given_beta_decay_probability() * self.beta_decay_probability()
         denominator = (
-            self.data_given_beta_decay_probability(scores_beta_decay) * self.beta_decay_probability()
-            + self.data_given_background_probability(scores_bg) * self.background_probability()
+            self.data_given_beta_decay_probability() * self.beta_decay_probability()
+            + self.data_given_background_probability() * self.background_probability()
         )
         return numerator / denominator
 
-    def background_given_data_probability(
-        self, scores_beta_decay: torch.Tensor | float, scores_bg: torch.Tensor | float
-    ) -> torch.Tensor | float:
+    def background_given_data_probability(self) -> torch.Tensor | float:
         """
-        Compute the posterior probability of a background event
-        given the observed data.
+        Compute the probability of a background event given the observed data.
+
+        Applies Bayes' theorem:
+
+            P(bg | D) =
+                [P(D | bg) P(bg)] /
+                [P(D | β⁺) P(β⁺) + P(D | bg) P(bg)]
 
         Returns:
-            torch.Tensor | float: Posterior probability P(bg | D), scalar for single-event
-            input or tensor for batched input.
+            torch.Tensor: Probability tensor P(bg | D)
         """
-        numerator = self.data_given_background_probability(scores_bg) * self.background_probability()
+        numerator = self.data_given_background_probability() * self.background_probability()
         denominator = (
-            self.data_given_beta_decay_probability(scores_beta_decay) * self.beta_decay_probability()
-            + self.data_given_background_probability(scores_bg) * self.background_probability()
+            self.data_given_beta_decay_probability() * self.beta_decay_probability()
+            + self.data_given_background_probability() * self.background_probability()
         )
         return numerator / denominator
 
     def inference(self) -> torch.Tensor | bool:
         """
-        Perform binary classification based on posterior probabilities.
+        Perform classification based on probabilities.
 
         Returns:
-            torch.Tensor | bool: Classification output, bool for single-event input
-            or boolean tensor for batched input.
+            torch.Tensor: Batched classification output.
         """
-        return self.beta_decay_given_data_probability(
-            self.scores_beta_decay, self.scores_bg
-        ) >= self.background_given_data_probability(self.scores_beta_decay, self.scores_bg)
-
-
-# delta E (1) and 180 degrees flying way (2) if 511 how close the compton cone (3)
+        return self.beta_decay_given_data_probability() >= self.background_given_data_probability()

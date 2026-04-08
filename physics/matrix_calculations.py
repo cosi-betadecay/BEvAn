@@ -1,4 +1,3 @@
-# delta E (1) and 180 degrees flying way (2) if 511 how close the compton cone (3)
 import omegaconf
 import torch
 
@@ -67,8 +66,53 @@ def delta_E_and_compton_cone(
         delta_E = torch.abs(E - ref_energy)
         return delta_E
 
-    arm = (
-        theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]
-    )  # not sure if this works as we want when thinking of MAP
+    arm = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
 
     return delta_E(energies), arm
+
+
+def build_density_matrix(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    n_bins_x: int = 50,
+    n_bins_y: int = 50,
+) -> torch.Tensor:
+    x = x.flatten()
+    y = y.flatten()
+
+    valid = torch.isfinite(x) & torch.isfinite(y)
+    x = x[valid]
+    y = y[valid]
+
+    if x.numel() == 0 or y.numel() == 0:
+        raise ValueError("Cannot create probability matrix from empty tensors.")
+
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+
+    if x_min == x_max:
+        x_max = x_max + 1e-6
+    if y_min == y_max:
+        y_max = y_max + 1e-6
+
+    x_bins = torch.linspace(x_min, x_max, n_bins_x + 1, device=x.device, dtype=x.dtype)
+    y_bins = torch.linspace(y_min, y_max, n_bins_y + 1, device=y.device, dtype=y.dtype)
+
+    x_idx = torch.bucketize(x, x_bins) - 1
+    y_idx = torch.bucketize(y, y_bins) - 1
+
+    valid_idx = (x_idx >= 0) & (x_idx < n_bins_x) & (y_idx >= 0) & (y_idx < n_bins_y)
+
+    x_idx = x_idx[valid_idx]
+    y_idx = y_idx[valid_idx]
+
+    counts = torch.zeros((n_bins_x, n_bins_y), dtype=torch.float32, device=x.device)
+    counts.index_put_(
+        (x_idx, y_idx),
+        torch.ones_like(x_idx, dtype=torch.float32),
+        accumulate=True,
+    )
+
+    probs = counts / counts.sum().clamp_min(1e-8)
+
+    return probs
