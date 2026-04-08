@@ -5,7 +5,7 @@ import torch
 def theta_geo(
     positions: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    sigma_x = cfg.arm.sigma_x
+    sigma_x = cfg.likelihoods.arm.sigma_x
 
     pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
     x0 = pos[:, 0, :]  # (B, 3)
@@ -40,7 +40,7 @@ def theta_kin(
             electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_1) ** 2 + (1.0 / E_2) ** 2)
         )
         sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
-        n_sigma_cos_theta_kin = cfg.arm.n_sigma_cos_theta_kin
+        n_sigma_cos_theta_kin = cfg.likelihoods.arm.n_sigma_cos_theta_kin
 
         return n_sigma_cos_theta_kin * sigma_cos_theta_kin / sin_theta_kin
 
