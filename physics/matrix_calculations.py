@@ -111,7 +111,7 @@ def delta_E(energies: torch.Tensor, ref_energy: float = 511.0) -> torch.Tensor:
     E = energies.sum() if energies.ndim == 1 else energies.sum(dim=1)
     delta_E = torch.abs(E - ref_energy)
 
-    return delta_E
+    return delta_E.min().reshape(1)
 
 
 def build_density_matrix(
