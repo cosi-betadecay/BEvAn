@@ -121,8 +121,8 @@ def build_density_matrix(
     y: torch.Tensor,
     x_bins: torch.Tensor | None = None,
     y_bins: torch.Tensor | None = None,
-    n_bins_x: int = 50,
-    n_bins_y: int = 50,
+    n_bins_x: int = 2000,
+    n_bins_y: int = 2000,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     x = x.flatten()
     y = y.flatten()

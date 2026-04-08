@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
+import wandb
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
@@ -255,7 +255,7 @@ def predict(
         n_beta_deltaE_arm,
         n_bg_deltaE_arm,
     )
-    predictions = BayesianAnnihiliationModel(ratio, 3000, 50000).inference()
+    predictions = BayesianAnnihiliationModel(ratio, 2360, 50572).inference()
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
 
     tp = torch.sum(ground_truths & predictions).item()
