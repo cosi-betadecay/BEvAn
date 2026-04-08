@@ -56,8 +56,8 @@ def annihilation_extractor(
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        energies, positions = event_data_processing(event, cfg)
-        if energies.numel() == 0 or positions.numel() == 0:
+        energies, positions = event_data_processing(event)
+        if energies is None or positions is None:
             bdecay_list_delta_E.append(0.0)
             bdecay_list_annihilation_angle.append(0.0)
             bdecay_list_arm.append(0.0)

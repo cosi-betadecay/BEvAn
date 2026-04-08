@@ -1,6 +1,7 @@
 defaults:
   - _self_
   - wandb
+  - likelihoods
 
 setup:
   geo_file: ${oc.env:MEGALIB}/resource/examples/geomega/special/Max.geo.setup
