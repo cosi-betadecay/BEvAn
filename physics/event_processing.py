@@ -1,19 +1,11 @@
 import itertools
 from typing import Any
 
-import omegaconf
 import torch
 
-from mathematics.calculations import calculate_tolerance
 
-
-def event_data_processing(
-    event: Any,
-    cfg: omegaconf.dictconfig.DictConfig,
-) -> bool:
+def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    tolerance = calculate_tolerance()
     n_hits = event.GetNHTs()
 
     if n_hits == 0:

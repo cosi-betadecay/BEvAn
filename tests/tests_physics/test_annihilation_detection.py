@@ -1,35 +1,16 @@
-import matplotlib.pyplot as plt
 import omegaconf
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 
-from physics.bayesian_annihilation import BayesianAnnihiliationModel
+from physics.annihilation_detection import R
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.matrix_calculations import annihilation_angle, arm, build_density_matrix, delta_E
-from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
 
-def R(
-    n_beta_deltaE_annihilation_angle: torch.Tensor,
-    n_bg_deltaE_annihilation_angle: torch.Tensor,
-    n_beta_deltaE_arm: torch.Tensor,
-    n_bg_deltaE_arm: torch.Tensor,
-    eps: float = 1e-8,
-) -> torch.Tensor:
-    log_r = (
-        torch.log(n_beta_deltaE_annihilation_angle + eps)
-        - torch.log(n_bg_deltaE_annihilation_angle + eps)
-        + torch.log(n_beta_deltaE_arm + eps)
-        - torch.log(n_bg_deltaE_arm + eps)
-    )
-    return torch.exp(log_r)
-
-
-def annihilation_extractor(
+def test_annihilation_extractor(
     cfg: omegaconf.dictconfig.DictConfig,
     ref_energy: int = 511,
 ) -> None:
@@ -70,6 +51,11 @@ def annihilation_extractor(
         _annihilation_angle = annihilation_angle(positions)
         _arm = arm(energies, positions, cfg)
 
+        # Asserting that the different functions only return a tensor with 1 element
+        assert _delta_E.numel() == 1
+        assert _annihilation_angle.numel() == 1
+        assert _arm.numel() == 1
+
         if gt:
             bdecay_list_delta_E.append(_delta_E)
             bdecay_list_annihilation_angle.append(_annihilation_angle)
@@ -88,6 +74,16 @@ def annihilation_extractor(
     bg_tensor_annihilation_angle = torch.tensor(bg_list_annihilation_angle, dtype=torch.float32)
     bg_tensor_arm = torch.tensor(bg_list_arm, dtype=torch.float32)
 
+    ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
+
+    # Asserting shape at tensor level
+    assert bdecay_tensor_delta_E.shape == ground_truths.shape
+    assert bdecay_tensor_annihilation_angle.shape == ground_truths.shape
+    assert bdecay_tensor_arm.shape == ground_truths.shape
+    assert bg_tensor_delta_E.shape == ground_truths.shape
+    assert bg_tensor_annihilation_angle.shape == ground_truths.shape
+    assert bg_tensor_arm.shape == ground_truths.shape
+
     # Building density matrices for beta decay
     bdecay_matrix_deltaE_vs_annihilation_angle = build_density_matrix(
         bdecay_tensor_delta_E, bdecay_tensor_annihilation_angle
@@ -105,31 +101,3 @@ def annihilation_extractor(
         bdecay_matrix_deltaE_vs_arm,
         bg_matrix_deltaE_vs_arm,
     )
-    predictions = BayesianAnnihiliationModel(ratio, 3000, 50000).inference()
-    ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
-
-    tp = torch.sum(ground_truths & predictions).item()
-    fp = torch.sum(~ground_truths & predictions).item()
-    fn = torch.sum(ground_truths & ~predictions).item()
-    tn = torch.sum(~ground_truths & ~predictions).item()
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
-    f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-
-    fig = plot_confusion_matrix(tp, fp, fn, tn)
-    wandb.log(
-        {
-            "TP": tp,
-            "FP": fp,
-            "FN": fn,
-            "TN": tn,
-            "precision": precision,
-            "recall": recall,
-            "false_positive_rate": fpr,
-            "f1_score": f1_score,
-            "confusion_matrix": wandb.Image(fig),
-        }
-    )
-    plt.close(fig)
