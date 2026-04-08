@@ -4,8 +4,8 @@ import torch
 from mathematics.geometry import theta_geo, theta_kin
 
 
-def annihilation_angle(positions: torch.Tensor) -> torch.Tensor:
-    def all_vector_cosines(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
+    def all_vector_cosines_matrix_calculation(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
         if positions.ndim == 2:
             positions = positions.unsqueeze(0)
             unbatched = True
@@ -31,7 +31,39 @@ def annihilation_angle(positions: torch.Tensor) -> torch.Tensor:
 
         return cosines.amin().reshape(-1)
 
-    cosines = all_vector_cosines(positions)
+    def all_vector_cosines_no_matrix(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+        if positions.ndim != 3:
+            raise ValueError(f"Expected positions shape (B, N, 3), got {tuple(positions.shape)}")
+
+        n = positions.shape[1]
+        if n < 3:
+            return positions.new_empty((positions.shape[0], 0))
+
+        deltas = positions[:, :, None, :] - positions[:, None, :, :]  # (B, N, N, 3)
+        i, j = torch.triu_indices(n, n, offset=1, device=positions.device)
+        vectors = deltas[:, i, j, :]  # (B, M, 3)
+        vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
+
+        bsz, m, _ = vectors.shape
+        min_cosines = torch.full((bsz,), 1.0, dtype=vectors.dtype, device=vectors.device)
+
+        for b in range(bsz):
+            best = torch.tensor(1.0, dtype=vectors.dtype, device=vectors.device)
+            for p in range(m):
+                vp = vectors[b, p]
+                for q in range(p + 1, m):
+                    cosine = torch.dot(vp, vectors[b, q])
+                    if cosine < best:
+                        best = cosine
+            min_cosines[b] = best
+
+        return min_cosines
+
+    if n_hits <= 14:
+        cosines = all_vector_cosines_matrix_calculation(positions)
+    else:
+        cosines = all_vector_cosines_no_matrix(positions)
+
     if cosines.numel() == 0:
         return positions.new_tensor(float("nan"))
 

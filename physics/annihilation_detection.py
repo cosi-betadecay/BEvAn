@@ -52,6 +52,7 @@ def annihilation_extractor(
         unit=" events",
     ):
         M.SetOwnership(event, True)
+        n_hits = event.GetNHTs()
 
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
@@ -67,7 +68,7 @@ def annihilation_extractor(
             continue
 
         _delta_E = delta_E(energies)
-        _annihilation_angle = annihilation_angle(positions)
+        _annihilation_angle = annihilation_angle(positions, n_hits)
         _arm = arm(energies, positions, cfg)
 
         if gt:
