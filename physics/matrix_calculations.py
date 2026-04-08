@@ -1,5 +1,6 @@
 import omegaconf
 import torch
+from tqdm import tqdm
 
 from mathematics.geometry import theta_geo, theta_kin
 
@@ -49,7 +50,8 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
 
         pair_i, pair_j = torch.triu_indices(n, n, offset=1, device=positions.device)
 
-        for b0 in range(0, total_b, combo_block_size):
+        combo_starts = range(0, total_b, combo_block_size)
+        for b0 in tqdm(combo_starts, desc="Annihilation angle blocks", unit="block", leave=False):
             b1 = min(b0 + combo_block_size, total_b)
             pos_chunk = positions[b0:b1]  # (Bc, N, 3)
 

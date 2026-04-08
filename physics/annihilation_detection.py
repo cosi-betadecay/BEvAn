@@ -41,10 +41,12 @@ def annihilation_extractor(
     bdecay_list_delta_E = []
     bdecay_list_annihilation_angle = []
     bdecay_list_arm = []
+    bdecay_list_ids = []
     # Lists bg
     bg_list_delta_E = []
     bg_list_annihilation_angle = []
     bg_list_arm = []
+    bg_list_ids = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -53,6 +55,7 @@ def annihilation_extractor(
     ):
         M.SetOwnership(event, True)
         n_hits = event.GetNHTs()
+        event_id = event.GetID()
 
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
@@ -65,6 +68,8 @@ def annihilation_extractor(
             bg_list_delta_E.append(0.0)
             bg_list_annihilation_angle.append(0.0)
             bg_list_arm.append(0.0)
+            bdecay_list_ids.append(event_id)
+            bg_list_ids.append(event_id)
             continue
 
         _delta_E = delta_E(energies)
@@ -75,10 +80,12 @@ def annihilation_extractor(
             bdecay_list_delta_E.append(_delta_E)
             bdecay_list_annihilation_angle.append(_annihilation_angle)
             bdecay_list_arm.append(_arm)
+            bdecay_list_ids.append(event_id)
         else:
             bg_list_delta_E.append(_delta_E)
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
+            bg_list_ids.append(event_id)
 
     # Converting beta decay lists to tensors
     bdecay_tensor_delta_E = torch.tensor(bdecay_list_delta_E, dtype=torch.float32)
