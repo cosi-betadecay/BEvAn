@@ -4,40 +4,47 @@ import torch
 from mathematics.geometry import theta_geo, theta_kin
 
 
-def annihilation_angle(positions: torch.Tensor) -> torch.Tensor:
-    def all_vector_cosines(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-        if positions.ndim == 2:
-            positions = positions.unsqueeze(0)
-            unbatched = True
-        elif positions.ndim == 3:
-            unbatched = False
-        else:
-            raise ValueError(f"Expected positions shape (N, 3) or (B, N, 3), got {tuple(positions.shape)}")
+def annihilation_angle(positions: torch.Tensor, eps: float = 1e-12, chunk_size: int = 1024) -> torch.Tensor:
+    if positions.ndim == 2:
+        positions = positions.unsqueeze(0)
+    elif positions.ndim != 3:
+        raise ValueError(f"Expected positions shape (N, 3) or (B, N, 3), got {tuple(positions.shape)}")
 
-        n = positions.shape[1]
-        if n < 3:
-            empty = positions.new_empty((positions.shape[0], 0))
-            return empty.squeeze(0) if unbatched else empty
+    n = positions.shape[1]
+    if n < 3:
+        return positions.new_tensor(float("nan")).reshape(1)
 
-        deltas = positions[:, :, None, :] - positions[:, None, :, :]  # (B, N, N, 3)
-        i, j = torch.triu_indices(n, n, offset=1, device=positions.device)
-        vectors = deltas[:, i, j, :]  # (B, M, 3), M = N choose 2
-        vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
+    deltas = positions[:, :, None, :] - positions[:, None, :, :]  # (B, N, N, 3)
+    i, j = torch.triu_indices(n, n, offset=1, device=positions.device)
+    vectors = deltas[:, i, j, :]  # (B, M, 3)
+    vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
 
-        cosine_matrix = vectors @ vectors.transpose(-1, -2)  # (B, M, M)
-        m = vectors.shape[1]
-        a, b = torch.triu_indices(m, m, offset=1, device=positions.device)
-        cosines = cosine_matrix[:, a, b]  # (B, K)
+    flat_vectors = vectors.reshape(-1, 3)  # (B*M, 3)
+    m = flat_vectors.shape[0]
 
-        return cosines.reshape(-1)
+    if m < 2:
+        return positions.new_tensor(float("nan")).reshape(1)
 
-    cosines = all_vector_cosines(positions)
-    if cosines.numel() == 0:
-        return positions.new_tensor(float("nan"))
+    best_cosine = positions.new_tensor(1.0)
 
-    angle_diffs = torch.abs(cosines + 1.0)
+    for start_i in range(0, m, chunk_size):
+        end_i = min(start_i + chunk_size, m)
+        vi = flat_vectors[start_i:end_i]  # (Ci, 3)
 
-    return cosines[torch.argmin(angle_diffs)].reshape(1)
+        for start_j in range(start_i, m, chunk_size):
+            end_j = min(start_j + chunk_size, m)
+            vj = flat_vectors[start_j:end_j]  # (Cj, 3)
+
+            block = vi @ vj.T  # (Ci, Cj)
+
+            if start_i == start_j:
+                diag_mask = torch.eye(block.shape[0], dtype=torch.bool, device=block.device)
+                block = block.masked_fill(diag_mask, 1.0)
+
+            block_min = block.min()
+            best_cosine = torch.minimum(best_cosine, block_min)
+
+    return best_cosine.reshape(1)
 
 
 def arm(
