@@ -8,11 +8,7 @@ from tqdm import tqdm
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
-from physics.matrix_calculations import (
-    build_density_matrix,
-    delta_E_and_annihilation_angle,
-    delta_E_and_compton_cone,
-)
+from physics.matrix_calculations import annihilation_angle, arm, build_density_matrix, delta_E
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -61,8 +57,9 @@ def annihilation_extractor(
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        _delta_E, _annihilation_angle = delta_E_and_annihilation_angle(energies, positions)
-        _, _arm = delta_E_and_compton_cone(energies, positions, cfg)
+        _delta_E = delta_E(energies)
+        _annihilation_angle = annihilation_angle(positions)
+        _arm = arm(energies, positions, cfg)
 
         if gt:
             bdecay_list_delta_E.append(_delta_E)
