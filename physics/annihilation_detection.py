@@ -33,8 +33,15 @@ def annihilation_extractor(
         energies, positions = event_data_processing(event, cfg)
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
-        # TODO: put the different energies and positions into the matrix calculations
-        # TODO: add the scores from the matrix calculations to the matrices
+
+        if gt:
+            # TODO: calculate scores from matrix_calculations (epsilon)
+            # TODO: bdecay_matrix.append(epsilon)
+            pass
+        else:
+            # TODO: calculate scores from matrix_calculations (zeta)
+            # TODO: bg_matrix.append(zeta)
+            pass
 
     # TODO: convert the matrices to 2D tensors
     # TODO: compute R using the matrices with vectorized operations. R should be a 1D tensor.
