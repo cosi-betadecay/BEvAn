@@ -49,6 +49,9 @@ def annihilation_angle(positions: torch.Tensor) -> torch.Tensor:
 def arm(
     energies: torch.Tensor, positions: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
 ) -> torch.Tensor:
+    if positions.numel() < 3:
+        return 1  # TODO: find a good replacement for this that actually makes sense
+
     arm = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
 
     return arm
