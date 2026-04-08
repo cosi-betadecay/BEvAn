@@ -66,9 +66,9 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_ids.append(event_id)
             continue
 
-        _delta_E = delta_E(energies).item()
-        _annihilation_angle = annihilation_angle(positions, n_hits).item()
-        _arm = arm(energies, positions, cfg).item()
+        _delta_E = delta_E(energies)
+        _annihilation_angle = annihilation_angle(positions, n_hits)
+        _arm = arm(energies, positions, cfg)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)
