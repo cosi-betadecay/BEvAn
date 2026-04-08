@@ -119,9 +119,11 @@ def delta_E(energies: torch.Tensor, ref_energy: float = 511.0) -> torch.Tensor:
 def build_density_matrix(
     x: torch.Tensor,
     y: torch.Tensor,
+    x_bins: torch.Tensor | None = None,
+    y_bins: torch.Tensor | None = None,
     n_bins_x: int = 50,
     n_bins_y: int = 50,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     x = x.flatten()
     y = y.flatten()
 
@@ -132,16 +134,23 @@ def build_density_matrix(
     if x.numel() == 0 or y.numel() == 0:
         raise ValueError("Cannot create probability matrix from empty tensors.")
 
-    x_min, x_max = x.min(), x.max()
-    y_min, y_max = y.min(), y.max()
+    if x_bins is None:
+        x_min, x_max = x.min(), x.max()
+        if x_min == x_max:
+            x_max = x_max + 1e-6
+        x_bins = torch.linspace(x_min, x_max, n_bins_x + 1, device=x.device, dtype=x.dtype)
+    else:
+        n_bins_x = x_bins.numel() - 1
+        x_bins = x_bins.to(device=x.device, dtype=x.dtype)
 
-    if x_min == x_max:
-        x_max = x_max + 1e-6
-    if y_min == y_max:
-        y_max = y_max + 1e-6
-
-    x_bins = torch.linspace(x_min, x_max, n_bins_x + 1, device=x.device, dtype=x.dtype)
-    y_bins = torch.linspace(y_min, y_max, n_bins_y + 1, device=y.device, dtype=y.dtype)
+    if y_bins is None:
+        y_min, y_max = y.min(), y.max()
+        if y_min == y_max:
+            y_max = y_max + 1e-6
+        y_bins = torch.linspace(y_min, y_max, n_bins_y + 1, device=y.device, dtype=y.dtype)
+    else:
+        n_bins_y = y_bins.numel() - 1
+        y_bins = y_bins.to(device=y.device, dtype=y.dtype)
 
     x_idx = torch.bucketize(x, x_bins) - 1
     y_idx = torch.bucketize(y, y_bins) - 1
@@ -160,4 +169,29 @@ def build_density_matrix(
 
     probs = counts / counts.sum().clamp_min(1e-8)
 
-    return probs
+    return probs, x_bins, y_bins
+
+
+def lookup_density_values(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    matrix: torch.Tensor,
+    x_bins: torch.Tensor,
+    y_bins: torch.Tensor,
+) -> torch.Tensor:
+    x = x.flatten().to(device=matrix.device, dtype=x_bins.dtype)
+    y = y.flatten().to(device=matrix.device, dtype=y_bins.dtype)
+
+    values = torch.full_like(x, 0.0, dtype=matrix.dtype, device=matrix.device)
+    valid = torch.isfinite(x) & torch.isfinite(y)
+    if not torch.any(valid):
+        return values
+
+    x_idx = torch.bucketize(x[valid], x_bins) - 1
+    y_idx = torch.bucketize(y[valid], y_bins) - 1
+
+    x_idx = x_idx.clamp(0, matrix.shape[0] - 1)
+    y_idx = y_idx.clamp(0, matrix.shape[1] - 1)
+
+    values[valid] = matrix[x_idx, y_idx]
+    return values

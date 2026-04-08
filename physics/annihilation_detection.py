@@ -8,7 +8,13 @@ from tqdm import tqdm
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
-from physics.matrix_calculations import annihilation_angle, arm, build_density_matrix, delta_E
+from physics.matrix_calculations import (
+    annihilation_angle,
+    arm,
+    build_density_matrix,
+    delta_E,
+    lookup_density_values,
+)
 from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
@@ -47,6 +53,10 @@ def annihilation_extractor(
     bg_list_annihilation_angle = []
     bg_list_arm = []
     bg_list_ids = []
+    # Lists general
+    gen_list_delta_E = []
+    gen_list_annihilation_angle = []
+    gen_list_arm = []
 
     for event in tqdm(
         iter(lambda: reader.GetNextEvent(), None),
@@ -62,19 +72,28 @@ def annihilation_extractor(
 
         energies, positions = event_data_processing(event)
         if energies is None or positions is None:
-            bdecay_list_delta_E.append(0.0)
-            bdecay_list_annihilation_angle.append(0.0)
-            bdecay_list_arm.append(0.0)
-            bg_list_delta_E.append(0.0)
-            bg_list_annihilation_angle.append(0.0)
-            bg_list_arm.append(0.0)
-            bdecay_list_ids.append(event_id)
-            bg_list_ids.append(event_id)
+            gen_list_delta_E.append(float("nan"))
+            gen_list_annihilation_angle.append(float("nan"))
+            gen_list_arm.append(float("nan"))
+            if gt:
+                bdecay_list_delta_E.append(float("nan"))
+                bdecay_list_annihilation_angle.append(float("nan"))
+                bdecay_list_arm.append(float("nan"))
+                bdecay_list_ids.append(event_id)
+            else:
+                bg_list_delta_E.append(float("nan"))
+                bg_list_annihilation_angle.append(float("nan"))
+                bg_list_arm.append(float("nan"))
+                bg_list_ids.append(event_id)
             continue
 
-        _delta_E = delta_E(energies)
-        _annihilation_angle = annihilation_angle(positions, n_hits)
-        _arm = arm(energies, positions, cfg)
+        _delta_E = delta_E(energies).item()
+        _annihilation_angle = annihilation_angle(positions, n_hits).item()
+        _arm = arm(energies, positions, cfg).item()
+
+        gen_list_delta_E.append(_delta_E)
+        gen_list_annihilation_angle.append(_annihilation_angle)
+        gen_list_arm.append(_arm)
 
         if gt:
             bdecay_list_delta_E.append(_delta_E)
@@ -95,23 +114,87 @@ def annihilation_extractor(
     bg_tensor_delta_E = torch.tensor(bg_list_delta_E, dtype=torch.float32)
     bg_tensor_annihilation_angle = torch.tensor(bg_list_annihilation_angle, dtype=torch.float32)
     bg_tensor_arm = torch.tensor(bg_list_arm, dtype=torch.float32)
+    # Converting general lists to tensors
+    gen_tensor_delta_E = torch.tensor(gen_list_delta_E, dtype=torch.float32)
+    gen_tensor_annihilation_angle = torch.tensor(gen_list_annihilation_angle, dtype=torch.float32)
+    gen_tensor_arm = torch.tensor(gen_list_arm, dtype=torch.float32)
+
+    combined_tensor_delta_E = torch.cat([bdecay_tensor_delta_E, bg_tensor_delta_E])
+    combined_tensor_annihilation_angle = torch.cat(
+        [bdecay_tensor_annihilation_angle, bg_tensor_annihilation_angle]
+    )
+    combined_tensor_arm = torch.cat([bdecay_tensor_arm, bg_tensor_arm])
 
     # Building density matrices for beta decay
-    bdecay_matrix_deltaE_vs_annihilation_angle = build_density_matrix(
-        bdecay_tensor_delta_E, bdecay_tensor_annihilation_angle
+    _, deltaE_angle_bins, angle_bins = build_density_matrix(
+        combined_tensor_delta_E,
+        combined_tensor_annihilation_angle,
     )
-    bdecay_matrix_deltaE_vs_arm = build_density_matrix(bdecay_tensor_delta_E, bdecay_tensor_arm)
+    _, deltaE_arm_bins, arm_bins = build_density_matrix(
+        combined_tensor_delta_E,
+        combined_tensor_arm,
+    )
+
+    bdecay_matrix_deltaE_vs_annihilation_angle, _, _ = build_density_matrix(
+        bdecay_tensor_delta_E,
+        bdecay_tensor_annihilation_angle,
+        x_bins=deltaE_angle_bins,
+        y_bins=angle_bins,
+    )
+    bdecay_matrix_deltaE_vs_arm, _, _ = build_density_matrix(
+        bdecay_tensor_delta_E,
+        bdecay_tensor_arm,
+        x_bins=deltaE_arm_bins,
+        y_bins=arm_bins,
+    )
     # Building density matrices for background
-    bg_matrix_deltaE_vs_annihilation_angle = build_density_matrix(
-        bg_tensor_delta_E, bg_tensor_annihilation_angle
+    bg_matrix_deltaE_vs_annihilation_angle, _, _ = build_density_matrix(
+        bg_tensor_delta_E,
+        bg_tensor_annihilation_angle,
+        x_bins=deltaE_angle_bins,
+        y_bins=angle_bins,
     )
-    bg_matrix_deltaE_vs_arm = build_density_matrix(bg_tensor_delta_E, bg_tensor_arm)
+    bg_matrix_deltaE_vs_arm, _, _ = build_density_matrix(
+        bg_tensor_delta_E,
+        bg_tensor_arm,
+        x_bins=deltaE_arm_bins,
+        y_bins=arm_bins,
+    )
+
+    n_beta_deltaE_annihilation_angle = lookup_density_values(
+        gen_tensor_delta_E,
+        gen_tensor_annihilation_angle,
+        bdecay_matrix_deltaE_vs_annihilation_angle,
+        deltaE_angle_bins,
+        angle_bins,
+    )
+    n_bg_deltaE_annihilation_angle = lookup_density_values(
+        gen_tensor_delta_E,
+        gen_tensor_annihilation_angle,
+        bg_matrix_deltaE_vs_annihilation_angle,
+        deltaE_angle_bins,
+        angle_bins,
+    )
+    n_beta_deltaE_arm = lookup_density_values(
+        gen_tensor_delta_E,
+        gen_tensor_arm,
+        bdecay_matrix_deltaE_vs_arm,
+        deltaE_arm_bins,
+        arm_bins,
+    )
+    n_bg_deltaE_arm = lookup_density_values(
+        gen_tensor_delta_E,
+        gen_tensor_arm,
+        bg_matrix_deltaE_vs_arm,
+        deltaE_arm_bins,
+        arm_bins,
+    )
 
     ratio = R(
-        bdecay_matrix_deltaE_vs_annihilation_angle,
-        bg_matrix_deltaE_vs_annihilation_angle,
-        bdecay_matrix_deltaE_vs_arm,
-        bg_matrix_deltaE_vs_arm,
+        n_beta_deltaE_annihilation_angle,
+        n_bg_deltaE_annihilation_angle,
+        n_beta_deltaE_arm,
+        n_bg_deltaE_arm,
     )
     predictions = BayesianAnnihiliationModel(ratio, 3000, 50000).inference()
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
