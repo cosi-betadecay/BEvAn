@@ -19,28 +19,7 @@ from utils.plots import plot_confusion_matrix
 from utils.reader_extraction import get_reader
 
 
-def R(
-    n_beta_deltaE_annihilation_angle: torch.Tensor,
-    n_bg_deltaE_annihilation_angle: torch.Tensor,
-    n_beta_deltaE_arm: torch.Tensor,
-    n_bg_deltaE_arm: torch.Tensor,
-    eps: float = 1e-8,
-) -> torch.Tensor:
-    log_r = (
-        torch.log(n_beta_deltaE_annihilation_angle + eps)
-        - torch.log(n_bg_deltaE_annihilation_angle + eps)
-        + torch.log(n_beta_deltaE_arm + eps)
-        - torch.log(n_bg_deltaE_arm + eps)
-    )
-    return torch.exp(log_r)
-
-
-def annihilation_extractor(
-    cfg: omegaconf.dictconfig.DictConfig,
-    ref_energy: int = 511,
-) -> None:
-    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
-
+def compute_event_features(cfg, ref_energy, reader):
     ground_truths = []
 
     # Lists beta decay
@@ -105,8 +84,31 @@ def annihilation_extractor(
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
             bg_list_ids.append(event_id)
+    return (
+        ground_truths,
+        bdecay_list_delta_E,
+        bdecay_list_annihilation_angle,
+        bdecay_list_arm,
+        bg_list_delta_E,
+        bg_list_annihilation_angle,
+        bg_list_arm,
+        gen_list_delta_E,
+        gen_list_annihilation_angle,
+        gen_list_arm,
+    )
 
-    # Converting beta decay lists to tensors
+
+def create_tensors(
+    bdecay_list_delta_E,
+    bdecay_list_annihilation_angle,
+    bdecay_list_arm,
+    bg_list_delta_E,
+    bg_list_annihilation_angle,
+    bg_list_arm,
+    gen_list_delta_E,
+    gen_list_annihilation_angle,
+    gen_list_arm,
+):
     bdecay_tensor_delta_E = torch.tensor(bdecay_list_delta_E, dtype=torch.float32)
     bdecay_tensor_annihilation_angle = torch.tensor(bdecay_list_annihilation_angle, dtype=torch.float32)
     bdecay_tensor_arm = torch.tensor(bdecay_list_arm, dtype=torch.float32)
@@ -124,8 +126,36 @@ def annihilation_extractor(
         [bdecay_tensor_annihilation_angle, bg_tensor_annihilation_angle]
     )
     combined_tensor_arm = torch.cat([bdecay_tensor_arm, bg_tensor_arm])
+    return (
+        bdecay_tensor_delta_E,
+        bdecay_tensor_annihilation_angle,
+        bdecay_tensor_arm,
+        bg_tensor_delta_E,
+        bg_tensor_annihilation_angle,
+        bg_tensor_arm,
+        gen_tensor_delta_E,
+        gen_tensor_annihilation_angle,
+        gen_tensor_arm,
+        combined_tensor_delta_E,
+        combined_tensor_annihilation_angle,
+        combined_tensor_arm,
+    )
 
-    # Building density matrices for beta decay
+
+def build_density_matrices(
+    bdecay_tensor_delta_E,
+    bdecay_tensor_annihilation_angle,
+    bdecay_tensor_arm,
+    bg_tensor_delta_E,
+    bg_tensor_annihilation_angle,
+    bg_tensor_arm,
+    gen_tensor_delta_E,
+    gen_tensor_annihilation_angle,
+    gen_tensor_arm,
+    combined_tensor_delta_E,
+    combined_tensor_annihilation_angle,
+    combined_tensor_arm,
+):
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
@@ -190,6 +220,37 @@ def annihilation_extractor(
         arm_bins,
     )
 
+    return (
+        n_beta_deltaE_annihilation_angle,
+        n_bg_deltaE_annihilation_angle,
+        n_beta_deltaE_arm,
+        n_bg_deltaE_arm,
+    )
+
+
+def R(
+    n_beta_deltaE_annihilation_angle: torch.Tensor,
+    n_bg_deltaE_annihilation_angle: torch.Tensor,
+    n_beta_deltaE_arm: torch.Tensor,
+    n_bg_deltaE_arm: torch.Tensor,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    log_r = (
+        torch.log(n_beta_deltaE_annihilation_angle + eps)
+        - torch.log(n_bg_deltaE_annihilation_angle + eps)
+        + torch.log(n_beta_deltaE_arm + eps)
+        - torch.log(n_bg_deltaE_arm + eps)
+    )
+    return torch.exp(log_r)
+
+
+def predict(
+    ground_truths,
+    n_beta_deltaE_annihilation_angle,
+    n_bg_deltaE_annihilation_angle,
+    n_beta_deltaE_arm,
+    n_bg_deltaE_arm,
+):
     ratio = R(
         n_beta_deltaE_annihilation_angle,
         n_bg_deltaE_annihilation_angle,
@@ -224,3 +285,73 @@ def annihilation_extractor(
         }
     )
     plt.close(fig)
+
+
+def annihilation_extractor(
+    cfg: omegaconf.dictconfig.DictConfig,
+    ref_energy: int = 511,
+) -> None:
+    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
+
+    (
+        ground_truths,
+        bdecay_list_delta_E,
+        bdecay_list_annihilation_angle,
+        bdecay_list_arm,
+        bg_list_delta_E,
+        bg_list_annihilation_angle,
+        bg_list_arm,
+        gen_list_delta_E,
+        gen_list_annihilation_angle,
+        gen_list_arm,
+    ) = compute_event_features(cfg, ref_energy, reader)
+
+    (
+        bdecay_tensor_delta_E,
+        bdecay_tensor_annihilation_angle,
+        bdecay_tensor_arm,
+        bg_tensor_delta_E,
+        bg_tensor_annihilation_angle,
+        bg_tensor_arm,
+        gen_tensor_delta_E,
+        gen_tensor_annihilation_angle,
+        gen_tensor_arm,
+        combined_tensor_delta_E,
+        combined_tensor_annihilation_angle,
+        combined_tensor_arm,
+    ) = create_tensors(
+        bdecay_list_delta_E,
+        bdecay_list_annihilation_angle,
+        bdecay_list_arm,
+        bg_list_delta_E,
+        bg_list_annihilation_angle,
+        bg_list_arm,
+        gen_list_delta_E,
+        gen_list_annihilation_angle,
+        gen_list_arm,
+    )
+
+    n_beta_deltaE_annihilation_angle, n_bg_deltaE_annihilation_angle, n_beta_deltaE_arm, n_bg_deltaE_arm = (
+        build_density_matrices(
+            bdecay_tensor_delta_E,
+            bdecay_tensor_annihilation_angle,
+            bdecay_tensor_arm,
+            bg_tensor_delta_E,
+            bg_tensor_annihilation_angle,
+            bg_tensor_arm,
+            gen_tensor_delta_E,
+            gen_tensor_annihilation_angle,
+            gen_tensor_arm,
+            combined_tensor_delta_E,
+            combined_tensor_annihilation_angle,
+            combined_tensor_arm,
+        )
+    )
+
+    predict(
+        ground_truths,
+        n_beta_deltaE_annihilation_angle,
+        n_bg_deltaE_annihilation_angle,
+        n_beta_deltaE_arm,
+        n_bg_deltaE_arm,
+    )
