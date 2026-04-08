@@ -31,7 +31,11 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
 
         return cosines.amin().reshape(-1)
 
-    def all_vector_cosines_no_matrix(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+    def all_vector_cosines_blockwise(
+        positions: torch.Tensor,
+        eps: float = 1e-12,
+        block_size: int = 256,
+    ) -> torch.Tensor:
         if positions.ndim != 3:
             raise ValueError(f"Expected positions shape (B, N, 3), got {tuple(positions.shape)}")
 
@@ -47,22 +51,31 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
         bsz, m, _ = vectors.shape
         min_cosines = torch.full((bsz,), 1.0, dtype=vectors.dtype, device=vectors.device)
 
-        for b in range(bsz):
-            best = torch.tensor(1.0, dtype=vectors.dtype, device=vectors.device)
-            for p in range(m):
-                vp = vectors[b, p]
-                for q in range(p + 1, m):
-                    cosine = torch.dot(vp, vectors[b, q])
-                    if cosine < best:
-                        best = cosine
-            min_cosines[b] = best
+        for start_i in range(0, m, block_size):
+            end_i = min(start_i + block_size, m)
+            vi = vectors[:, start_i:end_i, :]  # (B, bi, 3)
+
+            for start_j in range(start_i, m, block_size):
+                end_j = min(start_j + block_size, m)
+                vj = vectors[:, start_j:end_j, :]  # (B, bj, 3)
+
+                block = torch.matmul(vi, vj.transpose(-1, -2))  # (B, bi, bj)
+
+                if start_i == start_j:
+                    bi = end_i - start_i
+                    bj = end_j - start_j
+                    diag = torch.eye(bi, bj, dtype=torch.bool, device=block.device).unsqueeze(0)
+                    block = block.masked_fill(diag, 1.0)
+
+                block_min = block.amin(dim=(1, 2))
+                min_cosines = torch.minimum(min_cosines, block_min)
 
         return min_cosines
 
     if n_hits <= 14:
         cosines = all_vector_cosines_matrix_calculation(positions)
     else:
-        cosines = all_vector_cosines_no_matrix(positions)
+        cosines = all_vector_cosines_blockwise(positions)
 
     if cosines.numel() == 0:
         return positions.new_tensor(float("nan"))
