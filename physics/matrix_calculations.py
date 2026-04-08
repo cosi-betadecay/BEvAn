@@ -34,7 +34,8 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
     def all_vector_cosines_blockwise(
         positions: torch.Tensor,
         eps: float = 1e-12,
-        block_size: int = 256,
+        combo_block_size: int = 1024,
+        vec_block_size: int = 128,
     ) -> torch.Tensor:
         if positions.ndim != 3:
             raise ValueError(f"Expected positions shape (B, N, 3), got {tuple(positions.shape)}")
@@ -43,34 +44,44 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
         if n < 3:
             return positions.new_empty((positions.shape[0], 0))
 
-        deltas = positions[:, :, None, :] - positions[:, None, :, :]  # (B, N, N, 3)
-        i, j = torch.triu_indices(n, n, offset=1, device=positions.device)
-        vectors = deltas[:, i, j, :]  # (B, M, 3)
-        vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
+        total_b = positions.shape[0]
+        global_best = torch.full((total_b,), 1.0, dtype=positions.dtype, device=positions.device)
 
-        bsz, m, _ = vectors.shape
-        min_cosines = torch.full((bsz,), 1.0, dtype=vectors.dtype, device=vectors.device)
+        pair_i, pair_j = torch.triu_indices(n, n, offset=1, device=positions.device)
 
-        for start_i in range(0, m, block_size):
-            end_i = min(start_i + block_size, m)
-            vi = vectors[:, start_i:end_i, :]  # (B, bi, 3)
+        for b0 in range(0, total_b, combo_block_size):
+            b1 = min(b0 + combo_block_size, total_b)
+            pos_chunk = positions[b0:b1]  # (Bc, N, 3)
 
-            for start_j in range(start_i, m, block_size):
-                end_j = min(start_j + block_size, m)
-                vj = vectors[:, start_j:end_j, :]  # (B, bj, 3)
+            deltas = pos_chunk[:, :, None, :] - pos_chunk[:, None, :, :]  # (Bc, N, N, 3)
+            vectors = deltas[:, pair_i, pair_j, :]  # (Bc, M, 3)
+            vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
 
-                block = torch.matmul(vi, vj.transpose(-1, -2))  # (B, bi, bj)
+            bsz, m, _ = vectors.shape
+            chunk_best = torch.full((bsz,), 1.0, dtype=vectors.dtype, device=vectors.device)
 
-                if start_i == start_j:
-                    bi = end_i - start_i
-                    bj = end_j - start_j
-                    diag = torch.eye(bi, bj, dtype=torch.bool, device=block.device).unsqueeze(0)
-                    block = block.masked_fill(diag, 1.0)
+            for i0 in range(0, m, vec_block_size):
+                i1 = min(i0 + vec_block_size, m)
+                vi = vectors[:, i0:i1, :]  # (Bc, bi, 3)
 
-                block_min = block.amin(dim=(1, 2))
-                min_cosines = torch.minimum(min_cosines, block_min)
+                for j0 in range(i0, m, vec_block_size):
+                    j1 = min(j0 + vec_block_size, m)
+                    vj = vectors[:, j0:j1, :]  # (Bc, bj, 3)
 
-        return min_cosines
+                    block = torch.matmul(vi, vj.transpose(-1, -2))  # (Bc, bi, bj)
+
+                    if i0 == j0:
+                        bi = i1 - i0
+                        bj = j1 - j0
+                        diag = torch.eye(bi, bj, dtype=torch.bool, device=block.device).unsqueeze(0)
+                        block = block.masked_fill(diag, 1.0)
+
+                    block_min = block.amin(dim=(1, 2))
+                    chunk_best = torch.minimum(chunk_best, block_min)
+
+            global_best[b0:b1] = chunk_best
+
+        return global_best.amin().reshape(-1)
 
     if n_hits <= 14:
         cosines = all_vector_cosines_matrix_calculation(positions)
