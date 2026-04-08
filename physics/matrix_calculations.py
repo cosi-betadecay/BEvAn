@@ -27,23 +27,17 @@ def annihilation_angle(positions: torch.Tensor) -> torch.Tensor:
         cosine_matrix = vectors @ vectors.transpose(-1, -2)  # (B, M, M)
         m = vectors.shape[1]
         a, b = torch.triu_indices(m, m, offset=1, device=positions.device)
-        cosines = cosine_matrix[:, a, b]  # (B, K), K = M choose 2
+        cosines = cosine_matrix[:, a, b]  # (B, K)
 
-        return cosines.squeeze(0) if unbatched else cosines
+        return cosines.reshape(-1)
 
     cosines = all_vector_cosines(positions)
     if cosines.numel() == 0:
-        return False
+        return positions.new_tensor(float("nan"))
 
     angle_diffs = torch.abs(cosines + 1.0)
-    if cosines.ndim == 1:
-        annihilation_angle = cosines[torch.argmin(angle_diffs)]
-    else:
-        annihilation_angle = torch.gather(cosines, 1, torch.argmin(angle_diffs, dim=1, keepdim=True)).squeeze(
-            1
-        )
 
-    return annihilation_angle
+    return cosines[torch.argmin(angle_diffs)].reshape(1)
 
 
 def arm(
