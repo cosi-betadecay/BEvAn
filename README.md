@@ -114,6 +114,21 @@ By default, `main.py` uses the MEGAlib example geometry file:
 `physics.annihilation_detection.annihilation_extractor` directly to analyze
 other datasets or tune the scoring weights.
 
+## Test reporting
+
+All tests are expected to run in a local ROOT-enabled environment. To make the
+latest local results easy to reuse in documentation, the recommended workflow is:
+
+```bash
+python -m pytest --junitxml=artifacts/pytest-junit.xml
+python scripts/generate_test_summary.py artifacts/pytest-junit.xml --output docs/test-summary.md
+```
+
+This keeps the machine-readable source report in `artifacts/pytest-junit.xml`
+and writes a README-friendly Markdown summary to
+`docs/test-summary.md`. See [docs/test-summary.md](./docs/test-summary.md) for
+the latest generated summary.
+
 ## Experiments and tuning
 
 - `experiments/arm_tuning.py`: explores ARM, energy, and KN likelihood behavior.

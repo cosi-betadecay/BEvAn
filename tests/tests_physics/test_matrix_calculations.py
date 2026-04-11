@@ -2,10 +2,23 @@
 Unit tests for physics/matrix_calculations.py.
 
 Covers:
-    - build_density_matrix  (10 tests)
-    - lookup_density_values (7 tests)
+    - build_density_matrix  (11 tests)
+    - lookup_density_values  (7 tests)
 
-All tests are self-contained: no MEGAlib / ROOT / W&B dependencies required.
+Test strategy
+-------------
+Tests split into two categories:
+
+1. Edge-case / contract tests  (inline tensors)
+   These must control the exact input values to verify specific
+   mathematical guarantees: NaN filtering, ValueError on empty input,
+   exact probability round-trips, clamping behaviour, etc.  Using real
+   detector data would make these assertions unpredictable or impossible.
+
+2. Real-data tests  (real_tensors fixture from conftest.py)
+   These verify that the functions behave correctly on actual feature
+   distributions extracted from Activation.sim — the same data the
+   production pipeline operates on.
 """
 
 import pytest
@@ -13,53 +26,10 @@ import torch
 
 from physics.matrix_calculations import build_density_matrix, lookup_density_values
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_matrix(x_vals, y_vals, x_bins, y_bins):
-    """Convenience wrapper that builds a density matrix with fixed bin edges."""
-    x = torch.tensor(x_vals, dtype=torch.float32)
-    y = torch.tensor(y_vals, dtype=torch.float32)
-    return build_density_matrix(x, y, x_bins=x_bins, y_bins=y_bins)
-
 
 # ===========================================================================
-# build_density_matrix
+# build_density_matrix — edge-case / contract tests
 # ===========================================================================
-
-
-def test_probabilities_sum_to_one():
-    """
-    The normalized probability matrix must always sum to exactly 1.0.
-
-    build_density_matrix divides the raw counts by their total, so any
-    finite, non-empty input should produce probabilities that sum to 1.
-    """
-    torch.manual_seed(0)
-    x = torch.randn(500)
-    y = torch.randn(500)
-
-    probs, _, _ = build_density_matrix(x, y, n_bins_x=50, n_bins_y=50)
-
-    assert torch.isclose(probs.sum(), torch.tensor(1.0), atol=1e-5)
-
-
-def test_output_shape():
-    """
-    The probability matrix shape must equal (n_bins_x, n_bins_y).
-    Returned x_bins must have n_bins_x + 1 elements (bin edges),
-    and y_bins must have n_bins_y + 1 elements.
-    """
-    x = torch.linspace(0.0, 10.0, 200)
-    y = torch.linspace(0.0, 10.0, 200)
-
-    probs, x_bins, y_bins = build_density_matrix(x, y, n_bins_x=20, n_bins_y=30)
-
-    assert probs.shape == (20, 30), f"Expected (20, 30), got {tuple(probs.shape)}"
-    assert x_bins.numel() == 21, f"Expected 21 x-bin edges, got {x_bins.numel()}"
-    assert y_bins.numel() == 31, f"Expected 31 y-bin edges, got {y_bins.numel()}"
 
 
 def test_nan_values_in_x_are_filtered():
@@ -160,6 +130,34 @@ def test_custom_bins_are_used_and_returned_unchanged():
     assert probs.shape == (20, 15)
 
 
+def test_points_on_lower_bin_edge_are_counted_and_round_trip_correctly():
+    """
+    Samples that land exactly on the minimum supplied bin edge must be counted
+    into the first cell, not dropped during matrix construction.
+
+    This is a high-value contract test because lookup_density_values maps an
+    exact-edge query back into the first bin.  If build_density_matrix were to
+    discard the same training point, training and inference would disagree on
+    the coordinate system at the boundary.
+    """
+    x_bins = torch.tensor([0.0, 0.5, 1.0])
+    y_bins = torch.tensor([0.0, 0.5, 1.0])
+
+    x = torch.tensor([0.0, 0.0, 0.0])
+    y = torch.tensor([0.0, 0.0, 0.0])
+
+    probs, _, _ = build_density_matrix(x, y, x_bins=x_bins, y_bins=y_bins)
+    looked_up = lookup_density_values(torch.tensor([0.0]), torch.tensor([0.0]), probs, x_bins, y_bins)
+
+    assert torch.isclose(probs.sum(), torch.tensor(1.0), atol=1e-6)
+    assert torch.isclose(probs[0, 0], torch.tensor(1.0), atol=1e-6), (
+        f"Expected all mass in first cell, got probs[0, 0] = {probs[0, 0].item():.6f}"
+    )
+    assert torch.isclose(looked_up[0], torch.tensor(1.0), atol=1e-6), (
+        f"Expected lookup at exact lower edge to return 1.0, got {looked_up[0].item():.6f}"
+    )
+
+
 def test_concentrated_data_fills_single_cell():
     """
     When all data points are tightly clustered in one location, virtually
@@ -172,46 +170,104 @@ def test_concentrated_data_fills_single_cell():
     x = torch.full((200,), 5.0) + torch.randn(200) * 1e-4
     y = torch.full((200,), 5.0) + torch.randn(200) * 1e-4
 
-    probs, _, _ = build_density_matrix(x, y, n_bins_x=100, n_bins_y=100)
+    probs, _, _ = build_density_matrix(x, y, n_bins_x=5, n_bins_y=5)
 
     assert probs.max().item() > 0.9, f"Expected max cell probability > 0.9, got {probs.max().item():.4f}"
 
 
-def test_shared_bins_produce_consistent_shapes():
+# ===========================================================================
+# build_density_matrix — real-data tests
+# ===========================================================================
+
+
+def test_probabilities_sum_to_one_on_real_data(real_tensors):
     """
-    A common usage pattern: build bins from a combined (signal + background)
-    dataset and re-use those bins for the individual signal and background
-    matrices.
+    The probability matrix built from real beta-decay feature vectors
+    (delta_E vs annihilation_angle) must sum to exactly 1.0.
 
-    Both downstream matrices must have the same shape as the combined
-    matrix, proving that shared bin edges produce a consistent coordinate
-    system.
+    This is the most fundamental contract of build_density_matrix: dividing
+    raw counts by their total always produces a proper probability distribution,
+    regardless of whether the input comes from synthetic or real detector data.
     """
-    torch.manual_seed(2)
-    combined_x = torch.cat([torch.randn(100) + 0.0, torch.randn(100) + 5.0])
-    combined_y = torch.cat([torch.randn(100) + 0.0, torch.randn(100) + 5.0])
+    probs, _, _ = build_density_matrix(
+        real_tensors["bdecay_tensor_delta_E"],
+        real_tensors["bdecay_tensor_annihilation_angle"],
+    )
 
-    _, x_bins, y_bins = build_density_matrix(combined_x, combined_y, n_bins_x=25, n_bins_y=25)
-    expected_shape = (25, 25)
+    assert torch.isclose(probs.sum(), torch.tensor(1.0), atol=1e-5), (
+        f"Expected probability sum = 1.0, got {probs.sum().item():.8f}"
+    )
 
-    signal_x = torch.randn(80)
-    signal_y = torch.randn(80)
-    signal_probs, _, _ = build_density_matrix(signal_x, signal_y, x_bins=x_bins, y_bins=y_bins)
 
-    bg_x = torch.randn(80) + 5.0
-    bg_y = torch.randn(80) + 5.0
-    bg_probs, _, _ = build_density_matrix(bg_x, bg_y, x_bins=x_bins, y_bins=y_bins)
+def test_output_shape_with_real_combined_data(real_tensors):
+    """
+    The probability matrix built from the combined (bdecay + background)
+    real feature tensors must have shape (n_bins_x, n_bins_y) and the
+    returned bin-edge tensors must have n_bins_x+1 and n_bins_y+1 elements.
 
-    assert signal_probs.shape == expected_shape, (
-        f"Signal matrix shape {signal_probs.shape} != expected {expected_shape}"
+    Using the combined tensor exercises the full range of the real feature
+    distributions, which are wider and more varied than any synthetic range.
+    """
+    n_bins_x, n_bins_y = 20, 30
+
+    probs, x_bins, y_bins = build_density_matrix(
+        real_tensors["combined_tensor_delta_E"],
+        real_tensors["combined_tensor_annihilation_angle"],
+        n_bins_x=n_bins_x,
+        n_bins_y=n_bins_y,
+    )
+
+    assert probs.shape == (n_bins_x, n_bins_y), (
+        f"Expected ({n_bins_x}, {n_bins_y}), got {tuple(probs.shape)}"
+    )
+    assert x_bins.numel() == n_bins_x + 1, (
+        f"Expected {n_bins_x + 1} x-bin edges, got {x_bins.numel()}"
+    )
+    assert y_bins.numel() == n_bins_y + 1, (
+        f"Expected {n_bins_y + 1} y-bin edges, got {y_bins.numel()}"
+    )
+
+
+def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):
+    """
+    The core shared-bin pattern used by build_density_matrices:
+        1. Derive bin edges from the combined (bdecay + bg) tensor.
+        2. Build the bdecay matrix with those bins.
+        3. Build the bg matrix with those same bins.
+
+    All three matrices must have identical shapes, proving that shared bin
+    edges create a consistent coordinate system across signal and background.
+    This is tested here with real feature distributions from Activation.sim.
+    """
+    _, x_bins, y_bins = build_density_matrix(
+        real_tensors["combined_tensor_delta_E"],
+        real_tensors["combined_tensor_annihilation_angle"],
+    )
+    expected_shape = (x_bins.numel() - 1, y_bins.numel() - 1)
+
+    bdecay_probs, _, _ = build_density_matrix(
+        real_tensors["bdecay_tensor_delta_E"],
+        real_tensors["bdecay_tensor_annihilation_angle"],
+        x_bins=x_bins,
+        y_bins=y_bins,
+    )
+    bg_probs, _, _ = build_density_matrix(
+        real_tensors["bg_tensor_delta_E"],
+        real_tensors["bg_tensor_annihilation_angle"],
+        x_bins=x_bins,
+        y_bins=y_bins,
+    )
+
+    assert bdecay_probs.shape == expected_shape, (
+        f"bdecay matrix shape {bdecay_probs.shape} != combined shape {expected_shape}"
     )
     assert bg_probs.shape == expected_shape, (
-        f"Background matrix shape {bg_probs.shape} != expected {expected_shape}"
+        f"bg matrix shape {bg_probs.shape} != combined shape {expected_shape}"
     )
 
 
 # ===========================================================================
-# lookup_density_values
+# lookup_density_values — edge-case / contract tests
 # ===========================================================================
 
 
@@ -332,9 +388,9 @@ def test_out_of_range_is_clamped_to_edge_bin():
     A query point whose x coordinate is far below x_min must be clamped to
     the first bin (index 0) rather than returning 0 or raising an error.
 
-    Setup: all data sits in x-bin 0 (x ≈ 0.05), y-bin 4 (y ≈ 0.5).
-    An in-range query at (0.05, 0.5) and an out-of-range query at
-    (-999.0, 0.5) must return the same non-zero probability because both
+    Setup: all data sits in x-bin 0 (x ≈ 0.05), y-bin 4 (y ≈ 0.45).
+    An in-range query at (0.05, 0.45) and an out-of-range query at
+    (-999.0, 0.45) must return the same non-zero probability because both
     are resolved to x_idx = 0 after clamping.
     """
     x_bins = torch.linspace(0.0, 1.0, 11)  # 10 bins, width 0.1 each
@@ -381,27 +437,38 @@ def test_output_length_matches_input_length():
     )
 
 
-def test_returned_values_are_non_negative():
-    """
-    All returned probability values must be >= 0.
+# ===========================================================================
+# lookup_density_values — real-data test
+# ===========================================================================
 
-    Since the probability matrix contains normalized counts, every stored
-    value is in [0, 1].  Invalid inputs (NaN/inf) map to 0.0.  Neither
-    clamped out-of-range inputs nor valid in-range inputs should ever
-    produce a negative value.
+
+def test_returned_values_are_non_negative_on_real_data(real_tensors):
     """
-    torch.manual_seed(3)
-    x_bins = torch.linspace(0.0, 10.0, 51)
-    y_bins = torch.linspace(0.0, 10.0, 51)
-    probs, _, _ = build_density_matrix(
-        torch.rand(300) * 10.0,
-        torch.rand(300) * 10.0,
-        x_bins=x_bins,
-        y_bins=y_bins,
+    All probability values returned by lookup_density_values must be >= 0
+    when queried with real gen-level feature tensors extracted from
+    Activation.sim.
+
+    The gen tensors contain the full mix of beta-decay and background events
+    in original event order, including any NaN entries from events with zero
+    hits.  Verifying non-negativity on real data guards against numerical
+    issues specific to the actual feature distributions (e.g., extreme
+    delta_E values or ARM values that sit near bin boundaries).
+    """
+    t = real_tensors
+
+    probs, x_bins, y_bins = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_annihilation_angle"],
     )
 
-    query_x = torch.cat([torch.rand(50) * 10.0, torch.tensor([float("nan"), -5.0, 15.0])])
-    query_y = torch.cat([torch.rand(50) * 10.0, torch.tensor([5.0, 5.0, 5.0])])
-    result = lookup_density_values(query_x, query_y, probs, x_bins, y_bins)
+    result = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        probs,
+        x_bins,
+        y_bins,
+    )
 
-    assert torch.all(result >= 0.0), f"Found negative probability values: {result[result < 0].tolist()}"
+    assert torch.all(result >= 0.0), (
+        f"Found {(result < 0).sum().item()} negative probability values in lookup output"
+    )

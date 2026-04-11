@@ -152,10 +152,21 @@ def build_density_matrix(
         n_bins_y = y_bins.numel() - 1
         y_bins = y_bins.to(device=y.device, dtype=y.dtype)
 
-    x_idx = torch.bucketize(x, x_bins) - 1
-    y_idx = torch.bucketize(y, y_bins) - 1
+    # Include samples that land exactly on the first/last bin edge while still
+    # excluding values truly outside the supplied range.
+    x_idx = torch.bucketize(x, x_bins, right=True) - 1
+    y_idx = torch.bucketize(y, y_bins, right=True) - 1
 
-    valid_idx = (x_idx >= 0) & (x_idx < n_bins_x) & (y_idx >= 0) & (y_idx < n_bins_y)
+    valid_idx = (
+        (x >= x_bins[0])
+        & (x <= x_bins[-1])
+        & (y >= y_bins[0])
+        & (y <= y_bins[-1])
+        & (x_idx >= 0)
+        & (x_idx < n_bins_x)
+        & (y_idx >= 0)
+        & (y_idx < n_bins_y)
+    )
 
     x_idx = x_idx[valid_idx]
     y_idx = y_idx[valid_idx]
