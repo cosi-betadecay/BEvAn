@@ -28,7 +28,6 @@ import torch
 
 from physics.annihilation_detection_utils import build_density_matrices
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -79,8 +78,7 @@ def test_returns_four_tensors_of_correct_length(real_tensors):
     assert len(result) == 4, f"Expected 4 output tensors, got {len(result)}"
     for i, tensor in enumerate(result):
         assert tensor.numel() == real_tensors["n_gen"], (
-            f"Output tensor {i} has {tensor.numel()} elements; "
-            f"expected {real_tensors['n_gen']}"
+            f"Output tensor {i} has {tensor.numel()} elements; expected {real_tensors['n_gen']}"
         )
 
 
@@ -103,9 +101,7 @@ def test_all_returned_values_are_non_negative(real_tensors):
         ("n_beta_arm", n_beta_arm),
         ("n_bg_arm", n_bg_arm),
     ]:
-        assert torch.all(tensor >= 0.0), (
-            f"{name} contains {(tensor < 0).sum().item()} negative values"
-        )
+        assert torch.all(tensor >= 0.0), f"{name} contains {(tensor < 0).sum().item()} negative values"
 
 
 def test_nan_in_gen_tensors_returns_zero(real_tensors):
@@ -142,8 +138,7 @@ def test_nan_in_gen_tensors_returns_zero(real_tensors):
     ]:
         for idx in nan_indices:
             assert tensor[idx].item() == 0.0, (
-                f"{name}[{idx}] = {tensor[idx].item():.6f}; "
-                f"expected 0.0 for NaN gen input"
+                f"{name}[{idx}] = {tensor[idx].item():.6f}; expected 0.0 for NaN gen input"
             )
 
 

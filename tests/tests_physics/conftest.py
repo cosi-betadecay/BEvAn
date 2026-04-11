@@ -16,10 +16,17 @@ import os
 
 import pytest
 import torch
+import wandb
 from omegaconf import OmegaConf
 
 from physics.annihilation_detection_utils import compute_event_features, create_tensors
+from physics.matrix_calculations import build_density_matrix
 from utils.reader_extraction import get_reader
+
+# Resolution used for the pre-built test matrices.
+# 200×200 is sufficient for all quantitative assertions and runs in seconds.
+# Production uses 2000×2000; increase here only if a test demands finer bins.
+N_BINS_TEST = 200
 
 
 @pytest.fixture(scope="session")
@@ -124,4 +131,98 @@ def real_tensors():
         "combined_tensor_annihilation_angle": combined_angle,
         "combined_tensor_arm": combined_arm,
         "n_gen": gen_dE.numel(),
+    }
+
+
+@pytest.fixture(scope="session")
+def wandb_run():
+    """
+    Initialize a single Weights & Biases run for the entire test session.
+
+    All test plots are logged to this one run so that every heatmap,
+    marginal overlay, and scatter plot can be compared side-by-side inside
+    the W&B dashboard without switching between runs.
+
+    The run is finalized automatically via wandb.finish() at session teardown.
+    """
+    run = wandb.init(
+        project="cosi-betadecay-tests",
+        name="test-density-matrices",
+        tags=["tests", "matrix", "density"],
+    )
+    yield run
+    wandb.finish()
+
+
+@pytest.fixture(scope="session")
+def density_matrices(real_tensors):
+    """
+    Pre-built 2D probability matrices for quantitative test assertions.
+
+    Both feature pairs are built with N_BINS_TEST × N_BINS_TEST resolution
+    using shared bin edges derived from the combined (bdecay + bg) tensor —
+    exactly mirroring the production pipeline in build_density_matrices().
+
+    Returned dict keys
+    ------------------
+    bdecay_angle  : (N, N) probability matrix — bdecay, delta_E vs angle
+    bg_angle      : (N, N) probability matrix — background, delta_E vs angle
+    x_bins_angle  : (N+1,) shared delta_E bin edges for the angle pair
+    y_bins_angle  : (N+1,) shared annihilation-angle bin edges
+    bdecay_arm    : (N, N) probability matrix — bdecay, delta_E vs ARM
+    bg_arm        : (N, N) probability matrix — background, delta_E vs ARM
+    x_bins_arm    : (N+1,) shared delta_E bin edges for the ARM pair
+    y_bins_arm    : (N+1,) shared ARM bin edges
+    """
+    t = real_tensors
+
+    # ---- Angle feature pair: delta_E vs annihilation_angle ----
+    _, x_bins_angle, y_bins_angle = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_annihilation_angle"],
+        n_bins_x=N_BINS_TEST,
+        n_bins_y=N_BINS_TEST,
+    )
+    bdecay_angle, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_annihilation_angle"],
+        x_bins=x_bins_angle,
+        y_bins=y_bins_angle,
+    )
+    bg_angle, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_annihilation_angle"],
+        x_bins=x_bins_angle,
+        y_bins=y_bins_angle,
+    )
+
+    # ---- ARM feature pair: delta_E vs ARM ----
+    _, x_bins_arm, y_bins_arm = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_arm"],
+        n_bins_x=N_BINS_TEST,
+        n_bins_y=N_BINS_TEST,
+    )
+    bdecay_arm, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_arm"],
+        x_bins=x_bins_arm,
+        y_bins=y_bins_arm,
+    )
+    bg_arm, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_arm"],
+        x_bins=x_bins_arm,
+        y_bins=y_bins_arm,
+    )
+
+    return {
+        "bdecay_angle": bdecay_angle,
+        "bg_angle": bg_angle,
+        "x_bins_angle": x_bins_angle,
+        "y_bins_angle": y_bins_angle,
+        "bdecay_arm": bdecay_arm,
+        "bg_arm": bg_arm,
+        "x_bins_arm": x_bins_arm,
+        "y_bins_arm": y_bins_arm,
     }

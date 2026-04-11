@@ -21,11 +21,25 @@ Tests split into two categories:
    production pipeline operates on.
 """
 
+"""
+Create following unit tests:
+* how the matrix behaves for TRUE events
+* how the matrix behaves for FALSE events
+
+specifically, I want to test how the matrix looks for false events, and how it looks for true events
+in that way we can make sure that the matrix is distinguishable for true and false events
+the way we should do this is to have an if ground truth flag per event etc etc. This means that we truly should
+use MEGAlib in the unit tests. In addition, I want to integrate this with weights & biases, where we plot how each test "looks"
+if that makes sense.
+
+We should create several tests, not only 1 for TRUE events and 1 for FALSE events.
+"""
+
+
 import pytest
 import torch
 
 from physics.matrix_calculations import build_density_matrix, lookup_density_values
-
 
 # ===========================================================================
 # build_density_matrix — edge-case / contract tests
@@ -217,15 +231,9 @@ def test_output_shape_with_real_combined_data(real_tensors):
         n_bins_y=n_bins_y,
     )
 
-    assert probs.shape == (n_bins_x, n_bins_y), (
-        f"Expected ({n_bins_x}, {n_bins_y}), got {tuple(probs.shape)}"
-    )
-    assert x_bins.numel() == n_bins_x + 1, (
-        f"Expected {n_bins_x + 1} x-bin edges, got {x_bins.numel()}"
-    )
-    assert y_bins.numel() == n_bins_y + 1, (
-        f"Expected {n_bins_y + 1} y-bin edges, got {y_bins.numel()}"
-    )
+    assert probs.shape == (n_bins_x, n_bins_y), f"Expected ({n_bins_x}, {n_bins_y}), got {tuple(probs.shape)}"
+    assert x_bins.numel() == n_bins_x + 1, f"Expected {n_bins_x + 1} x-bin edges, got {x_bins.numel()}"
+    assert y_bins.numel() == n_bins_y + 1, f"Expected {n_bins_y + 1} y-bin edges, got {y_bins.numel()}"
 
 
 def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):

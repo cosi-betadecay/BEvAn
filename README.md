@@ -120,8 +120,8 @@ All tests are expected to run in a local ROOT-enabled environment. To make the
 latest local results easy to reuse in documentation, the recommended workflow is:
 
 ```bash
-python -m pytest --junitxml=artifacts/pytest-junit.xml
-python scripts/generate_test_summary.py artifacts/pytest-junit.xml --output docs/test-summary.md
+python3 -m pytest --junitxml=artifacts/pytest-junit.xml
+python3 scripts/generate_test_summary.py artifacts/pytest-junit.xml --output docs/test-summary.md
 ```
 
 This keeps the machine-readable source report in `artifacts/pytest-junit.xml`
