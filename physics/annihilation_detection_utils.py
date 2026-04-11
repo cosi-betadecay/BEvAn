@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
@@ -24,12 +24,10 @@ def compute_event_features(cfg, ref_energy, reader):
     bdecay_list_delta_E = []
     bdecay_list_annihilation_angle = []
     bdecay_list_arm = []
-    bdecay_list_ids = []
     # Lists bg
     bg_list_delta_E = []
     bg_list_annihilation_angle = []
     bg_list_arm = []
-    bg_list_ids = []
     # Lists general
     gen_list_delta_E = []
     gen_list_annihilation_angle = []
@@ -56,12 +54,10 @@ def compute_event_features(cfg, ref_energy, reader):
                 bdecay_list_delta_E.append(float("nan"))
                 bdecay_list_annihilation_angle.append(float("nan"))
                 bdecay_list_arm.append(float("nan"))
-                bdecay_list_ids.append(event_id)
             else:
                 bg_list_delta_E.append(float("nan"))
                 bg_list_annihilation_angle.append(float("nan"))
                 bg_list_arm.append(float("nan"))
-                bg_list_ids.append(event_id)
             continue
 
         _delta_E = delta_E(energies)
@@ -76,12 +72,10 @@ def compute_event_features(cfg, ref_energy, reader):
             bdecay_list_delta_E.append(_delta_E)
             bdecay_list_annihilation_angle.append(_annihilation_angle)
             bdecay_list_arm.append(_arm)
-            bdecay_list_ids.append(event_id)
         else:
             bg_list_delta_E.append(_delta_E)
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
-            bg_list_ids.append(event_id)
     return (
         ground_truths,
         bdecay_list_delta_E,
