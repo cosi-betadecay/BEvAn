@@ -5,7 +5,7 @@ import wandb
 from tqdm import tqdm
 
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
-from physics.event_processing import event_data_processing, strip_padding_from_event
+from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.matrix_calculations import (
     annihilation_angle,
@@ -60,21 +60,9 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_arm.append(float("nan"))
             continue
 
-        stripped_candidates = strip_padding_from_event(energies, positions)
-
-        candidate_delta_E = []
-        candidate_annihilation_angle = []
-        candidate_arm = []
-        for candidate_energies, candidate_positions in stripped_candidates:
-            candidate_delta_E.append(delta_E(candidate_energies))
-            candidate_annihilation_angle.append(
-                annihilation_angle(candidate_positions, candidate_positions.shape[0])
-            )
-            candidate_arm.append(arm(candidate_energies, candidate_positions, cfg))
-
-        _delta_E = torch.stack(candidate_delta_E).min().reshape(1)
-        _annihilation_angle = torch.stack(candidate_annihilation_angle).min().reshape(1)
-        _arm = torch.stack(candidate_arm).min().reshape(1)
+        _delta_E = delta_E(energies, mask=mask)
+        _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, mask=mask)
+        _arm = arm(energies, positions, cfg, mask=mask)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)

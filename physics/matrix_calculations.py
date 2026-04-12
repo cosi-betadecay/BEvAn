@@ -5,7 +5,9 @@ from tqdm import tqdm
 from mathematics.geometry import theta_geo, theta_kin
 
 
-def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
+def annihilation_angle(
+    positions: torch.Tensor, n_hits: int | None = None, mask: torch.Tensor | None = None
+) -> torch.Tensor:
     def all_vector_cosines_matrix_calculation(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
         if positions.ndim == 2:
             positions = positions.unsqueeze(0)
@@ -85,6 +87,32 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
 
         return global_best.amin().reshape(-1)
 
+    if mask is not None:
+        if positions.ndim != 3 or mask.ndim != 2:
+            raise ValueError(
+                "Masked annihilation_angle expects positions shape (B, N, 3) and mask shape (B, N), "
+                f"got {tuple(positions.shape)} and {tuple(mask.shape)}"
+            )
+        if positions.shape[:2] != mask.shape:
+            raise ValueError(
+                "Positions and mask must have matching batch/sequence dimensions, "
+                f"got {tuple(positions.shape)} and {tuple(mask.shape)}"
+            )
+
+        outputs = []
+        for pos_row, mask_row in zip(positions, mask, strict=False):
+            valid_positions = pos_row[mask_row]
+            valid_n_hits = int(mask_row.sum().item())
+            outputs.append(annihilation_angle(valid_positions, valid_n_hits))
+        stacked = torch.stack(outputs).flatten()
+        finite = stacked[torch.isfinite(stacked)]
+        if finite.numel() == 0:
+            return positions.new_tensor(float("nan"))
+        return finite.amin().reshape(1)
+
+    if n_hits is None:
+        n_hits = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
+
     if n_hits <= 14:
         cosines = all_vector_cosines_matrix_calculation(positions)
     else:
@@ -99,18 +127,55 @@ def annihilation_angle(positions: torch.Tensor, n_hits: int) -> torch.Tensor:
 
 
 def arm(
-    energies: torch.Tensor, positions: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
+    energies: torch.Tensor,
+    positions: torch.Tensor,
+    cfg: omegaconf.dictconfig.DictConfig,
+    mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    if mask is not None:
+        if energies.ndim != 2 or positions.ndim != 3 or mask.ndim != 2:
+            raise ValueError(
+                "Masked arm expects energies shape (B, N), positions shape (B, N, 3), and mask shape (B, N), "
+                f"got {tuple(energies.shape)}, {tuple(positions.shape)}, and {tuple(mask.shape)}"
+            )
+        if energies.shape != mask.shape or positions.shape[:2] != mask.shape:
+            raise ValueError(
+                "Energies, positions, and mask must share batch/sequence dimensions, "
+                f"got {tuple(energies.shape)}, {tuple(positions.shape)}, and {tuple(mask.shape)}"
+            )
+
+        outputs = []
+        for energy_row, pos_row, mask_row in zip(energies, positions, mask, strict=False):
+            valid_energies = energy_row[mask_row]
+            valid_positions = pos_row[mask_row]
+            outputs.append(arm(valid_energies, valid_positions, cfg))
+        return torch.stack(outputs).min().reshape(1)
+
     if positions.shape[1] < 3:
-        return 1  # TODO: find a good replacement for this that actually makes sense
+        return positions.new_tensor(1.0)  # TODO: find a good replacement for this that actually makes sense
 
     arm = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
 
     return arm
 
 
-def delta_E(energies: torch.Tensor, ref_energy: float = 511.0) -> torch.Tensor:
-    E = energies.sum() if energies.ndim == 1 else energies.sum(dim=1)
+def delta_E(
+    energies: torch.Tensor, ref_energy: float = 511.0, mask: torch.Tensor | None = None
+) -> torch.Tensor:
+    if mask is not None:
+        if energies.ndim != 2 or mask.ndim != 2:
+            raise ValueError(
+                "Masked delta_E expects energies shape (B, N) and mask shape (B, N), "
+                f"got {tuple(energies.shape)} and {tuple(mask.shape)}"
+            )
+        if energies.shape != mask.shape:
+            raise ValueError(
+                "Energies and mask must have the same shape, "
+                f"got {tuple(energies.shape)} and {tuple(mask.shape)}"
+            )
+        E = torch.where(mask, energies, torch.zeros_like(energies)).sum(dim=1)
+    else:
+        E = energies.sum() if energies.ndim == 1 else energies.sum(dim=1)
     delta_E = torch.abs(E - ref_energy)
 
     return delta_E.min().reshape(1)

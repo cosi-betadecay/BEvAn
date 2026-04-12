@@ -35,8 +35,9 @@ import numpy as np
 import pytest
 import torch
 import wandb
+from omegaconf import OmegaConf
 
-from physics.matrix_calculations import build_density_matrix, lookup_density_values
+from physics.matrix_calculations import annihilation_angle, arm, build_density_matrix, delta_E, lookup_density_values
 
 # ===========================================================================
 # Module-level plot helpers
@@ -354,6 +355,38 @@ def test_output_shape_with_real_combined_data(real_tensors):
     assert probs.shape == (n_bins_x, n_bins_y), f"Expected ({n_bins_x}, {n_bins_y}), got {tuple(probs.shape)}"
     assert x_bins.numel() == n_bins_x + 1
     assert y_bins.numel() == n_bins_y + 1
+
+
+def test_masked_feature_functions_ignore_nan_padding():
+    """
+    Masked feature functions must ignore NaN-padded hits rather than treating
+    them as physical interactions.
+    """
+    cfg = OmegaConf.create({"likelihoods": {"arm": {"sigma_x": 4.0, "n_sigma_cos_theta_kin": 1}}})
+
+    energies = torch.tensor(
+        [
+            [200.0, 311.0, float("nan")],
+            [200.0, 100.0, 211.0],
+        ],
+        dtype=torch.float32,
+    )
+    positions = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [float("nan"), float("nan"), float("nan")]],
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
+        ],
+        dtype=torch.float32,
+    )
+    mask = torch.tensor([[True, True, False], [True, True, True]])
+
+    masked_delta_e = delta_E(energies, mask=mask)
+    masked_angle = annihilation_angle(positions, mask=mask)
+    masked_arm = arm(energies, positions, cfg, mask=mask)
+
+    assert torch.isclose(masked_delta_e, torch.tensor([0.0])).all()
+    assert torch.isfinite(masked_angle).all(), f"Expected finite masked annihilation angle, got {masked_angle}"
+    assert torch.isfinite(masked_arm).all(), f"Expected finite masked ARM, got {masked_arm}"
 
 
 def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):
