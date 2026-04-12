@@ -4,12 +4,12 @@ from typing import Any
 import torch
 
 
-def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
+def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return None, None
+        return None, None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -58,27 +58,42 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
+    mask = torch.arange(max_r, device=device).unsqueeze(0) < sizes.unsqueeze(1)
 
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
-        return None, None
+        return None, None, None
 
-    return energy_combo, pos_combo
+    return energy_combo, pos_combo, mask
 
 
 def strip_padding_from_event(
     energies: torch.Tensor, positions: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if energies.ndim != 1:
-        raise ValueError(
-            f"Expected 1D energies for a single event candidate, got shape {tuple(energies.shape)}"
-        )
-    if positions.ndim != 2 or positions.shape[1] != 3:
-        raise ValueError(f"Expected positions shape (N, 3), got {tuple(positions.shape)}")
-    if positions.shape[0] != energies.shape[0]:
-        raise ValueError(
-            "Energies and positions must have the same leading dimension, "
-            f"got {energies.shape[0]} and {positions.shape[0]}"
-        )
+) -> tuple[torch.Tensor, torch.Tensor] | list[tuple[torch.Tensor, torch.Tensor]]:
+    if energies.ndim == 1:
+        if positions.ndim != 2 or positions.shape[1] != 3:
+            raise ValueError(f"Expected positions shape (N, 3), got {tuple(positions.shape)}")
+        if positions.shape[0] != energies.shape[0]:
+            raise ValueError(
+                "Energies and positions must have the same leading dimension, "
+                f"got {energies.shape[0]} and {positions.shape[0]}"
+            )
 
-    valid = torch.isfinite(energies) & torch.all(torch.isfinite(positions), dim=1)
-    return energies[valid], positions[valid]
+        valid = torch.isfinite(energies) & torch.all(torch.isfinite(positions), dim=1)
+        return energies[valid], positions[valid]
+
+    if energies.ndim == 2:
+        if positions.ndim != 3 or positions.shape[2] != 3:
+            raise ValueError(f"Expected positions shape (B, N, 3), got {tuple(positions.shape)}")
+        if positions.shape[:2] != energies.shape:
+            raise ValueError(
+                "Energies and positions must have matching batch/sequence dimensions, "
+                f"got {tuple(energies.shape)} and {tuple(positions.shape)}"
+            )
+
+        stripped_events = []
+        for energy_row, position_row in zip(energies, positions, strict=False):
+            valid = torch.isfinite(energy_row) & torch.all(torch.isfinite(position_row), dim=1)
+            stripped_events.append((energy_row[valid], position_row[valid]))
+        return stripped_events
+
+    raise ValueError(f"Expected energies shape (N,) or (B, N), got {tuple(energies.shape)}")

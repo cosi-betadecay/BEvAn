@@ -45,8 +45,8 @@ def compute_event_features(cfg, ref_energy, reader):
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        energies, positions = event_data_processing(event)
-        if energies is None or positions is None:
+        energies, positions, mask = event_data_processing(event)
+        if energies is None or positions is None or mask is None:
             gen_list_delta_E.append(float("nan"))
             gen_list_annihilation_angle.append(float("nan"))
             gen_list_arm.append(float("nan"))
@@ -60,11 +60,21 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_arm.append(float("nan"))
             continue
 
-        energies, positions = strip_padding_from_event(energies, positions)
+        stripped_candidates = strip_padding_from_event(energies, positions)
 
-        _delta_E = delta_E(energies)
-        _annihilation_angle = annihilation_angle(positions, n_hits)
-        _arm = arm(energies, positions, cfg)
+        candidate_delta_E = []
+        candidate_annihilation_angle = []
+        candidate_arm = []
+        for candidate_energies, candidate_positions in stripped_candidates:
+            candidate_delta_E.append(delta_E(candidate_energies))
+            candidate_annihilation_angle.append(
+                annihilation_angle(candidate_positions, candidate_positions.shape[0])
+            )
+            candidate_arm.append(arm(candidate_energies, candidate_positions, cfg))
+
+        _delta_E = torch.stack(candidate_delta_E).min().reshape(1)
+        _annihilation_angle = torch.stack(candidate_annihilation_angle).min().reshape(1)
+        _arm = torch.stack(candidate_arm).min().reshape(1)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)

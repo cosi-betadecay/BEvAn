@@ -1,6 +1,5 @@
 """Unit tests for physics/event_processing.py."""
 
-import pytest
 import torch
 
 from physics.event_processing import event_data_processing, strip_padding_from_event
@@ -115,10 +114,14 @@ def test_strip_padding_from_event_removes_nan_padded_hits():
     assert tuple(stripped_positions[1].tolist()) == (0.0, 1.0, 0.0)
 
 
-def test_strip_padding_from_event_rejects_non_single_candidate_shapes():
-    """The helper should fail loudly if given batched tensors instead of one candidate row."""
+def test_strip_padding_from_event_supports_batched_candidate_input():
+    """The helper should return a cleaned candidate list when given batched padded input."""
     energies = torch.tensor([[10.0, float("nan")]], dtype=torch.float32)
     positions = torch.tensor([[[1.0, 0.0, 0.0], [float("nan"), float("nan"), float("nan")]]], dtype=torch.float32)
 
-    with pytest.raises(ValueError, match="Expected 1D energies"):
-        strip_padding_from_event(energies, positions)
+    stripped = strip_padding_from_event(energies, positions)
+
+    assert len(stripped) == 1
+    stripped_energies, stripped_positions = stripped[0]
+    assert tuple(stripped_energies.tolist()) == (10.0,)
+    assert stripped_positions.shape == (1, 3)
