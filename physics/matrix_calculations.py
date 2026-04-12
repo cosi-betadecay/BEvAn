@@ -151,7 +151,8 @@ def arm(
             outputs.append(arm(valid_energies, valid_positions, cfg))
         return torch.stack(outputs).min().reshape(1)
 
-    if positions.shape[1] < 3:
+    n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
+    if n_pos < 3:
         return positions.new_tensor(1.0)  # TODO: find a good replacement for this that actually makes sense
 
     arm_value = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
