@@ -29,6 +29,7 @@ Test strategy
      - Ground-truth accuracy  (4 tests)  — event-level density ratio on gen data
 """
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -74,12 +75,24 @@ def _plot_heatmap(
     y_label: str,
     cmap: str = "viridis",
 ) -> None:
-    """Draw a 2D probability heatmap using pcolormesh with a linear colour scale."""
+    """Draw a 2D probability heatmap using pcolormesh with a log colour scale.
+
+    The axes show normal numbers.  Only the colourbar spacing is logarithmic,
+    which is necessary because probability matrices are extremely sparse: a few
+    cells near the signal peak hold almost all the probability mass, while the
+    vast majority are near-zero.  A linear colour scale would map everything
+    except the peak to the bottom of the colourmap, making the plot appear flat
+    and featureless.  LogNorm preserves contrast across the full dynamic range
+    while keeping every label on the axes and colourbar as a plain number.
+    """
     data = _to_np(matrix).T          # pcolormesh expects (n_y, n_x)
     xb   = _to_np(x_bins)
     yb   = _to_np(y_bins)
 
-    im = ax.pcolormesh(xb, yb, data, cmap=cmap)
+    vmin = data[data > 0].min() if (data > 0).any() else 1e-10
+    norm = mcolors.LogNorm(vmin=vmin, vmax=data.max())
+
+    im = ax.pcolormesh(xb, yb, data, cmap=cmap, norm=norm)
     ax.set_title(title, fontsize=10)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)

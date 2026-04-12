@@ -30,3 +30,6 @@ outputs/
 
 # UV
 uv.lock
+
+# Claude
+/.claude
