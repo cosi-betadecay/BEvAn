@@ -4,7 +4,7 @@ import math
 
 import torch
 
-from physics.event_processing import event_data_processing
+from physics.event_processing import event_data_processing, iter_event_permutation_batches
 
 
 class _FakePosition:
@@ -46,10 +46,10 @@ class _FakeEvent:
         return self._hits[index]
 
 
-def test_returns_all_full_length_permutations_only():
+def test_event_data_processing_returns_base_hit_tensors():
     """
-    For an N-hit event, event_data_processing must return all N! orderings of
-    the full hit list and no shorter, zero-padded subsets.
+    event_data_processing should return the original event hits once, without
+    materializing the full permutation search space in memory.
     """
     event = _FakeEvent(
         [
@@ -61,8 +61,30 @@ def test_returns_all_full_length_permutations_only():
 
     energies, positions = event_data_processing(event)
 
-    assert energies.shape == (math.factorial(3), 3)
-    assert positions.shape == (math.factorial(3), 3, 3)
+    assert energies.shape == (3,)
+    assert positions.shape == (3, 3)
+    assert tuple(energies.cpu().tolist()) == (10.0, 20.0, 30.0)
+    assert tuple(positions[0].cpu().tolist()) == (1.0, 0.0, 0.0)
+
+
+def test_permutation_batches_cover_all_full_length_orderings_without_padding():
+    """
+    iter_event_permutation_batches must enumerate the full N! ordering search
+    space while keeping each emitted batch bounded in size.
+    """
+    base_energies = torch.tensor([10.0, 20.0, 30.0], dtype=torch.float32)
+    base_positions = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    batches = list(iter_event_permutation_batches(base_energies, base_positions, batch_size=2))
+
+    assert len(batches) == math.ceil(math.factorial(3) / 2)
 
     expected_energy_rows = {
         (10.0, 20.0, 30.0),
@@ -72,10 +94,15 @@ def test_returns_all_full_length_permutations_only():
         (30.0, 10.0, 20.0),
         (30.0, 20.0, 10.0),
     }
-    actual_energy_rows = {tuple(row.tolist()) for row in energies.cpu()}
+    actual_energy_rows = {
+        tuple(row.tolist()) for energy_batch, _ in batches for row in energy_batch.cpu()
+    }
 
     assert actual_energy_rows == expected_energy_rows
-    assert torch.all(energies > 0.0), "Found padded zero-energy pseudo-hits in full-length permutations"
+    for energy_batch, position_batch in batches:
+        assert energy_batch.shape[1] == 3
+        assert position_batch.shape[1:] == (3, 3)
+        assert torch.all(energy_batch > 0.0), "Found padded zero-energy pseudo-hits in permutation batches"
 
 
 def test_zero_hit_event_returns_none_pair():

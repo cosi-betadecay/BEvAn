@@ -1,7 +1,9 @@
 import itertools
+import math
 from typing import Any
 
 import torch
+from tqdm import tqdm
 
 
 def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
@@ -31,16 +33,44 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
         device=device,
     )
 
-    # Build all full-length hit orderings. Each row represents the same event
-    # under a different interaction-order hypothesis, without introducing
-    # shorter subsets or zero-padded pseudo-hits.
-    permutations = list(itertools.permutations(range(n_hits), n_hits))
-    idx = torch.tensor(permutations, dtype=torch.long, device=device)
-
-    energy_combo = energies[idx]  # (n_perm, n_hits)
-    pos_combo = positions[idx]  # (n_perm, n_hits, 3)
-
-    if energy_combo.numel() == 0 or pos_combo.numel() == 0:
+    if energies.numel() == 0 or positions.numel() == 0:
         return None, None
 
-    return energy_combo, pos_combo
+    return energies, positions
+
+
+def iter_event_permutation_batches(
+    energies: torch.Tensor,
+    positions: torch.Tensor,
+    batch_size: int = 2048,
+):
+    """
+    Yield full-length hit permutations in bounded-size batches.
+
+    Each batch represents alternative interaction-order hypotheses for the same
+    event. The full N! search space is preserved, but only `batch_size`
+    permutations are materialized at a time.
+    """
+    n_hits = energies.shape[0]
+    if n_hits == 0:
+        return
+
+    batch: list[tuple[int, ...]] = []
+    total_permutations = math.factorial(n_hits)
+    permutation_iter = tqdm(
+        itertools.permutations(range(n_hits), n_hits),
+        total=total_permutations,
+        desc=f"Hit permutations (N={n_hits})",
+        unit="perm",
+        leave=False,
+    )
+    for perm in permutation_iter:
+        batch.append(perm)
+        if len(batch) == batch_size:
+            idx = torch.tensor(batch, dtype=torch.long, device=energies.device)
+            yield energies[idx], positions[idx]
+            batch.clear()
+
+    if batch:
+        idx = torch.tensor(batch, dtype=torch.long, device=energies.device)
+        yield energies[idx], positions[idx]
