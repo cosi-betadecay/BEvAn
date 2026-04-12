@@ -116,7 +116,8 @@ def annihilation_angle(
     if n_hits <= 14:
         cosines = all_vector_cosines_matrix_calculation(positions)
     else:
-        cosines = all_vector_cosines_blockwise(positions)
+        blockwise_positions = positions.unsqueeze(0) if positions.ndim == 2 else positions
+        cosines = all_vector_cosines_blockwise(blockwise_positions)
 
     if cosines.numel() == 0:
         return positions.new_tensor(float("nan")).reshape(1)
