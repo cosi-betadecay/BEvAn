@@ -5,7 +5,7 @@ import wandb
 from tqdm import tqdm
 
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
-from physics.event_processing import event_data_processing
+from physics.event_processing import event_data_processing, strip_padding_from_event
 from physics.ground_truths import ground_truth_bdecay
 from physics.matrix_calculations import (
     annihilation_angle,
@@ -45,8 +45,9 @@ def compute_event_features(cfg, ref_energy, reader):
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        energies, positions, mask = event_data_processing(event)
-        if energies is None or positions is None or mask is None:
+        energies, positions = event_data_processing(event)
+        energies, positions = strip_padding_from_event(energies, positions)
+        if energies is None or positions is None:
             gen_list_delta_E.append(float("nan"))
             gen_list_annihilation_angle.append(float("nan"))
             gen_list_arm.append(float("nan"))

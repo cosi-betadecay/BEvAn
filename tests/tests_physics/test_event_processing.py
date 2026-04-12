@@ -1,8 +1,9 @@
 """Unit tests for physics/event_processing.py."""
 
+import pytest
 import torch
 
-from physics.event_processing import event_data_processing
+from physics.event_processing import event_data_processing, strip_padding_from_event
 
 
 class _FakePosition:
@@ -66,21 +67,22 @@ def test_event_data_processing_returns_padded_combinations_with_mask():
     assert mask.dtype == torch.bool
 
     expected_energy_rows = {
-        ((10.0, 0.0, 0.0), (True, False, False)),
-        ((20.0, 0.0, 0.0), (True, False, False)),
-        ((30.0, 0.0, 0.0), (True, False, False)),
-        ((10.0, 20.0, 0.0), (True, True, False)),
-        ((10.0, 30.0, 0.0), (True, True, False)),
-        ((20.0, 30.0, 0.0), (True, True, False)),
-        ((10.0, 20.0, 30.0), (True, True, True)),
+        (10.0,),
+        (20.0,),
+        (30.0,),
+        (10.0, 20.0),
+        (10.0, 30.0),
+        (20.0, 30.0),
+        (10.0, 20.0, 30.0),
     }
     actual_energy_rows = {
-        (tuple(energy_row.tolist()), tuple(mask_row.tolist()))
+        tuple(energy_row[mask_row].tolist())
         for energy_row, mask_row in zip(energies.cpu(), mask.cpu(), strict=False)
     }
 
     assert actual_energy_rows == expected_energy_rows
-    assert torch.all(energies[~mask] == 0.0), "Padding entries should remain zero where the mask is False"
+    assert torch.all(torch.isnan(energies[~mask])), "Padding entries should be NaN where the mask is False"
+    assert torch.all(torch.isnan(positions[~mask])), "Padded positions should be NaN where the mask is False"
 
 
 def test_zero_hit_event_returns_none_pair():
@@ -92,3 +94,31 @@ def test_zero_hit_event_returns_none_pair():
     assert energies is None
     assert positions is None
     assert mask is None
+
+
+def test_strip_padding_from_event_removes_nan_padded_hits():
+    """The helper should return only the real hits from a single padded candidate row."""
+    energies = torch.tensor([10.0, 20.0, float("nan")], dtype=torch.float32)
+    positions = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [float("nan"), float("nan"), float("nan")],
+        ],
+        dtype=torch.float32,
+    )
+
+    stripped_energies, stripped_positions = strip_padding_from_event(energies, positions)
+
+    assert tuple(stripped_energies.tolist()) == (10.0, 20.0)
+    assert stripped_positions.shape == (2, 3)
+    assert tuple(stripped_positions[1].tolist()) == (0.0, 1.0, 0.0)
+
+
+def test_strip_padding_from_event_rejects_non_single_candidate_shapes():
+    """The helper should fail loudly if given batched tensors instead of one candidate row."""
+    energies = torch.tensor([[10.0, float("nan")]], dtype=torch.float32)
+    positions = torch.tensor([[[1.0, 0.0, 0.0], [float("nan"), float("nan"), float("nan")]]], dtype=torch.float32)
+
+    with pytest.raises(ValueError, match="Expected 1D energies"):
+        strip_padding_from_event(energies, positions)
