@@ -31,32 +31,14 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
         device=device,
     )
 
-    # Build all hit combinations (CPU once, GPU afterwards)
-    combos = []
-    sizes = []
+    # Build all full-length hit orderings. Each row represents the same event
+    # under a different interaction-order hypothesis, without introducing
+    # shorter subsets or zero-padded pseudo-hits.
+    permutations = list(itertools.permutations(range(n_hits), n_hits))
+    idx = torch.tensor(permutations, dtype=torch.long, device=device)
 
-    for r in range(1, n_hits + 1):
-        for c in itertools.combinations(range(n_hits), r):
-            combos.append(c)
-            sizes.append(r)
-
-    max_r = max(sizes)
-    n_combo = len(combos)
-
-    # Pad combinations with sentinel index n_hits (maps to appended zero row)
-    idx = torch.full((n_combo, max_r), n_hits, dtype=torch.long)
-    for i, c in enumerate(combos):
-        idx[i, : len(c)] = torch.tensor(c)
-
-    idx = idx.to(device)
-    sizes = torch.tensor(sizes, device=device)
-
-    # Append one all-zero entry so padded indices gather zeros directly.
-    energies_ext = torch.cat([energies, energies.new_zeros(1)], dim=0)  # (n_hits + 1,)
-    positions_ext = torch.cat([positions, positions.new_zeros((1, 3))], dim=0)  # (n_hits + 1, 3)
-
-    energy_combo = energies_ext[idx]  # (n_combo, max_r)
-    pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
+    energy_combo = energies[idx]  # (n_perm, n_hits)
+    pos_combo = positions[idx]  # (n_perm, n_hits, 3)
 
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None
