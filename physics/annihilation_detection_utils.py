@@ -46,7 +46,6 @@ def compute_event_features(cfg, ref_energy, reader):
         ground_truths.append(gt)
 
         energies, positions = event_data_processing(event)
-        energies, positions = strip_padding_from_event(energies, positions)
         if energies is None or positions is None:
             gen_list_delta_E.append(float("nan"))
             gen_list_annihilation_angle.append(float("nan"))
@@ -60,6 +59,8 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_annihilation_angle.append(float("nan"))
                 bg_list_arm.append(float("nan"))
             continue
+
+        energies, positions = strip_padding_from_event(energies, positions)
 
         _delta_E = delta_E(energies)
         _annihilation_angle = annihilation_angle(positions, n_hits)
