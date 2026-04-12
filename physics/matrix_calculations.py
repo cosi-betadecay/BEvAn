@@ -165,7 +165,7 @@ def arm(
 
     arm_value = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
 
-    return arm_value
+    return arm_value.reshape(1)
 
 
 def delta_E(
