@@ -33,7 +33,7 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
         device=device,
     )
 
-    if energies.numel() == 0 or positions.numel() == 0:
+    if data_pruning(energies, positions):
         return None, None
 
     return energies, positions
@@ -74,3 +74,13 @@ def iter_event_permutation_batches(
     if batch:
         idx = torch.tensor(batch, dtype=torch.long, device=energies.device)
         yield energies[idx], positions[idx]
+
+
+def data_pruning(energies: torch.Tensor, positions: torch.Tensor) -> bool:
+    if energies.numel() == 0 or positions.numel() == 0:
+        return True
+
+    if torch.abs(torch.sum(energies) - 511) > 100:
+        return True
+
+    return False
