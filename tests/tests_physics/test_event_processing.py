@@ -1,10 +1,8 @@
 """Unit tests for physics/event_processing.py."""
 
-import math
-
 import torch
 
-from physics.event_processing import event_data_processing, iter_event_permutation_batches
+from physics.event_processing import event_data_processing
 
 
 class _FakePosition:
@@ -46,10 +44,11 @@ class _FakeEvent:
         return self._hits[index]
 
 
-def test_event_data_processing_returns_base_hit_tensors():
+def test_event_data_processing_returns_padded_combinations_with_mask():
     """
-    event_data_processing should return the original event hits once, without
-    materializing the full permutation search space in memory.
+    event_data_processing should return every non-empty hit subset padded to the
+    maximum subset length, along with a boolean mask that marks which entries
+    are real hits versus zero-padding.
     """
     event = _FakeEvent(
         [
@@ -59,57 +58,37 @@ def test_event_data_processing_returns_base_hit_tensors():
         ]
     )
 
-    energies, positions = event_data_processing(event)
+    energies, positions, mask = event_data_processing(event)
 
-    assert energies.shape == (3,)
-    assert positions.shape == (3, 3)
-    assert tuple(energies.cpu().tolist()) == (10.0, 20.0, 30.0)
-    assert tuple(positions[0].cpu().tolist()) == (1.0, 0.0, 0.0)
-
-
-def test_permutation_batches_cover_all_full_length_orderings_without_padding():
-    """
-    iter_event_permutation_batches must enumerate the full N! ordering search
-    space while keeping each emitted batch bounded in size.
-    """
-    base_energies = torch.tensor([10.0, 20.0, 30.0], dtype=torch.float32)
-    base_positions = torch.tensor(
-        [
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ],
-        dtype=torch.float32,
-    )
-
-    batches = list(iter_event_permutation_batches(base_energies, base_positions, batch_size=2))
-
-    assert len(batches) == math.ceil(math.factorial(3) / 2)
+    assert energies.shape == (7, 3)
+    assert positions.shape == (7, 3, 3)
+    assert mask.shape == (7, 3)
+    assert mask.dtype == torch.bool
 
     expected_energy_rows = {
-        (10.0, 20.0, 30.0),
-        (10.0, 30.0, 20.0),
-        (20.0, 10.0, 30.0),
-        (20.0, 30.0, 10.0),
-        (30.0, 10.0, 20.0),
-        (30.0, 20.0, 10.0),
+        ((10.0, 0.0, 0.0), (True, False, False)),
+        ((20.0, 0.0, 0.0), (True, False, False)),
+        ((30.0, 0.0, 0.0), (True, False, False)),
+        ((10.0, 20.0, 0.0), (True, True, False)),
+        ((10.0, 30.0, 0.0), (True, True, False)),
+        ((20.0, 30.0, 0.0), (True, True, False)),
+        ((10.0, 20.0, 30.0), (True, True, True)),
     }
     actual_energy_rows = {
-        tuple(row.tolist()) for energy_batch, _ in batches for row in energy_batch.cpu()
+        (tuple(energy_row.tolist()), tuple(mask_row.tolist()))
+        for energy_row, mask_row in zip(energies.cpu(), mask.cpu(), strict=False)
     }
 
     assert actual_energy_rows == expected_energy_rows
-    for energy_batch, position_batch in batches:
-        assert energy_batch.shape[1] == 3
-        assert position_batch.shape[1:] == (3, 3)
-        assert torch.all(energy_batch > 0.0), "Found padded zero-energy pseudo-hits in permutation batches"
+    assert torch.all(energies[~mask] == 0.0), "Padding entries should remain zero where the mask is False"
 
 
 def test_zero_hit_event_returns_none_pair():
-    """Events with no hits should still return (None, None)."""
+    """Events with no hits should still return a triple of Nones."""
     event = _FakeEvent([])
 
-    energies, positions = event_data_processing(event)
+    energies, positions, mask = event_data_processing(event)
 
     assert energies is None
     assert positions is None
+    assert mask is None

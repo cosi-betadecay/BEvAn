@@ -1,17 +1,15 @@
 import itertools
-import math
 from typing import Any
 
 import torch
-from tqdm import tqdm
 
 
-def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
+def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event.GetNHTs()
 
     if n_hits == 0:
-        return None, None
+        return None, None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
@@ -33,54 +31,35 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor]:
         device=device,
     )
 
-    if data_pruning(energies, positions):
-        return None, None
+    # Build all hit combinations (CPU once, GPU afterwards)
+    combos = []
+    sizes = []
 
-    return energies, positions
+    for r in range(1, n_hits + 1):
+        for c in itertools.combinations(range(n_hits), r):
+            combos.append(c)
+            sizes.append(r)
 
+    max_r = max(sizes)
+    n_combo = len(combos)
 
-def iter_event_permutation_batches(
-    energies: torch.Tensor,
-    positions: torch.Tensor,
-    batch_size: int = 2048,
-):
-    """
-    Yield full-length hit permutations in bounded-size batches.
+    # Pad combinations with sentinel index n_hits (maps to appended zero row)
+    idx = torch.full((n_combo, max_r), n_hits, dtype=torch.long)
+    for i, c in enumerate(combos):
+        idx[i, : len(c)] = torch.tensor(c)
 
-    Each batch represents alternative interaction-order hypotheses for the same
-    event. The full N! search space is preserved, but only `batch_size`
-    permutations are materialized at a time.
-    """
-    n_hits = energies.shape[0]
-    if n_hits == 0:
-        return
+    idx = idx.to(device)
+    sizes = torch.tensor(sizes, device=device)
 
-    batch: list[tuple[int, ...]] = []
-    total_permutations = math.factorial(n_hits)
-    permutation_iter = tqdm(
-        itertools.permutations(range(n_hits), n_hits),
-        total=total_permutations,
-        desc=f"Hit permutations (N={n_hits})",
-        unit="perm",
-        leave=False,
-    )
-    for perm in permutation_iter:
-        batch.append(perm)
-        if len(batch) == batch_size:
-            idx = torch.tensor(batch, dtype=torch.long, device=energies.device)
-            yield energies[idx], positions[idx]
-            batch.clear()
+    # Append one all-zero entry so padded indices gather zeros directly.
+    energies_ext = torch.cat([energies, energies.new_zeros(1)], dim=0)  # (n_hits + 1,)
+    positions_ext = torch.cat([positions, positions.new_zeros((1, 3))], dim=0)  # (n_hits + 1, 3)
 
-    if batch:
-        idx = torch.tensor(batch, dtype=torch.long, device=energies.device)
-        yield energies[idx], positions[idx]
+    energy_combo = energies_ext[idx]  # (n_combo, max_r)
+    pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
+    mask = torch.arange(max_r, device=device).unsqueeze(0) < sizes.unsqueeze(1)
 
+    if energy_combo.numel() == 0 or pos_combo.numel() == 0:
+        return None, None, None
 
-def data_pruning(energies: torch.Tensor, positions: torch.Tensor) -> bool:
-    if energies.numel() == 0 or positions.numel() == 0:
-        return True
-
-    if torch.abs(torch.sum(energies) - 511) > 100:
-        return True
-
-    return False
+    return energy_combo, pos_combo, mask

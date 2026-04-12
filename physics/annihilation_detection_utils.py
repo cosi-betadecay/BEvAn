@@ -5,7 +5,7 @@ import wandb
 from tqdm import tqdm
 
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
-from physics.event_processing import event_data_processing, iter_event_permutation_batches
+from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.matrix_calculations import (
     annihilation_angle,
@@ -45,8 +45,8 @@ def compute_event_features(cfg, ref_energy, reader):
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        energies, positions = event_data_processing(event)
-        if energies is None or positions is None:
+        energies, positions, mask = event_data_processing(event)
+        if energies is None or positions is None or mask is None:
             gen_list_delta_E.append(float("nan"))
             gen_list_annihilation_angle.append(float("nan"))
             gen_list_arm.append(float("nan"))
@@ -60,28 +60,9 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_arm.append(float("nan"))
             continue
 
-        delta_E_best = None
-        annihilation_angle_best = None
-        arm_best = None
-
-        for energy_batch, position_batch in iter_event_permutation_batches(energies, positions):
-            batch_delta_E = delta_E(energy_batch)
-            batch_annihilation_angle = annihilation_angle(position_batch, n_hits)
-            batch_arm = arm(energy_batch, position_batch, cfg)
-
-            delta_E_best = (
-                batch_delta_E if delta_E_best is None else torch.minimum(delta_E_best, batch_delta_E)
-            )
-            annihilation_angle_best = (
-                batch_annihilation_angle
-                if annihilation_angle_best is None
-                else torch.minimum(annihilation_angle_best, batch_annihilation_angle)
-            )
-            arm_best = batch_arm if arm_best is None else torch.minimum(arm_best, batch_arm)
-
-        _delta_E = delta_E_best
-        _annihilation_angle = annihilation_angle_best
-        _arm = arm_best
+        _delta_E = delta_E(energies)
+        _annihilation_angle = annihilation_angle(positions, n_hits)
+        _arm = arm(energies, positions, cfg)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)
