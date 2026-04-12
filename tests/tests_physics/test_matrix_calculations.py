@@ -2,44 +2,167 @@
 Unit tests for physics/matrix_calculations.py.
 
 Covers:
-    - build_density_matrix  (11 tests)
-    - lookup_density_values  (7 tests)
+    - build_density_matrix   (11 tests — 8 edge-case, 3 real-data)
+    - lookup_density_values  ( 7 tests — 6 edge-case, 1 real-data)
+    - Physics tests          (14 tests — TRUE vs FALSE event matrix analysis)
 
 Test strategy
 -------------
-Tests split into two categories:
-
 1. Edge-case / contract tests  (inline tensors)
-   These must control the exact input values to verify specific
-   mathematical guarantees: NaN filtering, ValueError on empty input,
-   exact probability round-trips, clamping behaviour, etc.  Using real
-   detector data would make these assertions unpredictable or impossible.
+   Require specific, controlled inputs to verify mathematical guarantees:
+   NaN/inf filtering, ValueError on empty input, exact probability values,
+   boundary conditions, and clamping behaviour.
 
-2. Real-data tests  (real_tensors fixture from conftest.py)
-   These verify that the functions behave correctly on actual feature
-   distributions extracted from Activation.sim — the same data the
-   production pipeline operates on.
+2. Real-data structural tests  (real_tensors fixture)
+   Verify correct behaviour on Activation.sim feature distributions.
+
+3. Physics tests  (real_tensors + density_matrices + wandb_run fixtures)
+   Assert that the density matrices are physically meaningful by checking
+   how they behave for TRUE (beta-decay) vs FALSE (background) events.
+   Every test logs one diagnostic plot to Weights & Biases.
+
+   Test groups:
+     - TRUE events structure  (2 tests)  — mass concentrated at low delta_E / ARM
+     - FALSE events structure (2 tests)  — mass more spread, not peaked near zero
+     - Entropy comparison     (2 tests)  — signal always less entropic than background
+     - Distinguishability     (4 tests)  — total variation + log-ratio sign checks
+     - Ground-truth accuracy  (4 tests)  — event-level density ratio on gen data
 """
 
-"""
-Create following unit tests:
-* how the matrix behaves for TRUE events
-* how the matrix behaves for FALSE events
-
-specifically, I want to test how the matrix looks for false events, and how it looks for true events
-in that way we can make sure that the matrix is distinguishable for true and false events
-the way we should do this is to have an if ground truth flag per event etc etc. This means that we truly should
-use MEGAlib in the unit tests. In addition, I want to integrate this with weights & biases, where we plot how each test "looks"
-if that makes sense.
-
-We should create several tests, not only 1 for TRUE events and 1 for FALSE events.
-"""
-
-
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 import torch
+import wandb
 
 from physics.matrix_calculations import build_density_matrix, lookup_density_values
+
+# ===========================================================================
+# Module-level plot helpers
+# ===========================================================================
+
+# Axis labels reused across multiple tests
+_LABEL_DE = "delta_E [keV]"
+_LABEL_ANGLE = "Annihilation angle [cosine]"
+_LABEL_ARM = "ARM [rad]"
+
+
+def _to_np(t: torch.Tensor) -> np.ndarray:
+    """Detach and convert a tensor to a float32 numpy array."""
+    return t.detach().cpu().float().numpy()
+
+
+def _entropy(matrix: torch.Tensor) -> float:
+    """Shannon entropy (nats) of a probability matrix. Zero cells are skipped."""
+    p = matrix.flatten()
+    p = p[p > 0]
+    return -(p * torch.log(p)).sum().item()
+
+
+def _total_variation(p: torch.Tensor, q: torch.Tensor) -> float:
+    """Total variation distance in [0, 1] between two probability distributions."""
+    return 0.5 * torch.abs(p - q).sum().item()
+
+
+def _plot_heatmap(
+    ax,
+    matrix: torch.Tensor,
+    x_bins: torch.Tensor,
+    y_bins: torch.Tensor,
+    title: str,
+    x_label: str,
+    y_label: str,
+    cmap: str = "viridis",
+) -> None:
+    """
+    Draw a 2D log-scale probability heatmap using pcolormesh.
+
+    x (delta_E) is placed on the x-axis with a log scale.
+    y (annihilation_angle or ARM) is on the y-axis with a linear scale.
+    Zero-probability cells are rendered as white.
+    """
+    data = _to_np(matrix).T  # pcolormesh expects (n_y, n_x)
+    xb = np.clip(_to_np(x_bins), 1e-3, None)  # log scale needs x > 0
+    yb = _to_np(y_bins)
+
+    data_display = data.copy()
+    data_display[data_display == 0] = np.nan  # white for empty cells
+
+    pos_vals = data[data > 0]
+    if pos_vals.size == 0:
+        ax.set_title(f"{title}\n(empty matrix)")
+        return
+
+    norm = mcolors.LogNorm(vmin=pos_vals.min(), vmax=pos_vals.max())
+    cmap_obj = plt.get_cmap(cmap).copy()
+    cmap_obj.set_bad("white")
+
+    im = ax.pcolormesh(xb, yb, data_display, norm=norm, cmap=cmap_obj)
+    ax.set_xscale("log")
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    plt.colorbar(im, ax=ax, label="Probability density")
+
+
+def _plot_log_ratio(
+    ax,
+    bdecay: torch.Tensor,
+    bg: torch.Tensor,
+    x_bins: torch.Tensor,
+    y_bins: torch.Tensor,
+    title: str,
+    x_label: str,
+    y_label: str,
+    eps: float = 1e-10,
+) -> None:
+    """
+    Draw log(P_signal / P_bg) as a diverging heatmap.
+
+    Red cells are signal-enriched (classifier votes beta-decay).
+    Blue cells are background-enriched (classifier votes bg).
+    """
+    log_ratio = _to_np(torch.log(bdecay + eps) - torch.log(bg + eps)).T
+    xb = np.clip(_to_np(x_bins), 1e-3, None)
+    yb = _to_np(y_bins)
+
+    absmax = float(np.abs(log_ratio).max()) or 1.0
+    norm = mcolors.TwoSlopeNorm(vmin=-absmax, vcenter=0.0, vmax=absmax)
+
+    im = ax.pcolormesh(xb, yb, log_ratio, norm=norm, cmap="RdBu_r")
+    ax.set_xscale("log")
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    plt.colorbar(im, ax=ax, label="log(P_signal / P_bg)")
+
+
+def _plot_1d_overlay(
+    ax,
+    bdecay_m: np.ndarray,
+    bg_m: np.ndarray,
+    bin_centers: np.ndarray,
+    x_label: str,
+    title: str,
+    log_x: bool = False,
+) -> None:
+    """Draw overlaid signal and background 1D marginal distributions."""
+    ax.plot(bin_centers, bdecay_m, color="steelblue", lw=2, label="Beta-decay")
+    ax.plot(bin_centers, bg_m, color="firebrick", lw=2, label="Background")
+    ax.set_xlabel(x_label)
+    ax.set_ylabel("Probability")
+    ax.set_title(title, fontsize=10)
+    ax.legend()
+    if log_x:
+        ax.set_xscale("log")
+
+
+def _bin_centers(edges: torch.Tensor) -> np.ndarray:
+    """Return midpoints of histogram bin edges."""
+    e = _to_np(edges)
+    return 0.5 * (e[:-1] + e[1:])
+
 
 # ===========================================================================
 # build_density_matrix — edge-case / contract tests
@@ -165,7 +288,7 @@ def test_points_on_lower_bin_edge_are_counted_and_round_trip_correctly():
 
     assert torch.isclose(probs.sum(), torch.tensor(1.0), atol=1e-6)
     assert torch.isclose(probs[0, 0], torch.tensor(1.0), atol=1e-6), (
-        f"Expected all mass in first cell, got probs[0, 0] = {probs[0, 0].item():.6f}"
+        f"Expected all mass in first cell, got probs[0,0] = {probs[0, 0].item():.6f}"
     )
     assert torch.isclose(looked_up[0], torch.tensor(1.0), atol=1e-6), (
         f"Expected lookup at exact lower edge to return 1.0, got {looked_up[0].item():.6f}"
@@ -190,18 +313,18 @@ def test_concentrated_data_fills_single_cell():
 
 
 # ===========================================================================
-# build_density_matrix — real-data tests
+# build_density_matrix — real-data structural tests
 # ===========================================================================
 
 
 def test_probabilities_sum_to_one_on_real_data(real_tensors):
     """
-    The probability matrix built from real beta-decay feature vectors
-    (delta_E vs annihilation_angle) must sum to exactly 1.0.
+    The probability matrix built from real beta-decay feature vectors must
+    sum to exactly 1.0.
 
-    This is the most fundamental contract of build_density_matrix: dividing
-    raw counts by their total always produces a proper probability distribution,
-    regardless of whether the input comes from synthetic or real detector data.
+    This is the most fundamental contract: dividing raw counts by their total
+    always produces a proper probability distribution, regardless of the
+    input distribution.
     """
     probs, _, _ = build_density_matrix(
         real_tensors["bdecay_tensor_delta_E"],
@@ -216,11 +339,8 @@ def test_probabilities_sum_to_one_on_real_data(real_tensors):
 def test_output_shape_with_real_combined_data(real_tensors):
     """
     The probability matrix built from the combined (bdecay + background)
-    real feature tensors must have shape (n_bins_x, n_bins_y) and the
-    returned bin-edge tensors must have n_bins_x+1 and n_bins_y+1 elements.
-
-    Using the combined tensor exercises the full range of the real feature
-    distributions, which are wider and more varied than any synthetic range.
+    real feature tensors must have shape (n_bins_x, n_bins_y), with bin-edge
+    tensors of lengths n_bins_x+1 and n_bins_y+1.
     """
     n_bins_x, n_bins_y = 20, 30
 
@@ -232,26 +352,21 @@ def test_output_shape_with_real_combined_data(real_tensors):
     )
 
     assert probs.shape == (n_bins_x, n_bins_y), f"Expected ({n_bins_x}, {n_bins_y}), got {tuple(probs.shape)}"
-    assert x_bins.numel() == n_bins_x + 1, f"Expected {n_bins_x + 1} x-bin edges, got {x_bins.numel()}"
-    assert y_bins.numel() == n_bins_y + 1, f"Expected {n_bins_y + 1} y-bin edges, got {y_bins.numel()}"
+    assert x_bins.numel() == n_bins_x + 1
+    assert y_bins.numel() == n_bins_y + 1
 
 
 def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):
     """
-    The core shared-bin pattern used by build_density_matrices:
-        1. Derive bin edges from the combined (bdecay + bg) tensor.
-        2. Build the bdecay matrix with those bins.
-        3. Build the bg matrix with those same bins.
-
-    All three matrices must have identical shapes, proving that shared bin
-    edges create a consistent coordinate system across signal and background.
-    This is tested here with real feature distributions from Activation.sim.
+    Bins derived from the combined tensor and re-used for signal/background
+    matrices must yield identical shapes across all three matrices — proving
+    that the shared-coordinate-system contract holds on real detector data.
     """
     _, x_bins, y_bins = build_density_matrix(
         real_tensors["combined_tensor_delta_E"],
         real_tensors["combined_tensor_annihilation_angle"],
     )
-    expected_shape = (x_bins.numel() - 1, y_bins.numel() - 1)
+    expected = (x_bins.numel() - 1, y_bins.numel() - 1)
 
     bdecay_probs, _, _ = build_density_matrix(
         real_tensors["bdecay_tensor_delta_E"],
@@ -266,12 +381,8 @@ def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):
         y_bins=y_bins,
     )
 
-    assert bdecay_probs.shape == expected_shape, (
-        f"bdecay matrix shape {bdecay_probs.shape} != combined shape {expected_shape}"
-    )
-    assert bg_probs.shape == expected_shape, (
-        f"bg matrix shape {bg_probs.shape} != combined shape {expected_shape}"
-    )
+    assert bdecay_probs.shape == expected
+    assert bg_probs.shape == expected
 
 
 # ===========================================================================
@@ -282,8 +393,8 @@ def test_shared_bins_produce_consistent_shapes_on_real_data(real_tensors):
 def test_known_point_returns_correct_probability():
     """
     Round-trip accuracy: build a 2×2 probability matrix from two points that
-    fall into distinct, predictable cells, then verify that a lookup at
-    each point returns the exact stored probability.
+    fall into distinct, predictable cells, then verify that a lookup at each
+    point returns the exact stored probability.
 
     Matrix layout:
         x_bins = [0, 0.5, 1]   (bin 0: [0, 0.5),  bin 1: [0.5, 1])
@@ -296,10 +407,12 @@ def test_known_point_returns_correct_probability():
     x_bins = torch.tensor([0.0, 0.5, 1.0])
     y_bins = torch.tensor([0.0, 0.5, 1.0])
 
-    x = torch.tensor([0.25, 0.75])
-    y = torch.tensor([0.25, 0.75])
-    probs, _, _ = build_density_matrix(x, y, x_bins=x_bins, y_bins=y_bins)
-
+    probs, _, _ = build_density_matrix(
+        torch.tensor([0.25, 0.75]),
+        torch.tensor([0.25, 0.75]),
+        x_bins=x_bins,
+        y_bins=y_bins,
+    )
     result = lookup_density_values(
         torch.tensor([0.25, 0.75]),
         torch.tensor([0.25, 0.75]),
@@ -315,11 +428,8 @@ def test_known_point_returns_correct_probability():
 
 def test_nan_input_returns_zero():
     """
-    NaN query coordinates are considered invalid and must map to a
-    probability of 0.0 in the output.
-
-    This mirrors the filtering logic inside lookup_density_values:
-    `valid = torch.isfinite(x) & torch.isfinite(y)`.
+    NaN query coordinates are invalid and must map to 0.0 in the output.
+    This mirrors the `valid = torch.isfinite(x) & torch.isfinite(y)` guard.
     """
     x_bins = torch.linspace(0.0, 1.0, 6)
     y_bins = torch.linspace(0.0, 1.0, 6)
@@ -338,15 +448,12 @@ def test_nan_input_returns_zero():
         y_bins,
     )
 
-    assert result[0].item() == 0.0, f"Expected 0.0 for NaN input, got {result[0].item()}"
+    assert result[0].item() == 0.0, f"Expected 0.0 for NaN, got {result[0].item()}"
 
 
 def test_inf_input_returns_zero():
     """
     ±inf query coordinates are invalid and must map to 0.0.
-
-    Infinity is not finite, so `torch.isfinite` returns False for it, and
-    the corresponding output slot is left at the initial fill value of 0.0.
     """
     x_bins = torch.linspace(0.0, 1.0, 6)
     y_bins = torch.linspace(0.0, 1.0, 6)
@@ -371,8 +478,7 @@ def test_inf_input_returns_zero():
 
 def test_all_nan_returns_all_zeros():
     """
-    When every query point is NaN, the early-exit guard
-    (`if not torch.any(valid): return values`) must fire and the entire
+    When every query point is NaN, the early-exit guard fires and the entire
     output tensor must be zero.
     """
     x_bins = torch.linspace(0.0, 1.0, 6)
@@ -384,47 +490,47 @@ def test_all_nan_returns_all_zeros():
         y_bins=y_bins,
     )
 
-    nan_x = torch.full((5,), float("nan"))
-    nan_y = torch.full((5,), float("nan"))
-    result = lookup_density_values(nan_x, nan_y, probs, x_bins, y_bins)
+    result = lookup_density_values(
+        torch.full((5,), float("nan")),
+        torch.full((5,), float("nan")),
+        probs,
+        x_bins,
+        y_bins,
+    )
 
     assert torch.all(result == 0.0), f"Expected all zeros, got {result.tolist()}"
 
 
 def test_out_of_range_is_clamped_to_edge_bin():
     """
-    A query point whose x coordinate is far below x_min must be clamped to
-    the first bin (index 0) rather than returning 0 or raising an error.
+    A query point below x_min must be clamped to bin 0 — not zero-filled.
 
-    Setup: all data sits in x-bin 0 (x ≈ 0.05), y-bin 4 (y ≈ 0.45).
+    Setup: all training data at (0.05, 0.45) → x-bin 0, y-bin 4.
     An in-range query at (0.05, 0.45) and an out-of-range query at
-    (-999.0, 0.45) must return the same non-zero probability because both
-    are resolved to x_idx = 0 after clamping.
+    (-999, 0.45) must both return the same non-zero probability after clamping.
     """
-    x_bins = torch.linspace(0.0, 1.0, 11)  # 10 bins, width 0.1 each
+    x_bins = torch.linspace(0.0, 1.0, 11)
     y_bins = torch.linspace(0.0, 1.0, 11)
-
-    x = torch.full((100,), 0.05)  # all points land in x-bin 0
-    y = torch.full((100,), 0.45)  # all points land in y-bin 4
-    probs, _, _ = build_density_matrix(x, y, x_bins=x_bins, y_bins=y_bins)
+    probs, _, _ = build_density_matrix(
+        torch.full((100,), 0.05),
+        torch.full((100,), 0.45),
+        x_bins=x_bins,
+        y_bins=y_bins,
+    )
 
     in_range = lookup_density_values(torch.tensor([0.05]), torch.tensor([0.45]), probs, x_bins, y_bins)
     clamped = lookup_density_values(torch.tensor([-999.0]), torch.tensor([0.45]), probs, x_bins, y_bins)
 
     assert clamped.item() > 0.0, "Clamped out-of-range query returned 0 — expected non-zero"
     assert torch.isclose(in_range, clamped, atol=1e-6), (
-        f"In-range ({in_range.item():.6f}) and clamped ({clamped.item():.6f}) "
-        "results differ — clamping is not working correctly"
+        f"In-range ({in_range.item():.6f}) and clamped ({clamped.item():.6f}) differ"
     )
 
 
 def test_output_length_matches_input_length():
     """
-    The output tensor must have the same number of elements as the input x
-    (and y) tensor, regardless of how many points are valid or out-of-range.
-
-    This ensures callers can safely index the output with the same indices
-    they used for the input.
+    The output tensor must have the same number of elements as the input,
+    regardless of how many are valid, NaN, or out-of-range.
     """
     x_bins = torch.linspace(0.0, 10.0, 11)
     y_bins = torch.linspace(0.0, 10.0, 11)
@@ -435,7 +541,6 @@ def test_output_length_matches_input_length():
         y_bins=y_bins,
     )
 
-    # Mix of valid, NaN, and out-of-range points
     query_x = torch.tensor([1.0, 5.0, float("nan"), -999.0, 9.0])
     query_y = torch.tensor([1.0, 5.0, 5.0, 5.0, 9.0])
     result = lookup_density_values(query_x, query_y, probs, x_bins, y_bins)
@@ -453,22 +558,16 @@ def test_output_length_matches_input_length():
 def test_returned_values_are_non_negative_on_real_data(real_tensors):
     """
     All probability values returned by lookup_density_values must be >= 0
-    when queried with real gen-level feature tensors extracted from
-    Activation.sim.
+    when queried with real gen-level feature tensors from Activation.sim.
 
-    The gen tensors contain the full mix of beta-decay and background events
-    in original event order, including any NaN entries from events with zero
-    hits.  Verifying non-negativity on real data guards against numerical
-    issues specific to the actual feature distributions (e.g., extreme
-    delta_E values or ARM values that sit near bin boundaries).
+    The gen tensors mix beta-decay and background events (in event order)
+    and include NaN entries from events with zero hits.
     """
     t = real_tensors
-
     probs, x_bins, y_bins = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_annihilation_angle"],
     )
-
     result = lookup_density_values(
         t["gen_tensor_delta_E"],
         t["gen_tensor_annihilation_angle"],
@@ -477,6 +576,701 @@ def test_returned_values_are_non_negative_on_real_data(real_tensors):
         y_bins,
     )
 
-    assert torch.all(result >= 0.0), (
-        f"Found {(result < 0).sum().item()} negative probability values in lookup output"
+    assert torch.all(result >= 0.0), f"Found {(result < 0).sum().item()} negative probability values"
+
+
+# ===========================================================================
+# Physics tests — TRUE events (beta-decay) matrix structure
+# ===========================================================================
+
+
+def test_bdecay_angle_matrix_concentrated_at_low_deltaE(real_tensors, density_matrices, wandb_run):
+    """
+    The beta-decay (delta_E vs annihilation_angle) matrix must have most of
+    its probability mass concentrated in the low-delta_E region.
+
+    Physics basis: a true 511 keV annihilation photon deposits energy very
+    close to 511 keV, so |sum(E) - 511| ≈ 0.  The 90th-percentile of the
+    delta_E marginal must be reached with a smaller fraction of bins for
+    bdecay than for background.
+
+    W&B plot: bdecay heatmap (delta_E vs angle) with a vertical marker at the
+    90th-percentile delta_E value.
+    """
+    dm = density_matrices
+
+    bdecay_dE_marginal = dm["bdecay_angle"].sum(dim=1)  # P(delta_E) for bdecay
+    bg_dE_marginal = dm["bg_angle"].sum(dim=1)  # P(delta_E) for bg
+
+    bdecay_frac = ((bdecay_dE_marginal.cumsum(0) < 0.9).sum().item() + 1) / len(bdecay_dE_marginal)
+    bg_frac = ((bg_dE_marginal.cumsum(0) < 0.9).sum().item() + 1) / len(bg_dE_marginal)
+
+    assert bdecay_frac < bg_frac, (
+        f"Expected bdecay to reach 90% mass in fewer bins than bg "
+        f"(bdecay={bdecay_frac:.3f}, bg={bg_frac:.3f})"
     )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_heatmap(
+        ax,
+        dm["bdecay_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        "Beta-decay: delta_E vs Annihilation Angle",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+    )
+    p90_dE = float(_to_np(dm["x_bins_angle"])[int(bdecay_frac * len(bdecay_dE_marginal))])
+    ax.axvline(x=max(p90_dE, 1e-3), color="red", ls="--", label=f"90th pct delta_E = {p90_dE:.2f} keV")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/bdecay_angle_deltaE_concentration": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_bdecay_arm_matrix_peaked_near_zero(real_tensors, density_matrices, wandb_run):
+    """
+    The beta-decay (delta_E vs ARM) matrix must have more than half of its
+    ARM probability mass in the lower half of ARM bins (ARM near zero).
+
+    Physics basis: a correctly reconstructed Compton event has a small
+    angular residual (ARM ≈ 0).  Beta-decay annihilation events, which
+    produce 511 keV photons, should exhibit good Compton consistency.
+
+    W&B plot: bdecay ARM heatmap with a horizontal marker at the ARM median.
+    """
+    dm = density_matrices
+
+    bdecay_arm_marginal = dm["bdecay_arm"].sum(dim=0)  # P(ARM) for bdecay
+    n_bins = len(bdecay_arm_marginal)
+    cumsum = bdecay_arm_marginal.cumsum(0)
+
+    # Fraction of ARM bins needed to capture 50% of bdecay mass
+    median_bin = (cumsum < 0.5).sum().item()
+    frac_to_median = median_bin / n_bins
+
+    assert frac_to_median < 0.5, (
+        f"Expected bdecay ARM median in lower half of bins, but it required {frac_to_median:.1%} of all bins"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_heatmap(
+        ax,
+        dm["bdecay_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        "Beta-decay: delta_E vs ARM",
+        _LABEL_DE,
+        _LABEL_ARM,
+        cmap="plasma",
+    )
+    median_arm = float(_to_np(dm["y_bins_arm"])[median_bin])
+    ax.axhline(y=median_arm, color="red", ls="--", label=f"ARM median = {median_arm:.3f} rad")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/bdecay_arm_peaked_near_zero": wandb.Image(fig)})
+    plt.close(fig)
+
+
+# ===========================================================================
+# Physics tests — FALSE events (background) matrix structure
+# ===========================================================================
+
+
+def test_bg_angle_matrix_more_spread_than_signal(real_tensors, density_matrices, wandb_run):
+    """
+    The background delta_E marginal (from the angle-feature matrix) must
+    require more bins than the beta-decay marginal to capture 90% of mass,
+    confirming that background energy depositions are more spread out.
+
+    W&B plot: overlaid delta_E CDFs for signal and background.
+    """
+    dm = density_matrices
+
+    bdecay_marginal = _to_np(dm["bdecay_angle"].sum(dim=1))
+    bg_marginal = _to_np(dm["bg_angle"].sum(dim=1))
+    centers = _bin_centers(dm["x_bins_angle"])
+
+    bdecay_frac = (np.cumsum(bdecay_marginal) < 0.9).sum() / len(bdecay_marginal)
+    bg_frac = (np.cumsum(bg_marginal) < 0.9).sum() / len(bg_marginal)
+
+    assert bg_frac > bdecay_frac, (
+        f"Expected background to need more bins for 90% CDF than signal "
+        f"(bg={bg_frac:.3f}, bdecay={bdecay_frac:.3f})"
+    )
+
+    # --- W&B plot: overlaid CDFs ---
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+    _plot_1d_overlay(
+        axes[0],
+        np.cumsum(bdecay_marginal),
+        np.cumsum(bg_marginal),
+        centers,
+        _LABEL_DE,
+        "delta_E cumulative distribution (angle pair)",
+        log_x=True,
+    )
+    axes[0].axhline(0.9, color="gray", ls=":", label="90%")
+    axes[0].legend()
+
+    _plot_1d_overlay(
+        axes[1],
+        bdecay_marginal,
+        bg_marginal,
+        centers,
+        _LABEL_DE,
+        "delta_E marginal PDF (angle pair)",
+        log_x=True,
+    )
+
+    fig.tight_layout()
+    wandb.log({"test/bg_angle_deltaE_spread": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_bg_arm_matrix_not_peaked_at_zero(real_tensors, density_matrices, wandb_run):
+    """
+    The background ARM marginal must have less mass in the lowest quarter of
+    ARM bins than the beta-decay ARM marginal does.
+
+    Physics basis: background Compton sequences are less consistent with 511
+    keV kinematics, so their ARM values are shifted toward larger values
+    compared to true annihilation events.
+
+    W&B plot: overlaid ARM PDFs (signal vs background) + heatmaps.
+    """
+    dm = density_matrices
+
+    bdecay_arm_marginal = _to_np(dm["bdecay_arm"].sum(dim=0))
+    bg_arm_marginal = _to_np(dm["bg_arm"].sum(dim=0))
+    n_bins = len(bdecay_arm_marginal)
+    quarter = n_bins // 4
+
+    bdecay_low_arm_mass = bdecay_arm_marginal[:quarter].sum()
+    bg_low_arm_mass = bg_arm_marginal[:quarter].sum()
+
+    assert bdecay_low_arm_mass > bg_low_arm_mass, (
+        f"Expected bdecay to have more mass near ARM=0 than background "
+        f"(bdecay={bdecay_low_arm_mass:.4f}, bg={bg_low_arm_mass:.4f})"
+    )
+
+    # --- W&B plot: side-by-side heatmaps + marginal overlay ---
+    centers = _bin_centers(dm["y_bins_arm"])
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    _plot_heatmap(
+        axes[0],
+        dm["bdecay_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        "Beta-decay: delta_E vs ARM",
+        _LABEL_DE,
+        _LABEL_ARM,
+        cmap="viridis",
+    )
+    _plot_heatmap(
+        axes[1],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        "Background: delta_E vs ARM",
+        _LABEL_DE,
+        _LABEL_ARM,
+        cmap="plasma",
+    )
+    _plot_1d_overlay(axes[2], bdecay_arm_marginal, bg_arm_marginal, centers, _LABEL_ARM, "ARM marginal PDF")
+
+    fig.tight_layout()
+    wandb.log({"test/bg_arm_not_peaked_at_zero": wandb.Image(fig)})
+    plt.close(fig)
+
+
+# ===========================================================================
+# Physics tests — Entropy: signal is always less entropic than background
+# ===========================================================================
+
+
+def test_signal_entropy_lower_than_background_angle_feature(real_tensors, density_matrices, wandb_run):
+    """
+    The Shannon entropy of the beta-decay matrix must be strictly lower than
+    that of the background matrix for the (delta_E, annihilation_angle) pair.
+
+    Lower entropy = more concentrated probability mass = more discriminative.
+    This is a necessary condition for the Bayesian classifier to work: a
+    uniform signal matrix would carry no information over the background.
+
+    W&B plot: side-by-side heatmaps with entropy values in the titles.
+    """
+    dm = density_matrices
+
+    h_bdecay = _entropy(dm["bdecay_angle"])
+    h_bg = _entropy(dm["bg_angle"])
+
+    assert h_bdecay < h_bg, (
+        f"Expected H(bdecay) < H(bg) for angle feature pair (H_bdecay={h_bdecay:.3f}, H_bg={h_bg:.3f} nats)"
+    )
+
+    # --- W&B plot ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _plot_heatmap(
+        axes[0],
+        dm["bdecay_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"Beta-decay  H={h_bdecay:.2f} nats",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+    )
+    _plot_heatmap(
+        axes[1],
+        dm["bg_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"Background  H={h_bg:.2f} nats",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+        cmap="plasma",
+    )
+    fig.suptitle("Entropy comparison — angle feature pair", fontsize=12)
+    fig.tight_layout()
+    wandb.log({"test/entropy_angle_signal_vs_bg": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_signal_entropy_lower_than_background_arm_feature(real_tensors, density_matrices, wandb_run):
+    """
+    The Shannon entropy of the beta-decay matrix must be strictly lower than
+    that of the background matrix for the (delta_E, ARM) pair.
+
+    W&B plot: side-by-side ARM heatmaps with entropy values in the titles.
+    """
+    dm = density_matrices
+
+    h_bdecay = _entropy(dm["bdecay_arm"])
+    h_bg = _entropy(dm["bg_arm"])
+
+    assert h_bdecay < h_bg, (
+        f"Expected H(bdecay) < H(bg) for ARM feature pair (H_bdecay={h_bdecay:.3f}, H_bg={h_bg:.3f} nats)"
+    )
+
+    # --- W&B plot ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _plot_heatmap(
+        axes[0],
+        dm["bdecay_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"Beta-decay  H={h_bdecay:.2f} nats",
+        _LABEL_DE,
+        _LABEL_ARM,
+    )
+    _plot_heatmap(
+        axes[1],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"Background  H={h_bg:.2f} nats",
+        _LABEL_DE,
+        _LABEL_ARM,
+        cmap="plasma",
+    )
+    fig.suptitle("Entropy comparison — ARM feature pair", fontsize=12)
+    fig.tight_layout()
+    wandb.log({"test/entropy_arm_signal_vs_bg": wandb.Image(fig)})
+    plt.close(fig)
+
+
+# ===========================================================================
+# Physics tests — Distinguishability: TV distance + log-ratio sign
+# ===========================================================================
+
+
+def test_angle_matrices_distinguishable_by_total_variation(real_tensors, density_matrices, wandb_run):
+    """
+    The total variation distance between the signal and background
+    (delta_E, annihilation_angle) matrices must exceed 0.1.
+
+    TV = 0 means identical distributions; TV = 1 means no shared support.
+    A threshold of 0.1 is conservative: any meaningful physical separation
+    between the two classes will comfortably exceed it.
+
+    W&B plot: |P_bdecay − P_bg| difference heatmap.
+    """
+    dm = density_matrices
+
+    tv = _total_variation(dm["bdecay_angle"], dm["bg_angle"])
+
+    assert tv > 0.1, f"Expected TV distance > 0.1 for angle matrices, got {tv:.4f}"
+
+    # --- W&B plot ---
+    diff = torch.abs(dm["bdecay_angle"] - dm["bg_angle"])
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_heatmap(
+        ax,
+        diff,
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"|P_bdecay − P_bg| (angle pair)   TV = {tv:.3f}",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+        cmap="hot",
+    )
+    fig.tight_layout()
+    wandb.log({"test/tv_distance_angle": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_arm_matrices_distinguishable_by_total_variation(real_tensors, density_matrices, wandb_run):
+    """
+    The total variation distance between the signal and background
+    (delta_E, ARM) matrices must exceed 0.1.
+
+    W&B plot: |P_bdecay − P_bg| difference heatmap for the ARM pair.
+    """
+    dm = density_matrices
+
+    tv = _total_variation(dm["bdecay_arm"], dm["bg_arm"])
+
+    assert tv > 0.1, f"Expected TV distance > 0.1 for ARM matrices, got {tv:.4f}"
+
+    # --- W&B plot ---
+    diff = torch.abs(dm["bdecay_arm"] - dm["bg_arm"])
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_heatmap(
+        ax,
+        diff,
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"|P_bdecay − P_bg| (ARM pair)   TV = {tv:.3f}",
+        _LABEL_DE,
+        _LABEL_ARM,
+        cmap="hot",
+    )
+    fig.tight_layout()
+    wandb.log({"test/tv_distance_arm": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_log_ratio_positive_in_signal_region_angle(real_tensors, density_matrices, wandb_run):
+    """
+    In the signal-enriched region of the (delta_E, annihilation_angle) space,
+    the log-likelihood ratio log(P_signal / P_bg) must be positive for the
+    majority of cells that carry significant beta-decay probability mass.
+
+    "Significant" is defined as cells where bdecay probability > 1% of the
+    maximum bdecay probability.  This threshold filters out near-empty cells
+    where the log ratio is noise-dominated.
+
+    W&B plot: log-ratio heatmap (diverging red/blue colormap).
+    """
+    dm = density_matrices
+    eps = 1e-10
+    bdecay = dm["bdecay_angle"]
+    bg = dm["bg_angle"]
+
+    threshold = 0.01 * bdecay.max()
+    signal_mask = bdecay > threshold
+    log_ratio = torch.log(bdecay + eps) - torch.log(bg + eps)
+
+    frac_positive = (log_ratio[signal_mask] > 0).float().mean().item()
+
+    assert frac_positive > 0.5, (
+        f"Expected majority of signal-region cells to have positive log-ratio "
+        f"(angle pair), got {frac_positive:.1%}"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_log_ratio(
+        ax,
+        bdecay,
+        bg,
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"log(P_signal/P_bg) — angle pair   ({frac_positive:.1%} positive in signal region)",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+    )
+    fig.tight_layout()
+    wandb.log({"test/log_ratio_angle": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_log_ratio_positive_in_signal_region_arm(real_tensors, density_matrices, wandb_run):
+    """
+    In the signal-enriched region of the (delta_E, ARM) space, the
+    log-likelihood ratio must be positive for the majority of cells carrying
+    significant beta-decay probability mass.
+
+    W&B plot: log-ratio heatmap for the ARM feature pair.
+    """
+    dm = density_matrices
+    eps = 1e-10
+    bdecay = dm["bdecay_arm"]
+    bg = dm["bg_arm"]
+
+    threshold = 0.01 * bdecay.max()
+    signal_mask = bdecay > threshold
+    log_ratio = torch.log(bdecay + eps) - torch.log(bg + eps)
+
+    frac_positive = (log_ratio[signal_mask] > 0).float().mean().item()
+
+    assert frac_positive > 0.5, (
+        f"Expected majority of signal-region cells to have positive log-ratio "
+        f"(ARM pair), got {frac_positive:.1%}"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_log_ratio(
+        ax,
+        bdecay,
+        bg,
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"log(P_signal/P_bg) — ARM pair   ({frac_positive:.1%} positive in signal region)",
+        _LABEL_DE,
+        _LABEL_ARM,
+    )
+    fig.tight_layout()
+    wandb.log({"test/log_ratio_arm": wandb.Image(fig)})
+    plt.close(fig)
+
+
+# ===========================================================================
+# Physics tests — Ground-truth accuracy: event-level density lookup
+# ===========================================================================
+
+
+def test_majority_of_true_events_higher_bdecay_density_angle(real_tensors, density_matrices, wandb_run):
+    """
+    For events the simulation labels as beta-decay (ground_truths == True),
+    the majority must fall in cells where P_bdecay > P_bg in the
+    (delta_E, annihilation_angle) matrix.
+
+    Events with NaN features (zero-hit events) get 0 from both lookups
+    and are excluded from the accuracy calculation.
+
+    W&B plot: true-event scatter overlaid on the log-ratio heatmap.
+    """
+    t, dm = real_tensors, density_matrices
+    gt = t["ground_truths"]
+
+    n_beta = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        dm["bdecay_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+    )
+    n_bg = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        dm["bg_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+    )
+
+    valid = gt & ((n_beta > 0) | (n_bg > 0))
+    accuracy = (n_beta[valid] > n_bg[valid]).float().mean().item()
+    n_valid = valid.sum().item()
+
+    assert accuracy > 0.55, (
+        f"Expected >55% of true bdecay events to have higher bdecay density "
+        f"(angle pair), got {accuracy:.1%} (n={n_valid})"
+    )
+
+    # --- W&B plot: scatter true events on log-ratio background ---
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _plot_log_ratio(
+        ax,
+        dm["bdecay_angle"],
+        dm["bg_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"True bdecay events on log-ratio (angle)  acc={accuracy:.1%}",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+    )
+    dE_true = _to_np(t["gen_tensor_delta_E"][gt])[:500]
+    angle_true = _to_np(t["gen_tensor_annihilation_angle"][gt])[:500]
+    ax.scatter(
+        np.clip(dE_true, 1e-3, None), angle_true, s=4, c="white", alpha=0.5, label="True events (n≤500)"
+    )
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/true_events_angle_log_ratio": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_majority_of_true_events_higher_bdecay_density_arm(real_tensors, density_matrices, wandb_run):
+    """
+    For events the simulation labels as beta-decay, the majority must fall in
+    cells where P_bdecay > P_bg in the (delta_E, ARM) matrix.
+
+    W&B plot: true-event scatter overlaid on the ARM log-ratio heatmap.
+    """
+    t, dm = real_tensors, density_matrices
+    gt = t["ground_truths"]
+
+    n_beta = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        dm["bdecay_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+    )
+    n_bg = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+    )
+
+    valid = gt & ((n_beta > 0) | (n_bg > 0))
+    accuracy = (n_beta[valid] > n_bg[valid]).float().mean().item()
+    n_valid = valid.sum().item()
+
+    assert accuracy > 0.55, (
+        f"Expected >55% of true bdecay events to have higher bdecay density "
+        f"(ARM pair), got {accuracy:.1%} (n={n_valid})"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _plot_log_ratio(
+        ax,
+        dm["bdecay_arm"],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"True bdecay events on log-ratio (ARM)  acc={accuracy:.1%}",
+        _LABEL_DE,
+        _LABEL_ARM,
+    )
+    dE_true = _to_np(t["gen_tensor_delta_E"][gt])[:500]
+    arm_true = _to_np(t["gen_tensor_arm"][gt])[:500]
+    ax.scatter(np.clip(dE_true, 1e-3, None), arm_true, s=4, c="white", alpha=0.5, label="True events (n≤500)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/true_events_arm_log_ratio": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_majority_of_false_events_higher_bg_density_angle(real_tensors, density_matrices, wandb_run):
+    """
+    For events the simulation labels as background (ground_truths == False),
+    the majority must fall in cells where P_bg > P_bdecay in the
+    (delta_E, annihilation_angle) matrix.
+
+    W&B plot: background-event scatter overlaid on the angle log-ratio heatmap.
+    """
+    t, dm = real_tensors, density_matrices
+    gt = t["ground_truths"]
+
+    n_beta = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        dm["bdecay_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+    )
+    n_bg = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        dm["bg_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+    )
+
+    valid = ~gt & ((n_beta > 0) | (n_bg > 0))
+    accuracy = (n_bg[valid] > n_beta[valid]).float().mean().item()
+    n_valid = valid.sum().item()
+
+    assert accuracy > 0.55, (
+        f"Expected >55% of background events to have higher bg density "
+        f"(angle pair), got {accuracy:.1%} (n={n_valid})"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _plot_log_ratio(
+        ax,
+        dm["bdecay_angle"],
+        dm["bg_angle"],
+        dm["x_bins_angle"],
+        dm["y_bins_angle"],
+        f"Background events on log-ratio (angle)  acc={accuracy:.1%}",
+        _LABEL_DE,
+        _LABEL_ANGLE,
+    )
+    dE_bg = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
+    angle_bg = _to_np(t["gen_tensor_annihilation_angle"][~gt])[:500]
+    ax.scatter(
+        np.clip(dE_bg, 1e-3, None), angle_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)"
+    )
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/false_events_angle_log_ratio": wandb.Image(fig)})
+    plt.close(fig)
+
+
+def test_majority_of_false_events_higher_bg_density_arm(real_tensors, density_matrices, wandb_run):
+    """
+    For events the simulation labels as background, the majority must fall in
+    cells where P_bg > P_bdecay in the (delta_E, ARM) matrix.
+
+    W&B plot: background-event scatter overlaid on the ARM log-ratio heatmap.
+    """
+    t, dm = real_tensors, density_matrices
+    gt = t["ground_truths"]
+
+    n_beta = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        dm["bdecay_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+    )
+    n_bg = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+    )
+
+    valid = ~gt & ((n_beta > 0) | (n_bg > 0))
+    accuracy = (n_bg[valid] > n_beta[valid]).float().mean().item()
+    n_valid = valid.sum().item()
+
+    assert accuracy > 0.55, (
+        f"Expected >55% of background events to have higher bg density "
+        f"(ARM pair), got {accuracy:.1%} (n={n_valid})"
+    )
+
+    # --- W&B plot ---
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _plot_log_ratio(
+        ax,
+        dm["bdecay_arm"],
+        dm["bg_arm"],
+        dm["x_bins_arm"],
+        dm["y_bins_arm"],
+        f"Background events on log-ratio (ARM)  acc={accuracy:.1%}",
+        _LABEL_DE,
+        _LABEL_ARM,
+    )
+    dE_bg = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
+    arm_bg = _to_np(t["gen_tensor_arm"][~gt])[:500]
+    ax.scatter(
+        np.clip(dE_bg, 1e-3, None), arm_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)"
+    )
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    wandb.log({"test/false_events_arm_log_ratio": wandb.Image(fig)})
+    plt.close(fig)
