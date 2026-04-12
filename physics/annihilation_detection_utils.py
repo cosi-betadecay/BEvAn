@@ -45,8 +45,8 @@ def compute_event_features(cfg, ref_energy, reader):
         gt = ground_truth_bdecay(event, ref_energy)
         ground_truths.append(gt)
 
-        energies, positions, mask = event_data_processing(event)
-        if energies is None or positions is None or mask is None:
+        energies, positions, sizes = event_data_processing(event)
+        if energies is None or positions is None or sizes is None:
             gen_list_delta_E.append(float("nan"))
             gen_list_annihilation_angle.append(float("nan"))
             gen_list_arm.append(float("nan"))
@@ -60,9 +60,9 @@ def compute_event_features(cfg, ref_energy, reader):
                 bg_list_arm.append(float("nan"))
             continue
 
-        _delta_E = delta_E(energies, mask=mask)
-        _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, mask=mask)
-        _arm = arm(energies, positions, cfg, mask=mask)
+        _delta_E = delta_E(energies, sizes=sizes)
+        _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes)
+        _arm = arm(energies, positions, cfg, sizes=sizes)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)

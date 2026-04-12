@@ -58,12 +58,11 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor, torch
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
-    mask = torch.arange(max_r, device=device).unsqueeze(0) < sizes.unsqueeze(1)
 
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None, None
 
-    return energy_combo, pos_combo, mask
+    return energy_combo, pos_combo, sizes
 
 
 def strip_padding_from_event(

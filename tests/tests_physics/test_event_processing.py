@@ -45,11 +45,10 @@ class _FakeEvent:
         return self._hits[index]
 
 
-def test_event_data_processing_returns_padded_combinations_with_mask():
+def test_event_data_processing_returns_padded_combinations_with_sizes():
     """
     event_data_processing should return every non-empty hit subset padded to the
-    maximum subset length, along with a boolean mask that marks which entries
-    are real hits versus zero-padding.
+    maximum subset length, along with an integer tensor of subset sizes.
     """
     event = _FakeEvent(
         [
@@ -59,12 +58,11 @@ def test_event_data_processing_returns_padded_combinations_with_mask():
         ]
     )
 
-    energies, positions, mask = event_data_processing(event)
+    energies, positions, sizes = event_data_processing(event)
 
     assert energies.shape == (7, 3)
     assert positions.shape == (7, 3, 3)
-    assert mask.shape == (7, 3)
-    assert mask.dtype == torch.bool
+    assert sizes.shape == (7,)
 
     expected_energy_rows = {
         (10.0,),
@@ -76,24 +74,26 @@ def test_event_data_processing_returns_padded_combinations_with_mask():
         (10.0, 20.0, 30.0),
     }
     actual_energy_rows = {
-        tuple(energy_row[mask_row].tolist())
-        for energy_row, mask_row in zip(energies.cpu(), mask.cpu(), strict=False)
+        tuple(energy_row[:size].tolist())
+        for energy_row, size in zip(energies.cpu(), sizes.cpu().tolist(), strict=False)
     }
 
     assert actual_energy_rows == expected_energy_rows
-    assert torch.all(torch.isnan(energies[~mask])), "Padding entries should be NaN where the mask is False"
-    assert torch.all(torch.isnan(positions[~mask])), "Padded positions should be NaN where the mask is False"
+    seq = torch.arange(energies.shape[1]).unsqueeze(0)
+    valid = seq < sizes.cpu().unsqueeze(1)
+    assert torch.all(torch.isnan(energies.cpu()[~valid])), "Padding entries should be NaN beyond each candidate size"
+    assert torch.all(torch.isnan(positions.cpu()[~valid])), "Padded positions should be NaN beyond each candidate size"
 
 
 def test_zero_hit_event_returns_none_pair():
     """Events with no hits should still return a triple of Nones."""
     event = _FakeEvent([])
 
-    energies, positions, mask = event_data_processing(event)
+    energies, positions, sizes = event_data_processing(event)
 
     assert energies is None
     assert positions is None
-    assert mask is None
+    assert sizes is None
 
 
 def test_strip_padding_from_event_removes_nan_padded_hits():

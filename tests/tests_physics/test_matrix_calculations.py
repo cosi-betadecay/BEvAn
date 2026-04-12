@@ -29,15 +29,13 @@ Test strategy
      - Ground-truth accuracy  (4 tests)  — event-level density ratio on gen data
 """
 
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import torch
 import wandb
-from omegaconf import OmegaConf
 
-from physics.matrix_calculations import annihilation_angle, arm, build_density_matrix, delta_E, lookup_density_values
+from physics.matrix_calculations import build_density_matrix, lookup_density_values
 
 # ===========================================================================
 # Module-level plot helpers
@@ -76,67 +74,16 @@ def _plot_heatmap(
     y_label: str,
     cmap: str = "viridis",
 ) -> None:
-    """
-    Draw a 2D log-scale probability heatmap using pcolormesh.
+    """Draw a 2D probability heatmap using pcolormesh with a linear colour scale."""
+    data = _to_np(matrix).T          # pcolormesh expects (n_y, n_x)
+    xb   = _to_np(x_bins)
+    yb   = _to_np(y_bins)
 
-    x (delta_E) is placed on the x-axis with a log scale.
-    y (annihilation_angle or ARM) is on the y-axis with a linear scale.
-    Zero-probability cells are rendered as white.
-    """
-    data = _to_np(matrix).T  # pcolormesh expects (n_y, n_x)
-    xb = np.clip(_to_np(x_bins), 1e-3, None)  # log scale needs x > 0
-    yb = _to_np(y_bins)
-
-    data_display = data.copy()
-    data_display[data_display == 0] = np.nan  # white for empty cells
-
-    pos_vals = data[data > 0]
-    if pos_vals.size == 0:
-        ax.set_title(f"{title}\n(empty matrix)")
-        return
-
-    norm = mcolors.LogNorm(vmin=pos_vals.min(), vmax=pos_vals.max())
-    cmap_obj = plt.get_cmap(cmap).copy()
-    cmap_obj.set_bad("white")
-
-    im = ax.pcolormesh(xb, yb, data_display, norm=norm, cmap=cmap_obj)
-    ax.set_xscale("log")
+    im = ax.pcolormesh(xb, yb, data, cmap=cmap)
     ax.set_title(title, fontsize=10)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     plt.colorbar(im, ax=ax, label="Probability density")
-
-
-def _plot_log_ratio(
-    ax,
-    bdecay: torch.Tensor,
-    bg: torch.Tensor,
-    x_bins: torch.Tensor,
-    y_bins: torch.Tensor,
-    title: str,
-    x_label: str,
-    y_label: str,
-    eps: float = 1e-10,
-) -> None:
-    """
-    Draw log(P_signal / P_bg) as a diverging heatmap.
-
-    Red cells are signal-enriched (classifier votes beta-decay).
-    Blue cells are background-enriched (classifier votes bg).
-    """
-    log_ratio = _to_np(torch.log(bdecay + eps) - torch.log(bg + eps)).T
-    xb = np.clip(_to_np(x_bins), 1e-3, None)
-    yb = _to_np(y_bins)
-
-    absmax = float(np.abs(log_ratio).max()) or 1.0
-    norm = mcolors.TwoSlopeNorm(vmin=-absmax, vcenter=0.0, vmax=absmax)
-
-    im = ax.pcolormesh(xb, yb, log_ratio, norm=norm, cmap="RdBu_r")
-    ax.set_xscale("log")
-    ax.set_title(title, fontsize=10)
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(y_label)
-    plt.colorbar(im, ax=ax, label="log(P_signal / P_bg)")
 
 
 def _plot_1d_overlay(
@@ -146,7 +93,6 @@ def _plot_1d_overlay(
     bin_centers: np.ndarray,
     x_label: str,
     title: str,
-    log_x: bool = False,
 ) -> None:
     """Draw overlaid signal and background 1D marginal distributions."""
     ax.plot(bin_centers, bdecay_m, color="steelblue", lw=2, label="Beta-decay")
@@ -155,8 +101,6 @@ def _plot_1d_overlay(
     ax.set_ylabel("Probability")
     ax.set_title(title, fontsize=10)
     ax.legend()
-    if log_x:
-        ax.set_xscale("log")
 
 
 def _bin_centers(edges: torch.Tensor) -> np.ndarray:
@@ -357,7 +301,7 @@ def test_output_shape_with_real_combined_data(real_tensors):
     assert y_bins.numel() == n_bins_y + 1
 
 
-def test_masked_feature_functions_ignore_nan_padding():
+def test_sized_feature_functions_ignore_nan_padding():
     """
     Masked feature functions must ignore NaN-padded hits rather than treating
     them as physical interactions.
@@ -378,11 +322,11 @@ def test_masked_feature_functions_ignore_nan_padding():
         ],
         dtype=torch.float32,
     )
-    mask = torch.tensor([[True, True, False], [True, True, True]])
+    sizes = torch.tensor([2, 3])
 
-    masked_delta_e = delta_E(energies, mask=mask)
-    masked_angle = annihilation_angle(positions, mask=mask)
-    masked_arm = arm(energies, positions, cfg, mask=mask)
+    masked_delta_e = delta_E(energies, sizes=sizes)
+    masked_angle = annihilation_angle(positions, sizes=sizes)
+    masked_arm = arm(energies, positions, cfg, sizes=sizes)
 
     assert torch.isclose(masked_delta_e, torch.tensor([0.0])).all()
     assert torch.isfinite(masked_angle).all(), f"Expected finite masked annihilation angle, got {masked_angle}"
@@ -744,7 +688,6 @@ def test_bg_angle_matrix_more_spread_than_signal(real_tensors, density_matrices,
         centers,
         _LABEL_DE,
         "delta_E cumulative distribution (angle pair)",
-        log_x=True,
     )
     axes[0].axhline(0.9, color="gray", ls=":", label="90%")
     axes[0].legend()
@@ -756,7 +699,6 @@ def test_bg_angle_matrix_more_spread_than_signal(real_tensors, density_matrices,
         centers,
         _LABEL_DE,
         "delta_E marginal PDF (angle pair)",
-        log_x=True,
     )
 
     fig.tight_layout()
@@ -1015,20 +957,15 @@ def test_log_ratio_positive_in_signal_region_angle(real_tensors, density_matrice
         f"(angle pair), got {frac_positive:.1%}"
     )
 
-    # --- W&B plot ---
-    fig, ax = plt.subplots(figsize=(8, 5))
-    _plot_log_ratio(
-        ax,
-        bdecay,
-        bg,
-        dm["x_bins_angle"],
-        dm["y_bins_angle"],
-        f"log(P_signal/P_bg) — angle pair   ({frac_positive:.1%} positive in signal region)",
-        _LABEL_DE,
-        _LABEL_ANGLE,
-    )
+    # --- W&B plot: side-by-side signal vs background ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _plot_heatmap(axes[0], bdecay, dm["x_bins_angle"], dm["y_bins_angle"],
+                  "Beta-decay density (angle pair)", _LABEL_DE, _LABEL_ANGLE)
+    _plot_heatmap(axes[1], bg, dm["x_bins_angle"], dm["y_bins_angle"],
+                  "Background density (angle pair)", _LABEL_DE, _LABEL_ANGLE, cmap="plasma")
+    fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
-    wandb.log({"test/log_ratio_angle": wandb.Image(fig)})
+    wandb.log({"test/signal_vs_bg_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1056,20 +993,15 @@ def test_log_ratio_positive_in_signal_region_arm(real_tensors, density_matrices,
         f"(ARM pair), got {frac_positive:.1%}"
     )
 
-    # --- W&B plot ---
-    fig, ax = plt.subplots(figsize=(8, 5))
-    _plot_log_ratio(
-        ax,
-        bdecay,
-        bg,
-        dm["x_bins_arm"],
-        dm["y_bins_arm"],
-        f"log(P_signal/P_bg) — ARM pair   ({frac_positive:.1%} positive in signal region)",
-        _LABEL_DE,
-        _LABEL_ARM,
-    )
+    # --- W&B plot: side-by-side signal vs background ---
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _plot_heatmap(axes[0], bdecay, dm["x_bins_arm"], dm["y_bins_arm"],
+                  "Beta-decay density (ARM pair)", _LABEL_DE, _LABEL_ARM)
+    _plot_heatmap(axes[1], bg, dm["x_bins_arm"], dm["y_bins_arm"],
+                  "Background density (ARM pair)", _LABEL_DE, _LABEL_ARM, cmap="plasma")
+    fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
-    wandb.log({"test/log_ratio_arm": wandb.Image(fig)})
+    wandb.log({"test/signal_vs_bg_arm": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1116,26 +1048,17 @@ def test_majority_of_true_events_higher_bdecay_density_angle(real_tensors, densi
         f"(angle pair), got {accuracy:.1%} (n={n_valid})"
     )
 
-    # --- W&B plot: scatter true events on log-ratio background ---
+    # --- W&B plot: true events scattered on the bdecay density heatmap ---
     fig, ax = plt.subplots(figsize=(9, 5))
-    _plot_log_ratio(
-        ax,
-        dm["bdecay_angle"],
-        dm["bg_angle"],
-        dm["x_bins_angle"],
-        dm["y_bins_angle"],
-        f"True bdecay events on log-ratio (angle)  acc={accuracy:.1%}",
-        _LABEL_DE,
-        _LABEL_ANGLE,
-    )
-    dE_true = _to_np(t["gen_tensor_delta_E"][gt])[:500]
+    _plot_heatmap(ax, dm["bdecay_angle"], dm["x_bins_angle"], dm["y_bins_angle"],
+                  f"True bdecay events on signal density (angle)  acc={accuracy:.1%}",
+                  _LABEL_DE, _LABEL_ANGLE)
+    dE_true    = _to_np(t["gen_tensor_delta_E"][gt])[:500]
     angle_true = _to_np(t["gen_tensor_annihilation_angle"][gt])[:500]
-    ax.scatter(
-        np.clip(dE_true, 1e-3, None), angle_true, s=4, c="white", alpha=0.5, label="True events (n≤500)"
-    )
+    ax.scatter(dE_true, angle_true, s=4, c="red", alpha=0.5, label="True events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/true_events_angle_log_ratio": wandb.Image(fig)})
+    wandb.log({"test/true_events_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1173,24 +1096,17 @@ def test_majority_of_true_events_higher_bdecay_density_arm(real_tensors, density
         f"(ARM pair), got {accuracy:.1%} (n={n_valid})"
     )
 
-    # --- W&B plot ---
+    # --- W&B plot: true events scattered on the bdecay density heatmap ---
     fig, ax = plt.subplots(figsize=(9, 5))
-    _plot_log_ratio(
-        ax,
-        dm["bdecay_arm"],
-        dm["bg_arm"],
-        dm["x_bins_arm"],
-        dm["y_bins_arm"],
-        f"True bdecay events on log-ratio (ARM)  acc={accuracy:.1%}",
-        _LABEL_DE,
-        _LABEL_ARM,
-    )
-    dE_true = _to_np(t["gen_tensor_delta_E"][gt])[:500]
+    _plot_heatmap(ax, dm["bdecay_arm"], dm["x_bins_arm"], dm["y_bins_arm"],
+                  f"True bdecay events on signal density (ARM)  acc={accuracy:.1%}",
+                  _LABEL_DE, _LABEL_ARM)
+    dE_true  = _to_np(t["gen_tensor_delta_E"][gt])[:500]
     arm_true = _to_np(t["gen_tensor_arm"][gt])[:500]
-    ax.scatter(np.clip(dE_true, 1e-3, None), arm_true, s=4, c="white", alpha=0.5, label="True events (n≤500)")
+    ax.scatter(dE_true, arm_true, s=4, c="red", alpha=0.5, label="True events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/true_events_arm_log_ratio": wandb.Image(fig)})
+    wandb.log({"test/true_events_arm": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1229,26 +1145,17 @@ def test_majority_of_false_events_higher_bg_density_angle(real_tensors, density_
         f"(angle pair), got {accuracy:.1%} (n={n_valid})"
     )
 
-    # --- W&B plot ---
+    # --- W&B plot: background events scattered on the bg density heatmap ---
     fig, ax = plt.subplots(figsize=(9, 5))
-    _plot_log_ratio(
-        ax,
-        dm["bdecay_angle"],
-        dm["bg_angle"],
-        dm["x_bins_angle"],
-        dm["y_bins_angle"],
-        f"Background events on log-ratio (angle)  acc={accuracy:.1%}",
-        _LABEL_DE,
-        _LABEL_ANGLE,
-    )
-    dE_bg = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
+    _plot_heatmap(ax, dm["bg_angle"], dm["x_bins_angle"], dm["y_bins_angle"],
+                  f"Background events on bg density (angle)  acc={accuracy:.1%}",
+                  _LABEL_DE, _LABEL_ANGLE, cmap="plasma")
+    dE_bg    = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
     angle_bg = _to_np(t["gen_tensor_annihilation_angle"][~gt])[:500]
-    ax.scatter(
-        np.clip(dE_bg, 1e-3, None), angle_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)"
-    )
+    ax.scatter(dE_bg, angle_bg, s=2, c="white", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/false_events_angle_log_ratio": wandb.Image(fig)})
+    wandb.log({"test/false_events_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1286,24 +1193,15 @@ def test_majority_of_false_events_higher_bg_density_arm(real_tensors, density_ma
         f"(ARM pair), got {accuracy:.1%} (n={n_valid})"
     )
 
-    # --- W&B plot ---
+    # --- W&B plot: background events scattered on the bg density heatmap ---
     fig, ax = plt.subplots(figsize=(9, 5))
-    _plot_log_ratio(
-        ax,
-        dm["bdecay_arm"],
-        dm["bg_arm"],
-        dm["x_bins_arm"],
-        dm["y_bins_arm"],
-        f"Background events on log-ratio (ARM)  acc={accuracy:.1%}",
-        _LABEL_DE,
-        _LABEL_ARM,
-    )
-    dE_bg = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
+    _plot_heatmap(ax, dm["bg_arm"], dm["x_bins_arm"], dm["y_bins_arm"],
+                  f"Background events on bg density (ARM)  acc={accuracy:.1%}",
+                  _LABEL_DE, _LABEL_ARM, cmap="plasma")
+    dE_bg  = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
     arm_bg = _to_np(t["gen_tensor_arm"][~gt])[:500]
-    ax.scatter(
-        np.clip(dE_bg, 1e-3, None), arm_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)"
-    )
+    ax.scatter(dE_bg, arm_bg, s=2, c="white", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/false_events_arm_log_ratio": wandb.Image(fig)})
+    wandb.log({"test/false_events_arm": wandb.Image(fig)})
     plt.close(fig)
