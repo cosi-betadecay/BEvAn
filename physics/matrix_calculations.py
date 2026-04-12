@@ -154,9 +154,9 @@ def arm(
     if positions.shape[1] < 3:
         return positions.new_tensor(1.0)  # TODO: find a good replacement for this that actually makes sense
 
-    arm = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
+    arm_value = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
 
-    return arm
+    return arm_value
 
 
 def delta_E(
