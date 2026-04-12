@@ -119,7 +119,7 @@ def annihilation_angle(
         cosines = all_vector_cosines_blockwise(positions)
 
     if cosines.numel() == 0:
-        return positions.new_tensor(float("nan"))
+        return positions.new_tensor(float("nan")).reshape(1)
 
     angle_diffs = torch.abs(cosines + 1.0)
 
