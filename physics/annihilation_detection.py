@@ -3,7 +3,6 @@ import omegaconf
 from physics.annihilation_detection_utils import (
     build_density_matrices,
     compute_event_features,
-    create_tensors,
     predict,
 )
 from utils.reader_extraction import get_reader
@@ -17,18 +16,6 @@ def annihilation_extractor(
 
     (
         ground_truths,
-        bdecay_list_delta_E,
-        bdecay_list_annihilation_angle,
-        bdecay_list_arm,
-        bg_list_delta_E,
-        bg_list_annihilation_angle,
-        bg_list_arm,
-        gen_list_delta_E,
-        gen_list_annihilation_angle,
-        gen_list_arm,
-    ) = compute_event_features(cfg, ref_energy, reader)
-
-    (
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
         bdecay_tensor_arm,
@@ -41,17 +28,7 @@ def annihilation_extractor(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
         combined_tensor_arm,
-    ) = create_tensors(
-        bdecay_list_delta_E,
-        bdecay_list_annihilation_angle,
-        bdecay_list_arm,
-        bg_list_delta_E,
-        bg_list_annihilation_angle,
-        bg_list_arm,
-        gen_list_delta_E,
-        gen_list_annihilation_angle,
-        gen_list_arm,
-    )
+    ) = compute_event_features(cfg, ref_energy, reader)
 
     n_beta_deltaE_annihilation_angle, n_bg_deltaE_annihilation_angle, n_beta_deltaE_arm, n_bg_deltaE_arm = (
         build_density_matrices(

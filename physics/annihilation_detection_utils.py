@@ -1,4 +1,7 @@
+from typing import Any
+
 import matplotlib.pyplot as plt
+import omegaconf
 import ROOT as M
 import torch
 import wandb
@@ -17,7 +20,7 @@ from physics.matrix_calculations import (
 from utils.plots import plot_confusion_matrix
 
 
-def compute_event_features(cfg, ref_energy, reader):
+def compute_event_features(cfg: omegaconf.dictconfig.DictConfig, ref_energy: int, reader: Any):
     ground_truths = []
 
     # Lists beta decay
@@ -76,31 +79,10 @@ def compute_event_features(cfg, ref_energy, reader):
             bg_list_delta_E.append(_delta_E)
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
-    return (
-        ground_truths,
-        bdecay_list_delta_E,
-        bdecay_list_annihilation_angle,
-        bdecay_list_arm,
-        bg_list_delta_E,
-        bg_list_annihilation_angle,
-        bg_list_arm,
-        gen_list_delta_E,
-        gen_list_annihilation_angle,
-        gen_list_arm,
-    )
 
-
-def create_tensors(
-    bdecay_list_delta_E,
-    bdecay_list_annihilation_angle,
-    bdecay_list_arm,
-    bg_list_delta_E,
-    bg_list_annihilation_angle,
-    bg_list_arm,
-    gen_list_delta_E,
-    gen_list_annihilation_angle,
-    gen_list_arm,
-):
+    # Convert ground truth list to tensor
+    ground_truths = torch.tensor(ground_truths, dtype=torch.float32)
+    # Convert beta decay lists to tensor
     bdecay_tensor_delta_E = torch.tensor(bdecay_list_delta_E, dtype=torch.float32)
     bdecay_tensor_annihilation_angle = torch.tensor(bdecay_list_annihilation_angle, dtype=torch.float32)
     bdecay_tensor_arm = torch.tensor(bdecay_list_arm, dtype=torch.float32)
@@ -118,7 +100,9 @@ def create_tensors(
         [bdecay_tensor_annihilation_angle, bg_tensor_annihilation_angle]
     )
     combined_tensor_arm = torch.cat([bdecay_tensor_arm, bg_tensor_arm])
+
     return (
+        ground_truths,
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
         bdecay_tensor_arm,
@@ -148,6 +132,7 @@ def build_density_matrices(
     combined_tensor_annihilation_angle,
     combined_tensor_arm,
 ):
+    # Building general density matrices
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
@@ -156,7 +141,7 @@ def build_density_matrices(
         combined_tensor_delta_E,
         combined_tensor_arm,
     )
-
+    # Building density matrices for beta decay
     bdecay_matrix_deltaE_vs_annihilation_angle, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
