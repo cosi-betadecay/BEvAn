@@ -73,7 +73,7 @@ def _plot_heatmap(
     title: str,
     x_label: str,
     y_label: str,
-    cmap: str = "viridis",
+    cmap: str = "viridis_r",
 ) -> None:
     """Draw a 2D probability heatmap using pcolormesh with a log colour scale.
 
@@ -654,7 +654,7 @@ def test_bdecay_arm_matrix_peaked_near_zero(real_tensors, density_matrices, wand
         "Beta-decay: delta_E vs ARM",
         _LABEL_DE,
         _LABEL_ARM,
-        cmap="plasma",
+        cmap="plasma_r",
     )
     median_arm = float(_to_np(dm["y_bins_arm"])[median_bin])
     ax.axhline(y=median_arm, color="red", ls="--", label=f"ARM median = {median_arm:.3f} rad")
@@ -757,7 +757,7 @@ def test_bg_arm_matrix_not_peaked_at_zero(real_tensors, density_matrices, wandb_
         "Beta-decay: delta_E vs ARM",
         _LABEL_DE,
         _LABEL_ARM,
-        cmap="viridis",
+        cmap="viridis_r",
     )
     _plot_heatmap(
         axes[1],
@@ -767,7 +767,7 @@ def test_bg_arm_matrix_not_peaked_at_zero(real_tensors, density_matrices, wandb_
         "Background: delta_E vs ARM",
         _LABEL_DE,
         _LABEL_ARM,
-        cmap="plasma",
+        cmap="plasma_r",
     )
     _plot_1d_overlay(axes[2], bdecay_arm_marginal, bg_arm_marginal, centers, _LABEL_ARM, "ARM marginal PDF")
 
@@ -820,7 +820,7 @@ def test_signal_entropy_lower_than_background_angle_feature(real_tensors, densit
         f"Background  H={h_bg:.2f} nats",
         _LABEL_DE,
         _LABEL_ANGLE,
-        cmap="plasma",
+        cmap="plasma_r",
     )
     fig.suptitle("Entropy comparison — angle feature pair", fontsize=12)
     fig.tight_layout()
@@ -863,7 +863,7 @@ def test_signal_entropy_lower_than_background_arm_feature(real_tensors, density_
         f"Background  H={h_bg:.2f} nats",
         _LABEL_DE,
         _LABEL_ARM,
-        cmap="plasma",
+        cmap="plasma_r",
     )
     fig.suptitle("Entropy comparison — ARM feature pair", fontsize=12)
     fig.tight_layout()
@@ -904,7 +904,7 @@ def test_angle_matrices_distinguishable_by_total_variation(real_tensors, density
         f"|P_bdecay − P_bg| (angle pair)   TV = {tv:.3f}",
         _LABEL_DE,
         _LABEL_ANGLE,
-        cmap="hot",
+        cmap="hot_r",
     )
     fig.tight_layout()
     wandb.log({"test/tv_distance_angle": wandb.Image(fig)})
@@ -935,7 +935,7 @@ def test_arm_matrices_distinguishable_by_total_variation(real_tensors, density_m
         f"|P_bdecay − P_bg| (ARM pair)   TV = {tv:.3f}",
         _LABEL_DE,
         _LABEL_ARM,
-        cmap="hot",
+        cmap="hot_r",
     )
     fig.tight_layout()
     wandb.log({"test/tv_distance_arm": wandb.Image(fig)})
@@ -975,7 +975,7 @@ def test_log_ratio_positive_in_signal_region_angle(real_tensors, density_matrice
     _plot_heatmap(axes[0], bdecay, dm["x_bins_angle"], dm["y_bins_angle"],
                   "Beta-decay density (angle pair)", _LABEL_DE, _LABEL_ANGLE)
     _plot_heatmap(axes[1], bg, dm["x_bins_angle"], dm["y_bins_angle"],
-                  "Background density (angle pair)", _LABEL_DE, _LABEL_ANGLE, cmap="plasma")
+                  "Background density (angle pair)", _LABEL_DE, _LABEL_ANGLE, cmap="plasma_r")
     fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
     wandb.log({"test/signal_vs_bg_angle": wandb.Image(fig)})
@@ -1011,7 +1011,7 @@ def test_log_ratio_positive_in_signal_region_arm(real_tensors, density_matrices,
     _plot_heatmap(axes[0], bdecay, dm["x_bins_arm"], dm["y_bins_arm"],
                   "Beta-decay density (ARM pair)", _LABEL_DE, _LABEL_ARM)
     _plot_heatmap(axes[1], bg, dm["x_bins_arm"], dm["y_bins_arm"],
-                  "Background density (ARM pair)", _LABEL_DE, _LABEL_ARM, cmap="plasma")
+                  "Background density (ARM pair)", _LABEL_DE, _LABEL_ARM, cmap="plasma_r")
     fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
     wandb.log({"test/signal_vs_bg_arm": wandb.Image(fig)})
@@ -1162,10 +1162,10 @@ def test_majority_of_false_events_higher_bg_density_angle(real_tensors, density_
     fig, ax = plt.subplots(figsize=(9, 5))
     _plot_heatmap(ax, dm["bg_angle"], dm["x_bins_angle"], dm["y_bins_angle"],
                   f"Background events on bg density (angle)  acc={accuracy:.1%}",
-                  _LABEL_DE, _LABEL_ANGLE, cmap="plasma")
+                  _LABEL_DE, _LABEL_ANGLE, cmap="plasma_r")
     dE_bg    = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
     angle_bg = _to_np(t["gen_tensor_annihilation_angle"][~gt])[:500]
-    ax.scatter(dE_bg, angle_bg, s=2, c="white", alpha=0.3, label="Background events (n≤500)")
+    ax.scatter(dE_bg, angle_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
     wandb.log({"test/false_events_angle": wandb.Image(fig)})
@@ -1210,10 +1210,10 @@ def test_majority_of_false_events_higher_bg_density_arm(real_tensors, density_ma
     fig, ax = plt.subplots(figsize=(9, 5))
     _plot_heatmap(ax, dm["bg_arm"], dm["x_bins_arm"], dm["y_bins_arm"],
                   f"Background events on bg density (ARM)  acc={accuracy:.1%}",
-                  _LABEL_DE, _LABEL_ARM, cmap="plasma")
+                  _LABEL_DE, _LABEL_ARM, cmap="plasma_r")
     dE_bg  = _to_np(t["gen_tensor_delta_E"][~gt])[:500]
     arm_bg = _to_np(t["gen_tensor_arm"][~gt])[:500]
-    ax.scatter(dE_bg, arm_bg, s=2, c="white", alpha=0.3, label="Background events (n≤500)")
+    ax.scatter(dE_bg, arm_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
     wandb.log({"test/false_events_arm": wandb.Image(fig)})
