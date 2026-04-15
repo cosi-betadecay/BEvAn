@@ -1,7 +1,33 @@
-from typing import Any
+"""β⁺-decay vs background classifier built on a Zoglauer-style Bayesian scheme.
+
+This module adapts the Bayesian Compton Sequence Reconstruction (B-CSR)
+methodology from Zoglauer's PhD §4.5.3. The original B-CSR classifies
+*correct vs wrong interaction sequence* for a single γ-ray; here the same
+likelihood-ratio framework is repurposed to classify *β⁺-decay vs background*
+events.
+
+Scope / current implementation
+------------------------------
+Sub-spaces used: (ΔE), (annihilation_angle | ΔE), (ARM | ΔE).
+ΔE is factored out of the two 2D joints P(ΔE, y) via
+``conditional_from_joint`` so it contributes to the likelihood ratio exactly
+once, matching the ``Π_i p(m_i | C)`` independence assumption of eq. 4.26.
+
+Intentionally omitted (future work, not part of the present implementation):
+    * Compton-absorption probability a_C sub-space (§4.5.3 central interaction).
+    * Photo-absorption probability a_P sub-space (final interaction).
+    * Geometric distance factor d_E.
+    * Detector-type dimension and interaction-multiplicity N.
+    * Separate dθ-criterion sub-space for tracked electrons.
+
+Likelihood-ratio form (Zoglauer eq. 4.26 adapted):
+    R = [P(β)/P(bg)] · [P_β(ΔE)/P_bg(ΔE)]
+                     · [P_β(angle|ΔE)/P_bg(angle|ΔE)]
+                     · [P_β(ARM|ΔE)/P_bg(ARM|ΔE)]
+    p(β | m) = R / (R + 1)
+"""
 
 import matplotlib.pyplot as plt
-import omegaconf
 import ROOT as M
 import torch
 import wandb
@@ -14,13 +40,16 @@ from physics.matrix_calculations import (
     annihilation_angle,
     arm,
     build_density_matrix,
+    build_density_matrix_1d,
+    conditional_from_joint,
     delta_E,
     lookup_density_values,
+    lookup_density_values_1d,
 )
 from utils.plots import plot_confusion_matrix
 
 
-def compute_event_features(cfg: omegaconf.dictconfig.DictConfig, ref_energy: int, reader: Any):
+def compute_event_features(cfg, ref_energy, reader):
     ground_truths = []
 
     # Lists beta decay
@@ -79,10 +108,31 @@ def compute_event_features(cfg: omegaconf.dictconfig.DictConfig, ref_energy: int
             bg_list_delta_E.append(_delta_E)
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
+    return (
+        ground_truths,
+        bdecay_list_delta_E,
+        bdecay_list_annihilation_angle,
+        bdecay_list_arm,
+        bg_list_delta_E,
+        bg_list_annihilation_angle,
+        bg_list_arm,
+        gen_list_delta_E,
+        gen_list_annihilation_angle,
+        gen_list_arm,
+    )
 
-    # Convert ground truth list to tensor
-    ground_truths = torch.tensor(ground_truths, dtype=torch.float32)
-    # Convert beta decay lists to tensor
+
+def create_tensors(
+    bdecay_list_delta_E,
+    bdecay_list_annihilation_angle,
+    bdecay_list_arm,
+    bg_list_delta_E,
+    bg_list_annihilation_angle,
+    bg_list_arm,
+    gen_list_delta_E,
+    gen_list_annihilation_angle,
+    gen_list_arm,
+):
     bdecay_tensor_delta_E = torch.tensor(bdecay_list_delta_E, dtype=torch.float32)
     bdecay_tensor_annihilation_angle = torch.tensor(bdecay_list_annihilation_angle, dtype=torch.float32)
     bdecay_tensor_arm = torch.tensor(bdecay_list_arm, dtype=torch.float32)
@@ -100,9 +150,7 @@ def compute_event_features(cfg: omegaconf.dictconfig.DictConfig, ref_energy: int
         [bdecay_tensor_annihilation_angle, bg_tensor_annihilation_angle]
     )
     combined_tensor_arm = torch.cat([bdecay_tensor_arm, bg_tensor_arm])
-
     return (
-        ground_truths,
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
         bdecay_tensor_arm,
@@ -132,7 +180,22 @@ def build_density_matrices(
     combined_tensor_annihilation_angle,
     combined_tensor_arm,
 ):
-    # Building general density matrices
+    """Build the Zoglauer-style likelihood factors for β vs bg classification.
+
+    ΔE appears in both 2D joints (ΔE × angle, ΔE × ARM). To avoid
+    double-counting it when the likelihood ratio multiplies the two
+    sub-spaces, each 2D joint is factored as P(ΔE, y) = P(ΔE) · P(y | ΔE),
+    and only one ΔE marginal is kept.
+
+    Returns six per-event likelihood tensors ordered as
+        (P_β(ΔE),   P_bg(ΔE),
+         P_β(angle | ΔE), P_bg(angle | ΔE),
+         P_β(ARM   | ΔE), P_bg(ARM   | ΔE))
+    all of length ``len(gen_tensor_delta_E)``. Out-of-support events return
+    0.0 (no evidence) — see ``lookup_density_values``.
+    """
+    # Shared bin edges derived from the combined (bdecay + bg) population so
+    # that bdecay and bg matrices live on the same grid.
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
@@ -141,100 +204,148 @@ def build_density_matrices(
         combined_tensor_delta_E,
         combined_tensor_arm,
     )
-    # Building density matrices for beta decay
-    bdecay_matrix_deltaE_vs_annihilation_angle, _, _ = build_density_matrix(
+
+    # --- 2D joints per class (needed to derive the angle|ΔE and ARM|ΔE
+    #     conditionals) ---
+    bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
     )
-    bdecay_matrix_deltaE_vs_arm, _, _ = build_density_matrix(
+    bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
     )
-    # Building density matrices for background
-    bg_matrix_deltaE_vs_annihilation_angle, _, _ = build_density_matrix(
+    bg_joint_deltaE_angle, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
     )
-    bg_matrix_deltaE_vs_arm, _, _ = build_density_matrix(
+    bg_joint_deltaE_arm, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
     )
 
-    n_beta_deltaE_annihilation_angle = lookup_density_values(
+    # --- ΔE marginals (1D). Use the same deltaE_angle_bins as the canonical
+    #     ΔE grid; the arm-pair grid has the same support since it is derived
+    #     from the same combined ΔE tensor, but may differ in the last bin
+    #     due to floating-point ties. We build both 1D marginals independently
+    #     so lookups use matching edges. ---
+    bdecay_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(
+        bdecay_tensor_delta_E, x_bins=deltaE_angle_bins
+    )
+    bg_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(bg_tensor_delta_E, x_bins=deltaE_angle_bins)
+
+    # --- Conditionals P(y | ΔE) per class, by row-normalizing the joint. ---
+    bdecay_cond_angle = conditional_from_joint(bdecay_joint_deltaE_angle, axis=0)
+    bdecay_cond_arm = conditional_from_joint(bdecay_joint_deltaE_arm, axis=0)
+    bg_cond_angle = conditional_from_joint(bg_joint_deltaE_angle, axis=0)
+    bg_cond_arm = conditional_from_joint(bg_joint_deltaE_arm, axis=0)
+
+    # --- Per-event lookups ---
+    p_beta_deltaE = lookup_density_values_1d(
+        gen_tensor_delta_E, bdecay_marginal_deltaE_angle_grid, deltaE_angle_bins
+    )
+    p_bg_deltaE = lookup_density_values_1d(
+        gen_tensor_delta_E, bg_marginal_deltaE_angle_grid, deltaE_angle_bins
+    )
+
+    p_beta_angle_given_deltaE = lookup_density_values(
         gen_tensor_delta_E,
         gen_tensor_annihilation_angle,
-        bdecay_matrix_deltaE_vs_annihilation_angle,
+        bdecay_cond_angle,
         deltaE_angle_bins,
         angle_bins,
     )
-    n_bg_deltaE_annihilation_angle = lookup_density_values(
+    p_bg_angle_given_deltaE = lookup_density_values(
         gen_tensor_delta_E,
         gen_tensor_annihilation_angle,
-        bg_matrix_deltaE_vs_annihilation_angle,
+        bg_cond_angle,
         deltaE_angle_bins,
         angle_bins,
     )
-    n_beta_deltaE_arm = lookup_density_values(
+    p_beta_arm_given_deltaE = lookup_density_values(
         gen_tensor_delta_E,
         gen_tensor_arm,
-        bdecay_matrix_deltaE_vs_arm,
+        bdecay_cond_arm,
         deltaE_arm_bins,
         arm_bins,
     )
-    n_bg_deltaE_arm = lookup_density_values(
+    p_bg_arm_given_deltaE = lookup_density_values(
         gen_tensor_delta_E,
         gen_tensor_arm,
-        bg_matrix_deltaE_vs_arm,
+        bg_cond_arm,
         deltaE_arm_bins,
         arm_bins,
     )
 
     return (
-        n_beta_deltaE_annihilation_angle,
-        n_bg_deltaE_annihilation_angle,
-        n_beta_deltaE_arm,
-        n_bg_deltaE_arm,
+        p_beta_deltaE,
+        p_bg_deltaE,
+        p_beta_angle_given_deltaE,
+        p_bg_angle_given_deltaE,
+        p_beta_arm_given_deltaE,
+        p_bg_arm_given_deltaE,
     )
 
 
 def R(
-    n_beta_deltaE_annihilation_angle: torch.Tensor,
-    n_bg_deltaE_annihilation_angle: torch.Tensor,
-    n_beta_deltaE_arm: torch.Tensor,
-    n_bg_deltaE_arm: torch.Tensor,
+    p_beta_deltaE: torch.Tensor,
+    p_bg_deltaE: torch.Tensor,
+    p_beta_angle_given_deltaE: torch.Tensor,
+    p_bg_angle_given_deltaE: torch.Tensor,
+    p_beta_arm_given_deltaE: torch.Tensor,
+    p_bg_arm_given_deltaE: torch.Tensor,
     eps: float = 1e-8,
 ) -> torch.Tensor:
+    """Likelihood-ratio Π_i P(m_i | β) / P(m_i | bg) with ΔE counted once.
+
+    Corresponds to Zoglauer eq. 4.26 without the ``p(C)/p(C̄)`` prior; the
+    prior is applied downstream in :class:`BayesianAnnihiliationModel`.
+    """
     log_r = (
-        torch.log(n_beta_deltaE_annihilation_angle + eps)
-        - torch.log(n_bg_deltaE_annihilation_angle + eps)
-        + torch.log(n_beta_deltaE_arm + eps)
-        - torch.log(n_bg_deltaE_arm + eps)
+        torch.log(p_beta_deltaE + eps)
+        - torch.log(p_bg_deltaE + eps)
+        + torch.log(p_beta_angle_given_deltaE + eps)
+        - torch.log(p_bg_angle_given_deltaE + eps)
+        + torch.log(p_beta_arm_given_deltaE + eps)
+        - torch.log(p_bg_arm_given_deltaE + eps)
     )
     return torch.exp(log_r)
 
 
 def predict(
     ground_truths,
-    n_beta_deltaE_annihilation_angle,
-    n_bg_deltaE_annihilation_angle,
-    n_beta_deltaE_arm,
-    n_bg_deltaE_arm,
+    p_beta_deltaE,
+    p_bg_deltaE,
+    p_beta_angle_given_deltaE,
+    p_bg_angle_given_deltaE,
+    p_beta_arm_given_deltaE,
+    p_bg_arm_given_deltaE,
+    n_beta_decay: int,
+    n_bg: int,
 ):
+    """Classify events, apply the class prior, log diagnostics.
+
+    ``n_beta_decay`` and ``n_bg`` are the *training* class counts — used as
+    the ``p(β) / p(bg)`` prior in Bayes' theorem. They must be derived from
+    the tensors passed to :func:`build_density_matrices`, not hard-coded.
+    """
     ratio = R(
-        n_beta_deltaE_annihilation_angle,
-        n_bg_deltaE_annihilation_angle,
-        n_beta_deltaE_arm,
-        n_bg_deltaE_arm,
+        p_beta_deltaE,
+        p_bg_deltaE,
+        p_beta_angle_given_deltaE,
+        p_bg_angle_given_deltaE,
+        p_beta_arm_given_deltaE,
+        p_bg_arm_given_deltaE,
     )
-    predictions = BayesianAnnihiliationModel(ratio, 2360, 50572).inference()
+    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
 
     tp = torch.sum(ground_truths & predictions).item()
