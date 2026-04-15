@@ -33,3 +33,6 @@ uv.lock
 
 # Claude
 /.claude
+
+# Logs
+*.log
