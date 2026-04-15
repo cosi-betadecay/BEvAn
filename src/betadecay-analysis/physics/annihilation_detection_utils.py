@@ -37,15 +37,13 @@ from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.matrix_calculations import (
-    annihilation_angle,
-    arm,
     build_density_matrix,
     build_density_matrix_1d,
     conditional_from_joint,
-    delta_E,
     lookup_density_values,
     lookup_density_values_1d,
 )
+from physics.matrix_calculations_factors import annihilation_angle, arm, delta_E
 from utils.plots import plot_confusion_matrix
 
 
