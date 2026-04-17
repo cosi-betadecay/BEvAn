@@ -1,7 +1,7 @@
 import torch
 
 
-def calculate_tolerance(n_std: int = 1) -> float:
+def calculate_tolerance(n_std: int = 3) -> float:
     """Calculate the physically motivated energy tolerance for 511 keV detection.
 
     This function converts the detector's energy resolution, given as a full width
