@@ -67,6 +67,7 @@ def _average_precision(labels, scores):
 def test_roc_curve(real_posterior_scores, wandb_run):
     model = real_posterior_scores["model"]
     valid = real_posterior_scores["valid"]
+    n_bins = real_posterior_scores["n_bins"]
     scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
     labels = real_posterior_scores["labels"][valid]
 
@@ -84,12 +85,17 @@ def test_roc_curve(real_posterior_scores, wandb_run):
     ax.plot([0, 1], [0, 1], "--", color="gray", label="chance")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
-    ax.set_title("ROC — P(β | D) vs truth (Activation.sim)")
+    ax.set_title(f"ROC — P(β | D) vs truth (n_bins={n_bins})")
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
     ax.legend(loc="lower right")
 
-    wandb_run.log({"roc/auc": auc, "roc/curve": wandb.Image(fig)})
+    wandb_run.log(
+        {
+            f"roc/n_bins={n_bins}/auc": auc,
+            f"roc/n_bins={n_bins}/curve": wandb.Image(fig),
+        }
+    )
     plt.close(fig)
 
 
@@ -101,6 +107,7 @@ def test_roc_curve(real_posterior_scores, wandb_run):
 def test_precision_recall_curve(real_posterior_scores, wandb_run):
     model = real_posterior_scores["model"]
     valid = real_posterior_scores["valid"]
+    n_bins = real_posterior_scores["n_bins"]
     scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
     labels = real_posterior_scores["labels"][valid]
 
@@ -123,16 +130,16 @@ def test_precision_recall_curve(real_posterior_scores, wandb_run):
     )
     ax.set_xlabel("Recall (efficiency)")
     ax.set_ylabel("Precision (purity)")
-    ax.set_title("Precision-Recall — P(β | D) vs truth (Activation.sim)")
+    ax.set_title(f"Precision-Recall — P(β | D) vs truth (n_bins={n_bins})")
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.05)
     ax.legend(loc="lower left")
 
     wandb_run.log(
         {
-            "pr/average_precision": ap,
-            "pr/prevalence": prevalence,
-            "pr/curve": wandb.Image(fig),
+            f"pr/n_bins={n_bins}/average_precision": ap,
+            f"pr/n_bins={n_bins}/prevalence": prevalence,
+            f"pr/n_bins={n_bins}/curve": wandb.Image(fig),
         }
     )
     plt.close(fig)
@@ -146,6 +153,7 @@ def test_precision_recall_curve(real_posterior_scores, wandb_run):
 def test_score_distribution_per_class(real_posterior_scores, wandb_run):
     model = real_posterior_scores["model"]
     valid = real_posterior_scores["valid"]
+    n_bins = real_posterior_scores["n_bins"]
     scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
     labels = real_posterior_scores["labels"][valid]
 
@@ -181,16 +189,16 @@ def test_score_distribution_per_class(real_posterior_scores, wandb_run):
     )
     ax.set_xlabel("P(β | D)")
     ax.set_ylabel("density")
-    ax.set_title("Score distribution per class (Activation.sim)")
+    ax.set_title(f"Score distribution per class — P(β | D) (n_bins={n_bins})")
     ax.legend(loc="upper center")
 
     wandb_run.log(
         {
-            "score_dist/mean_beta": mean_beta,
-            "score_dist/mean_bg": mean_bg,
-            "score_dist/separation": separation,
-            "score_dist/edge_fraction_0_or_1": edge_frac,
-            "score_dist/hist": wandb.Image(fig),
+            f"score_dist/n_bins={n_bins}/mean_beta": mean_beta,
+            f"score_dist/n_bins={n_bins}/mean_bg": mean_bg,
+            f"score_dist/n_bins={n_bins}/separation": separation,
+            f"score_dist/n_bins={n_bins}/edge_fraction_0_or_1": edge_frac,
+            f"score_dist/n_bins={n_bins}/hist": wandb.Image(fig),
         }
     )
     plt.close(fig)
@@ -204,6 +212,7 @@ def test_score_distribution_per_class(real_posterior_scores, wandb_run):
 def test_score_distribution_per_class_bg(real_posterior_scores, wandb_run):
     model = real_posterior_scores["model"]
     valid = real_posterior_scores["valid"]
+    n_bins = real_posterior_scores["n_bins"]
     bg_scores_all = model.background_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
     labels = real_posterior_scores["labels"][valid]
 
@@ -241,16 +250,16 @@ def test_score_distribution_per_class_bg(real_posterior_scores, wandb_run):
     )
     ax.set_xlabel("P(bg | D)")
     ax.set_ylabel("density")
-    ax.set_title("Score distribution per class — P(bg | D) (Activation.sim)")
+    ax.set_title(f"Score distribution per class — P(bg | D) (n_bins={n_bins})")
     ax.legend(loc="upper center")
 
     wandb_run.log(
         {
-            "score_dist_bg/mean_beta": mean_beta,
-            "score_dist_bg/mean_bg": mean_bg,
-            "score_dist_bg/separation": separation,
-            "score_dist_bg/edge_fraction_0_or_1": edge_frac,
-            "score_dist_bg/hist": wandb.Image(fig),
+            f"score_dist_bg/n_bins={n_bins}/mean_beta": mean_beta,
+            f"score_dist_bg/n_bins={n_bins}/mean_bg": mean_bg,
+            f"score_dist_bg/n_bins={n_bins}/separation": separation,
+            f"score_dist_bg/n_bins={n_bins}/edge_fraction_0_or_1": edge_frac,
+            f"score_dist_bg/n_bins={n_bins}/hist": wandb.Image(fig),
         }
     )
     plt.close(fig)
