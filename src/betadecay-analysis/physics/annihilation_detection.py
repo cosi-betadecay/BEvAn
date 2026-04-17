@@ -1,5 +1,6 @@
 import omegaconf
 import torch
+from utils.reader_extraction import get_reader
 
 from physics.annihilation_detection_utils import (
     build_density_matrices,
@@ -7,7 +8,6 @@ from physics.annihilation_detection_utils import (
     create_tensors,
     predict,
 )
-from utils.reader_extraction import get_reader
 
 
 def annihilation_extractor(

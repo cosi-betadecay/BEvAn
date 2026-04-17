@@ -1,10 +1,16 @@
 import itertools
 from typing import Any
 
+import omegaconf
 import torch
 
+from physics.preprocessing.preprocesser import preprocesser_events
 
-def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+def event_data_processing(
+    event: Any,
+    cfg: omegaconf.dictconfig.DictConfig,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event.GetNHTs()
 
@@ -59,26 +65,9 @@ def event_data_processing(event: Any) -> tuple[torch.Tensor, torch.Tensor, torch
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
 
+    energy_combo, pos_combo = preprocesser_events(energy_combo, pos_combo, 1, cfg.preprocessing)
+
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None, None
 
     return energy_combo, pos_combo, sizes
-
-
-def strip_padding_from_event(
-    energies: torch.Tensor, positions: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if energies.ndim != 1:
-        raise ValueError(
-            f"Expected 1D energies for a single event candidate, got shape {tuple(energies.shape)}"
-        )
-    if positions.ndim != 2 or positions.shape[1] != 3:
-        raise ValueError(f"Expected positions shape (N, 3), got {tuple(positions.shape)}")
-    if positions.shape[0] != energies.shape[0]:
-        raise ValueError(
-            "Energies and positions must have the same leading dimension, "
-            f"got {energies.shape[0]} and {positions.shape[0]}"
-        )
-
-    valid = torch.isfinite(energies) & torch.all(torch.isfinite(positions), dim=1)
-    return energies[valid], positions[valid]
