@@ -1,17 +1,3 @@
-"""
-Session-scoped fixtures for tests_specialized.
-
-Loads the real Activation.sim file through the same MEGAlib/ROOT pipeline used
-in production, builds the Bayesian density model, and yields per-event
-posterior scores P(β | D) paired with ground-truth labels — the (scores,
-labels) pair consumed by the classifier diagnostic tests (ROC, PR, score
-distribution).
-
-Requirements:
-    - MEGALIB environment variable points to a MEGAlib installation.
-    - data/Activation.sim exists relative to the project root.
-"""
-
 import os
 
 import pytest
@@ -31,15 +17,14 @@ from utils.reader_extraction import get_reader
 @pytest.fixture(scope="session")
 def real_posterior_scores():
     """
-    Load data/Activation.sim, run the Bayesian pipeline, and return a dict of
-    numpy arrays:
+    Load data/Activation.sim, run the Bayesian pipeline, and return:
 
-        scores  : P(β | D) per event, float64, shape (n_valid,)
-        labels  : int64 ground-truth labels (1 = β, 0 = bg), shape (n_valid,)
-
-    Events dropped by event_data_processing (NaN features) are filtered out
-    before returning, so `scores` and `labels` contain only classifiable
-    events.
+        model   : BayesianAnnihiliationModel instance (call its methods for
+                  P(β|D), P(bg|D), predictions, etc.)
+        labels  : int64 ground-truth labels (1 = β, 0 = bg)
+        valid   : boolean mask (1D, length = n_events) selecting events that
+                  survived event_data_processing. Apply this mask to whatever
+                  the model returns before pairing with `labels`.
     """
     megalib_root = os.environ["MEGALIB"]
     geo_file = f"{megalib_root}/resource/examples/geomega/special/Max.geo.setup"
@@ -130,18 +115,14 @@ def real_posterior_scores():
         p_bg_arm_given_deltaE,
     )
 
-    posterior_beta = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).beta_decay_given_data_probability()
+    model = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg)
 
-    scores = posterior_beta.detach().cpu().numpy().astype("float64")
+    # Events dropped by event_data_processing propagate NaN through R → ratio.
+    # Compute a reusable validity mask from the ratio itself.
+    valid = torch.isfinite(ratio).numpy()
     labels = torch.tensor(ground_truths, dtype=torch.bool).numpy().astype("int64")
 
-    # Drop events that were dropped by event_data_processing (NaN features
-    # propagate to NaN posterior).
-    valid = ~(scores != scores)  # ~isnan without importing numpy at top
-    scores = scores[valid]
-    labels = labels[valid]
-
-    return {"scores": scores, "labels": labels}
+    return {"model": model, "labels": labels, "valid": valid}
 
 
 @pytest.fixture(scope="session")

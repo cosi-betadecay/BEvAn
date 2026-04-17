@@ -1,27 +1,3 @@
-"""
-1) ROC curve (TPR vs FPR)
-What: parameterize threshold from 0→1, plot TPR(t) vs FPR(t), report AUC.
-Based on: the raw posterior P(β|D) (or equivalently R) for every event, paired with the ground-truth label.
-Tells you: the discriminative power of your likelihood model alone. Prior has no effect on ROC. If ROC is bad, the features or density estimate are bad. If ROC is good, any prior-induced misbehavior is a thresholding choice, not a model failure.
-
-2) Precision-Recall curve
-What: P vs R across thresholds; report average precision (AP).
-Based on: same scores + labels as ROC.
-Tells you: for imbalanced problems PR is more honest than ROC. If your β fraction is, say, 30%, ROC can look good while PR reveals the classifier gets crushed at high recall. Physics audiences tend to prefer efficiency/purity versions of this (same math, different axes).
-
-3) Score distribution per class
-What: two overlaid histograms of P(β|D) (or log R) — one for true β events, one for true bg.
-Based on: same scores + labels.
-Tells you: where the separation happens. A bimodal picture with β peaking near 1 and bg near 0 = good. Heavy overlap near 0.5 = weak features. Spikes at exactly 0 and 1 = you're in the degenerate sparse-bin regime (events whose bin contained only their own class).
-
-Use these libraries at least:
-pytest
-wandb
-matplotlib
-USE THE REAL SIMULATION FILES IN DATA!!! MEANING WE SHOULD USE THE ROOT LIBRARY TOO.
-...
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -89,8 +65,10 @@ def _average_precision(labels, scores):
 
 
 def test_roc_curve(real_posterior_scores, wandb_run):
-    scores = real_posterior_scores["scores"]
-    labels = real_posterior_scores["labels"]
+    model = real_posterior_scores["model"]
+    valid = real_posterior_scores["valid"]
+    scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
+    labels = real_posterior_scores["labels"][valid]
 
     fpr, tpr = _roc_curve(labels, scores)
     auc = _auc(fpr, tpr)
@@ -121,8 +99,10 @@ def test_roc_curve(real_posterior_scores, wandb_run):
 
 
 def test_precision_recall_curve(real_posterior_scores, wandb_run):
-    scores = real_posterior_scores["scores"]
-    labels = real_posterior_scores["labels"]
+    model = real_posterior_scores["model"]
+    valid = real_posterior_scores["valid"]
+    scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
+    labels = real_posterior_scores["labels"][valid]
 
     precision, recall = _precision_recall_curve(labels, scores)
     ap = _average_precision(labels, scores)
@@ -164,8 +144,10 @@ def test_precision_recall_curve(real_posterior_scores, wandb_run):
 
 
 def test_score_distribution_per_class(real_posterior_scores, wandb_run):
-    scores = real_posterior_scores["scores"]
-    labels = real_posterior_scores["labels"]
+    model = real_posterior_scores["model"]
+    valid = real_posterior_scores["valid"]
+    scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
+    labels = real_posterior_scores["labels"][valid]
 
     beta_scores = scores[labels == 1]
     bg_scores = scores[labels == 0]
@@ -209,6 +191,66 @@ def test_score_distribution_per_class(real_posterior_scores, wandb_run):
             "score_dist/separation": separation,
             "score_dist/edge_fraction_0_or_1": edge_frac,
             "score_dist/hist": wandb.Image(fig),
+        }
+    )
+    plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Score Distribution per Class — P(bg | D)
+# --------------------------------------------------------------------------- #
+
+
+def test_score_distribution_per_class_bg(real_posterior_scores, wandb_run):
+    model = real_posterior_scores["model"]
+    valid = real_posterior_scores["valid"]
+    bg_scores_all = model.background_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
+    labels = real_posterior_scores["labels"][valid]
+
+    beta_scores = bg_scores_all[labels == 1]
+    bg_scores = bg_scores_all[labels == 0]
+
+    assert beta_scores.size > 0 and bg_scores.size > 0
+
+    mean_beta = float(beta_scores.mean())
+    mean_bg = float(bg_scores.mean())
+    separation = mean_bg - mean_beta
+    edge_frac = float(np.mean((bg_scores_all == 0.0) | (bg_scores_all == 1.0)))
+
+    # For P(bg | D) the direction of separation flips: true bg events should
+    # have a higher P(bg | D) than true β events.
+    assert mean_bg > mean_beta, (
+        f"True-bg posterior mean ({mean_bg:.3f}) should exceed true-β posterior mean ({mean_beta:.3f})"
+    )
+
+    bins = np.linspace(0.0, 1.0, 41)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.hist(
+        beta_scores,
+        bins=bins,
+        alpha=0.5,
+        density=True,
+        label=f"true β (n={beta_scores.size}, μ={mean_beta:.2f})",
+    )
+    ax.hist(
+        bg_scores,
+        bins=bins,
+        alpha=0.5,
+        density=True,
+        label=f"true bg (n={bg_scores.size}, μ={mean_bg:.2f})",
+    )
+    ax.set_xlabel("P(bg | D)")
+    ax.set_ylabel("density")
+    ax.set_title("Score distribution per class — P(bg | D) (Activation.sim)")
+    ax.legend(loc="upper center")
+
+    wandb_run.log(
+        {
+            "score_dist_bg/mean_beta": mean_beta,
+            "score_dist_bg/mean_bg": mean_bg,
+            "score_dist_bg/separation": separation,
+            "score_dist_bg/edge_fraction_0_or_1": edge_frac,
+            "score_dist_bg/hist": wandb.Image(fig),
         }
     )
     plt.close(fig)
