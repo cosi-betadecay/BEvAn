@@ -2,6 +2,11 @@ import omegaconf
 import torch
 
 
+def reconstruct_incoming_direction():
+    # TODO: Develop/use a reconstruction algorithm to get the incoming direction of particle. This would enable more accurate ARM calculations.
+    return
+
+
 def theta_geo(
     positions: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
 ) -> tuple[torch.Tensor, torch.Tensor]:
