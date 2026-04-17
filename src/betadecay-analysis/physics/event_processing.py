@@ -1,15 +1,11 @@
 import itertools
 from typing import Any
 
-import omegaconf
 import torch
-
-from physics.preprocessing.preprocesser import preprocesser_events
 
 
 def event_data_processing(
     event: Any,
-    cfg: omegaconf.dictconfig.DictConfig,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event.GetNHTs()
@@ -64,8 +60,6 @@ def event_data_processing(
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
-
-    energy_combo, pos_combo = preprocesser_events(energy_combo, pos_combo, 1, cfg.preprocessing)
 
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None, None
