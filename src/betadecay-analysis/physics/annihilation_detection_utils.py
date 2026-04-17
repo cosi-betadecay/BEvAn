@@ -32,6 +32,7 @@ import ROOT as M
 import torch
 import wandb
 from tqdm import tqdm
+from utils.plots import plot_confusion_matrix
 
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
@@ -44,7 +45,6 @@ from physics.matrix_calculations import (
     lookup_density_values_1d,
 )
 from physics.matrix_calculations_factors import annihilation_angle, arm, delta_E
-from utils.plots import plot_confusion_matrix
 
 
 def compute_event_features(cfg, ref_energy, reader):
@@ -106,6 +106,10 @@ def compute_event_features(cfg, ref_energy, reader):
             bg_list_delta_E.append(_delta_E)
             bg_list_annihilation_angle.append(_annihilation_angle)
             bg_list_arm.append(_arm)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     return (
         ground_truths,
         bdecay_list_delta_E,
