@@ -96,7 +96,16 @@ def _plot_heatmap(
     vmin = data[data > 0].min() if (data > 0).any() else 1e-10
     norm = mcolors.LogNorm(vmin=vmin, vmax=data.max())
 
-    im = ax.pcolormesh(xb, yb, data, cmap=cmap, norm=norm)
+    # rasterized=True collapses the ~n_bins² quad patches into a single
+    # raster image at render time — dramatic speedup for fine grids (2000×2000
+    # goes from seconds-per-plot with OOM risk to tens of ms). linewidth=0 +
+    # edgecolors="none" prevent matplotlib from drawing per-cell borders,
+    # which is a second silent cost at large grids. Visual output is
+    # identical in PNG.
+    im = ax.pcolormesh(
+        xb, yb, data, cmap=cmap, norm=norm,
+        rasterized=True, linewidth=0, edgecolors="none",
+    )
     ax.set_title(title, fontsize=10)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
