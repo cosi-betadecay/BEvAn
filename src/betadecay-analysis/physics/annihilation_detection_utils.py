@@ -30,10 +30,10 @@ Likelihood-ratio form (Zoglauer eq. 4.26 adapted):
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 
+import wandb
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
@@ -208,6 +208,8 @@ def build_density_matrices(
         spacing_x="log",
         spacing_y="linear",
         log_x_floor=0.1,
+        n_bins_x=10000,
+        n_bins_y=10000,
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         combined_tensor_delta_E,
@@ -216,6 +218,8 @@ def build_density_matrices(
         spacing_y="log",
         log_x_floor=0.1,
         log_y_floor=1e-3,
+        n_bins_x=10000,
+        n_bins_y=10000,
     )
 
     # --- 2D joints per class (needed to derive the angle|ΔE and ARM|ΔE

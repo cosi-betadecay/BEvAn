@@ -83,6 +83,9 @@ def annihilation_extractor(
     n_beta_decay = int(torch.isfinite(bdecay_tensor_delta_E).sum().item())
     n_bg = int(torch.isfinite(bg_tensor_delta_E).sum().item())
 
+    #n_beta_decay = 20000
+    #n_bg = 50000
+
     predict(
         ground_truths,
         p_beta_deltaE,
