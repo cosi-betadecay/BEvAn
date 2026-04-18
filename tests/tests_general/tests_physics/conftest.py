@@ -17,6 +17,7 @@ Requirements:
       is invoked from).
 """
 
+import gc
 import os
 
 import pytest
@@ -38,6 +39,26 @@ from utils.reader_extraction import get_reader
 # enough that every bin is well-populated, 2000×2000 is the production
 # default. Intermediate 200×200 bridges the two.
 BIN_SIZES = [20, 200, 2000]
+
+
+# Module-level LRU-of-1 caches for the parametrized heavy fixtures. With
+# scope="session", pytest would hold all three bin-size instances alive until
+# end-of-session, which at n_bins=2000 pushes peak memory into OOM territory.
+# Instead we use function-scope fixtures that hit these caches: tests at the
+# same n_bins reuse the build, and when pytest moves to the next n_bins the
+# previous entry is explicitly evicted and gc'd before the new build starts.
+_density_matrices_cache: dict[int, dict] = {}
+_likelihood_tensors_cache: dict[int, dict] = {}
+
+
+def _evict_other_params(cache: dict, current_param) -> None:
+    """Drop cached entries for params other than the current one and force a
+    garbage collection pass so torch tensors are actually released."""
+    stale = [k for k in cache if k != current_param]
+    for k in stale:
+        del cache[k]
+    if stale:
+        gc.collect()
 
 
 @pytest.fixture(scope="session")
@@ -133,20 +154,13 @@ def wandb_run():
     wandb.finish()
 
 
-@pytest.fixture(scope="session", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
-def density_matrices(real_tensors, request):
-    """
-    2D probability matrices for the two feature pairs, built at resolution
-    ``request.param`` × ``request.param`` using shared bin edges derived from
-    the combined (bdecay + bg) tensor — exactly mirroring the production
-    pipeline in build_density_matrices().
-    """
-    n_bins = request.param
+def _build_density_matrices(real_tensors: dict, n_bins: int) -> dict:
+    """Construct 2D probability matrices for the two feature pairs at a given
+    resolution. Mirrors the production pipeline in ``build_density_matrices``.
+    ΔE and ARM axes use log spacing; annihilation_angle stays linear."""
     t = real_tensors
 
     # ---- Angle feature pair: delta_E vs annihilation_angle ----
-    # ΔE is a residual peaked at 0 with a long tail → log spacing.
-    # annihilation_angle is a bounded cosine → linear (matches production).
     _, x_bins_angle, y_bins_angle = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_annihilation_angle"],
@@ -170,7 +184,6 @@ def density_matrices(real_tensors, request):
     )
 
     # ---- ARM feature pair: delta_E vs ARM ----
-    # Both axes are residual-like → log.
     _, x_bins_arm, y_bins_arm = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_arm"],
@@ -207,25 +220,30 @@ def density_matrices(real_tensors, request):
     }
 
 
-@pytest.fixture(scope="session", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
-def likelihood_tensors(real_tensors, request):
+@pytest.fixture(scope="function", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
+def density_matrices(real_tensors, request):
     """
-    Per-event likelihood tensors produced by the Zoglauer-style density
-    factorization used in production, at resolution ``request.param``.
+    2D probability matrices for the two feature pairs at ``request.param`` ×
+    ``request.param`` resolution.
 
-    This fixture replicates the logic of
-    ``annihilation_detection_utils.build_density_matrices`` but with a
-    configurable bin count, so the annihilation-detection-utils unit tests can
-    sweep resolutions without modifying production code.
-
-    Returns the six per-event likelihood tensors in the same order as the
-    production function:
-        (P_β(ΔE), P_bg(ΔE),
-         P_β(angle | ΔE), P_bg(angle | ΔE),
-         P_β(ARM   | ΔE), P_bg(ARM   | ΔE))
-    plus ``n_bins`` and ``n_gen`` for convenience.
+    Function-scoped with a module-level LRU-of-1 cache (``_density_matrices_cache``)
+    that evicts non-current parametrizations. Within a group of tests at the
+    same n_bins, the cache hit avoids rebuild; when pytest transitions to the
+    next n_bins, the previous entry is dropped and ``gc.collect()`` runs,
+    so peak memory stays bounded to one bin size's worth of matrices instead
+    of all three (which is what session-scoped parametrization would give you).
     """
     n_bins = request.param
+    _evict_other_params(_density_matrices_cache, n_bins)
+    if n_bins not in _density_matrices_cache:
+        _density_matrices_cache[n_bins] = _build_density_matrices(real_tensors, n_bins)
+    return _density_matrices_cache[n_bins]
+
+
+def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
+    """Construct the six per-event likelihood tensors at a given resolution.
+    Mirrors ``annihilation_detection_utils.build_density_matrices`` but with
+    a configurable bin count (production hardcodes 2000)."""
     t = real_tensors
 
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
@@ -330,3 +348,23 @@ def likelihood_tensors(real_tensors, request):
         "n_bins": n_bins,
         "n_gen": t["n_gen"],
     }
+
+
+@pytest.fixture(scope="function", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
+def likelihood_tensors(real_tensors, request):
+    """
+    Per-event likelihood tensors at ``request.param`` resolution — the
+    six factors (P_β(ΔE), P_bg(ΔE), P_β(angle|ΔE), P_bg(angle|ΔE),
+    P_β(ARM|ΔE), P_bg(ARM|ΔE)) plus ``n_bins`` and ``n_gen``.
+
+    Function-scoped with module-level LRU-of-1 cache via
+    ``_likelihood_tensors_cache``. Same memory-bounding pattern as
+    ``density_matrices``: tests at a given n_bins hit the cache; pytest
+    transitioning to the next n_bins evicts the old entry and gc.collects
+    before the new one is built.
+    """
+    n_bins = request.param
+    _evict_other_params(_likelihood_tensors_cache, n_bins)
+    if n_bins not in _likelihood_tensors_cache:
+        _likelihood_tensors_cache[n_bins] = _build_likelihood_tensors(real_tensors, n_bins)
+    return _likelihood_tensors_cache[n_bins]
