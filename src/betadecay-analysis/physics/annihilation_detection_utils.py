@@ -197,14 +197,25 @@ def build_density_matrices(
     0.0 (no evidence) — see ``lookup_density_values``.
     """
     # Shared bin edges derived from the combined (bdecay + bg) population so
-    # that bdecay and bg matrices live on the same grid.
+    # that bdecay and bg matrices live on the same grid. ΔE and ARM are
+    # residual-like quantities that peak near 0 with a long tail, so log
+    # spacing concentrates resolution where the signal lives (Zoglauer B-CSR
+    # §4.5.3 uses the same principle for energies and angle residuals). The
+    # annihilation_angle axis is a bounded cosine and stays linear.
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=0.1,
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_arm,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=0.1,
+        log_y_floor=1e-3,
     )
 
     # --- 2D joints per class (needed to derive the angle|ΔE and ARM|ΔE

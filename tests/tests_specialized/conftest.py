@@ -119,17 +119,26 @@ def _build_density_matrices_at(t, n_bins):
     """Replicates the production build_density_matrices logic but with a
     configurable bin count on both axes. Kept in the conftest so production
     code stays untouched."""
+    # ΔE and ARM are residual-like (peak at 0, long tail) → log spacing.
+    # annihilation_angle is a bounded cosine → linear.
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         t["combined_dE"],
         t["combined_angle"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=0.1,
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         t["combined_dE"],
         t["combined_arm"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=0.1,
+        log_y_floor=1e-3,
     )
 
     bdecay_joint_deltaE_angle, _, _ = build_density_matrix(

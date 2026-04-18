@@ -145,11 +145,16 @@ def density_matrices(real_tensors, request):
     t = real_tensors
 
     # ---- Angle feature pair: delta_E vs annihilation_angle ----
+    # ΔE is a residual peaked at 0 with a long tail → log spacing.
+    # annihilation_angle is a bounded cosine → linear (matches production).
     _, x_bins_angle, y_bins_angle = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_annihilation_angle"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=0.1,
     )
     bdecay_angle, _, _ = build_density_matrix(
         t["bdecay_tensor_delta_E"],
@@ -165,11 +170,16 @@ def density_matrices(real_tensors, request):
     )
 
     # ---- ARM feature pair: delta_E vs ARM ----
+    # Both axes are residual-like → log.
     _, x_bins_arm, y_bins_arm = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_arm"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=0.1,
+        log_y_floor=1e-3,
     )
     bdecay_arm, _, _ = build_density_matrix(
         t["bdecay_tensor_delta_E"],
@@ -223,12 +233,19 @@ def likelihood_tensors(real_tensors, request):
         t["combined_tensor_annihilation_angle"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=0.1,
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_arm"],
         n_bins_x=n_bins,
         n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=0.1,
+        log_y_floor=1e-3,
     )
 
     bdecay_joint_angle, _, _ = build_density_matrix(

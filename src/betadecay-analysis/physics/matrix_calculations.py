@@ -2,6 +2,48 @@ import torch
 from tqdm import tqdm
 
 
+def _build_default_edges(
+    x: torch.Tensor,
+    n_bins: int,
+    spacing: str,
+    log_floor: float | None,
+) -> torch.Tensor:
+    """Construct default bin edges for histogramming.
+
+    ``spacing="linear"`` gives uniform linspace edges spanning the data range.
+    ``spacing="log"`` gives geometrically-spaced edges over ``[floor, x.max()]``
+    where ``floor = max(log_floor, smallest_positive_value)``. Zoglauer-style:
+    densifies resolution near zero for residual-like features (ΔE, ARM) whose
+    signal clusters at small values and whose tails are long.
+
+    Values below the floor at lookup time clamp into the first bin via
+    ``lookup_density_values``' existing out-of-support semantics.
+    """
+    if spacing == "linear":
+        x_min, x_max = x.min(), x.max()
+        if x_min == x_max:
+            x_max = x_max + 1e-6
+        return torch.linspace(x_min, x_max, n_bins + 1, device=x.device, dtype=x.dtype)
+    if spacing == "log":
+        floor = log_floor if log_floor is not None else 1e-3
+        positive = x[x > 0]
+        if positive.numel() == 0:
+            raise ValueError("Cannot build log-spaced edges: no positive values in x.")
+        x_min = max(float(positive.min().item()), float(floor))
+        x_max = float(x.max().item())
+        if x_min >= x_max:
+            x_max = x_min + 1e-6
+        log_edges = torch.linspace(
+            float(torch.log(torch.tensor(x_min))),
+            float(torch.log(torch.tensor(x_max))),
+            n_bins + 1,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        return torch.exp(log_edges)
+    raise ValueError(f"Unknown spacing {spacing!r}; expected 'linear' or 'log'.")
+
+
 def build_density_matrix(
     x: torch.Tensor,
     y: torch.Tensor,
@@ -9,6 +51,10 @@ def build_density_matrix(
     y_bins: torch.Tensor | None = None,
     n_bins_x: int = 2000,
     n_bins_y: int = 2000,
+    spacing_x: str = "linear",
+    spacing_y: str = "linear",
+    log_x_floor: float | None = None,
+    log_y_floor: float | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build a normalized 2D probability matrix over (x, y).
 
@@ -29,19 +75,13 @@ def build_density_matrix(
         raise ValueError("Cannot create probability matrix from empty tensors.")
 
     if x_bins is None:
-        x_min, x_max = x.min(), x.max()
-        if x_min == x_max:
-            x_max = x_max + 1e-6
-        x_bins = torch.linspace(x_min, x_max, n_bins_x + 1, device=x.device, dtype=x.dtype)
+        x_bins = _build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
     else:
         n_bins_x = x_bins.numel() - 1
         x_bins = x_bins.to(device=x.device, dtype=x.dtype)
 
     if y_bins is None:
-        y_min, y_max = y.min(), y.max()
-        if y_min == y_max:
-            y_max = y_max + 1e-6
-        y_bins = torch.linspace(y_min, y_max, n_bins_y + 1, device=y.device, dtype=y.dtype)
+        y_bins = _build_default_edges(y, n_bins_y, spacing_y, log_y_floor)
     else:
         n_bins_y = y_bins.numel() - 1
         y_bins = y_bins.to(device=y.device, dtype=y.dtype)
@@ -127,6 +167,8 @@ def build_density_matrix_1d(
     x: torch.Tensor,
     x_bins: torch.Tensor | None = None,
     n_bins_x: int = 2000,
+    spacing_x: str = "linear",
+    log_x_floor: float | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Build a normalized 1D probability vector over x.
 
@@ -141,10 +183,7 @@ def build_density_matrix_1d(
         raise ValueError("Cannot create probability vector from empty tensor.")
 
     if x_bins is None:
-        x_min, x_max = x.min(), x.max()
-        if x_min == x_max:
-            x_max = x_max + 1e-6
-        x_bins = torch.linspace(x_min, x_max, n_bins_x + 1, device=x.device, dtype=x.dtype)
+        x_bins = _build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
     else:
         n_bins_x = x_bins.numel() - 1
         x_bins = x_bins.to(device=x.device, dtype=x.dtype)
