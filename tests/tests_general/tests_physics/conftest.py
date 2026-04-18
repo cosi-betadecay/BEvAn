@@ -1,10 +1,15 @@
 """
 Session-scoped pytest fixtures shared across tests_physics.
 
-The real_tensors fixture processes the full Activation.sim file through the
-same event-reading and feature-extraction pipeline that production code uses.
+The ``real_tensors`` fixture iterates ``data/Activation.sim`` through the same
+event-reading and feature-extraction pipeline the production code uses.
 Because it is session-scoped, MEGAlib opens and iterates the file only once
-per test run, regardless of how many test functions consume the fixture.
+per test run, regardless of how many test functions consume it.
+
+The ``density_matrices`` and ``likelihood_tensors`` fixtures are parametrized
+over ``BIN_SIZES`` so every physics test that consumes them runs once per
+resolution. This exposes how much of each assertion depends on sparse-bin
+memorization vs. genuine feature separation.
 
 Requirements:
     - The MEGALIB environment variable must point to a valid MEGAlib installation.
@@ -20,51 +25,33 @@ import wandb
 from omegaconf import OmegaConf
 
 from physics.annihilation_detection_utils import compute_event_features, create_tensors
-from physics.matrix_calculations import build_density_matrix
+from physics.matrix_calculations import (
+    build_density_matrix,
+    build_density_matrix_1d,
+    conditional_from_joint,
+    lookup_density_values,
+    lookup_density_values_1d,
+)
 from utils.reader_extraction import get_reader
 
-# Resolution used for the pre-built test matrices.
-# 200×200 is sufficient for all quantitative assertions and runs in seconds.
-# Production uses 2000×2000; increase here only if a test demands finer bins.
-N_BINS_TEST = 200
+# Resolutions swept by density_matrices / likelihood_tensors. 20×20 is coarse
+# enough that every bin is well-populated, 2000×2000 is the production
+# default. Intermediate 200×200 bridges the two.
+BIN_SIZES = [20, 200, 2000]
 
 
 @pytest.fixture(scope="session")
 def real_tensors():
     """
     Load and process the full Activation.sim file, returning every feature
-    tensor that the pipeline produces.
-
-    The fixture mirrors the first half of annihilation_extractor() exactly:
-        1. Initialize the MEGAlib reader with the production geometry file.
-        2. Call compute_event_features() to iterate over all events and
-           produce per-class feature lists (delta_E, annihilation_angle, ARM).
-        3. Call create_tensors() to convert those lists into PyTorch tensors
-           and build the combined (bdecay + bg) tensors.
-
-    Returned dict keys
-    ------------------
-    ground_truths : torch.BoolTensor, shape (n_events,)
-        True for beta-decay events, False for background, in event order.
-    bdecay_tensor_delta_E : Tensor  — delta_E values for bdecay events only
-    bdecay_tensor_annihilation_angle : Tensor
-    bdecay_tensor_arm : Tensor
-    bg_tensor_delta_E : Tensor      — delta_E values for background events only
-    bg_tensor_annihilation_angle : Tensor
-    bg_tensor_arm : Tensor
-    gen_tensor_delta_E : Tensor     — all events in original event order
-    gen_tensor_annihilation_angle : Tensor
-    gen_tensor_arm : Tensor
-    combined_tensor_delta_E : Tensor  — cat([bdecay, bg])
-    combined_tensor_annihilation_angle : Tensor
-    combined_tensor_arm : Tensor
-    n_gen : int  — total number of events (== len(gen_tensor_*))
+    tensor the pipeline produces. Session-scoped so MEGAlib iterates the sim
+    file exactly once per test run even when downstream fixtures sweep bin
+    sizes.
     """
     megalib_root = os.environ["MEGALIB"]
     geo_file = f"{megalib_root}/resource/examples/geomega/special/Max.geo.setup"
     sim_file = "data/Activation.sim"
 
-    # ARM parameters from configs/likelihoods.yaml
     cfg = OmegaConf.create(
         {
             "likelihoods": {
@@ -136,15 +123,7 @@ def real_tensors():
 
 @pytest.fixture(scope="session")
 def wandb_run():
-    """
-    Initialize a single Weights & Biases run for the entire test session.
-
-    All test plots are logged to this one run so that every heatmap,
-    marginal overlay, and scatter plot can be compared side-by-side inside
-    the W&B dashboard without switching between runs.
-
-    The run is finalized automatically via wandb.finish() at session teardown.
-    """
+    """Single W&B run collecting diagnostics across every bin-size parametrization."""
     run = wandb.init(
         project="cosi-betadecay-tests",
         name="test-density-matrices",
@@ -154,34 +133,23 @@ def wandb_run():
     wandb.finish()
 
 
-@pytest.fixture(scope="session")
-def density_matrices(real_tensors):
+@pytest.fixture(scope="session", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
+def density_matrices(real_tensors, request):
     """
-    Pre-built 2D probability matrices for quantitative test assertions.
-
-    Both feature pairs are built with N_BINS_TEST × N_BINS_TEST resolution
-    using shared bin edges derived from the combined (bdecay + bg) tensor —
-    exactly mirroring the production pipeline in build_density_matrices().
-
-    Returned dict keys
-    ------------------
-    bdecay_angle  : (N, N) probability matrix — bdecay, delta_E vs angle
-    bg_angle      : (N, N) probability matrix — background, delta_E vs angle
-    x_bins_angle  : (N+1,) shared delta_E bin edges for the angle pair
-    y_bins_angle  : (N+1,) shared annihilation-angle bin edges
-    bdecay_arm    : (N, N) probability matrix — bdecay, delta_E vs ARM
-    bg_arm        : (N, N) probability matrix — background, delta_E vs ARM
-    x_bins_arm    : (N+1,) shared delta_E bin edges for the ARM pair
-    y_bins_arm    : (N+1,) shared ARM bin edges
+    2D probability matrices for the two feature pairs, built at resolution
+    ``request.param`` × ``request.param`` using shared bin edges derived from
+    the combined (bdecay + bg) tensor — exactly mirroring the production
+    pipeline in build_density_matrices().
     """
+    n_bins = request.param
     t = real_tensors
 
     # ---- Angle feature pair: delta_E vs annihilation_angle ----
     _, x_bins_angle, y_bins_angle = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_annihilation_angle"],
-        n_bins_x=N_BINS_TEST,
-        n_bins_y=N_BINS_TEST,
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
     )
     bdecay_angle, _, _ = build_density_matrix(
         t["bdecay_tensor_delta_E"],
@@ -200,8 +168,8 @@ def density_matrices(real_tensors):
     _, x_bins_arm, y_bins_arm = build_density_matrix(
         t["combined_tensor_delta_E"],
         t["combined_tensor_arm"],
-        n_bins_x=N_BINS_TEST,
-        n_bins_y=N_BINS_TEST,
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
     )
     bdecay_arm, _, _ = build_density_matrix(
         t["bdecay_tensor_delta_E"],
@@ -225,4 +193,123 @@ def density_matrices(real_tensors):
         "bg_arm": bg_arm,
         "x_bins_arm": x_bins_arm,
         "y_bins_arm": y_bins_arm,
+        "n_bins": n_bins,
+    }
+
+
+@pytest.fixture(scope="session", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
+def likelihood_tensors(real_tensors, request):
+    """
+    Per-event likelihood tensors produced by the Zoglauer-style density
+    factorization used in production, at resolution ``request.param``.
+
+    This fixture replicates the logic of
+    ``annihilation_detection_utils.build_density_matrices`` but with a
+    configurable bin count, so the annihilation-detection-utils unit tests can
+    sweep resolutions without modifying production code.
+
+    Returns the six per-event likelihood tensors in the same order as the
+    production function:
+        (P_β(ΔE), P_bg(ΔE),
+         P_β(angle | ΔE), P_bg(angle | ΔE),
+         P_β(ARM   | ΔE), P_bg(ARM   | ΔE))
+    plus ``n_bins`` and ``n_gen`` for convenience.
+    """
+    n_bins = request.param
+    t = real_tensors
+
+    _, deltaE_angle_bins, angle_bins = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_annihilation_angle"],
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
+    )
+    _, deltaE_arm_bins, arm_bins = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_arm"],
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
+    )
+
+    bdecay_joint_angle, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_annihilation_angle"],
+        x_bins=deltaE_angle_bins,
+        y_bins=angle_bins,
+    )
+    bdecay_joint_arm, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_arm"],
+        x_bins=deltaE_arm_bins,
+        y_bins=arm_bins,
+    )
+    bg_joint_angle, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_annihilation_angle"],
+        x_bins=deltaE_angle_bins,
+        y_bins=angle_bins,
+    )
+    bg_joint_arm, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_arm"],
+        x_bins=deltaE_arm_bins,
+        y_bins=arm_bins,
+    )
+
+    bdecay_marginal_dE, _ = build_density_matrix_1d(
+        t["bdecay_tensor_delta_E"], x_bins=deltaE_angle_bins
+    )
+    bg_marginal_dE, _ = build_density_matrix_1d(
+        t["bg_tensor_delta_E"], x_bins=deltaE_angle_bins
+    )
+
+    bdecay_cond_angle = conditional_from_joint(bdecay_joint_angle, axis=0)
+    bdecay_cond_arm = conditional_from_joint(bdecay_joint_arm, axis=0)
+    bg_cond_angle = conditional_from_joint(bg_joint_angle, axis=0)
+    bg_cond_arm = conditional_from_joint(bg_joint_arm, axis=0)
+
+    p_beta_deltaE = lookup_density_values_1d(
+        t["gen_tensor_delta_E"], bdecay_marginal_dE, deltaE_angle_bins
+    )
+    p_bg_deltaE = lookup_density_values_1d(
+        t["gen_tensor_delta_E"], bg_marginal_dE, deltaE_angle_bins
+    )
+    p_beta_angle = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        bdecay_cond_angle,
+        deltaE_angle_bins,
+        angle_bins,
+    )
+    p_bg_angle = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        bg_cond_angle,
+        deltaE_angle_bins,
+        angle_bins,
+    )
+    p_beta_arm = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        bdecay_cond_arm,
+        deltaE_arm_bins,
+        arm_bins,
+    )
+    p_bg_arm = lookup_density_values(
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_arm"],
+        bg_cond_arm,
+        deltaE_arm_bins,
+        arm_bins,
+    )
+
+    return {
+        "p_beta_deltaE": p_beta_deltaE,
+        "p_bg_deltaE": p_bg_deltaE,
+        "p_beta_angle": p_beta_angle,
+        "p_bg_angle": p_bg_angle,
+        "p_beta_arm": p_beta_arm,
+        "p_bg_arm": p_bg_arm,
+        "n_bins": n_bins,
+        "n_gen": t["n_gen"],
     }

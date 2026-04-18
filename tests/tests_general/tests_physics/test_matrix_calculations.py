@@ -615,7 +615,7 @@ def test_bdecay_angle_matrix_concentrated_at_low_deltaE(real_tensors, density_ma
     ax.axvline(x=max(p90_dE, 1e-3), color="red", ls="--", label=f"90th pct delta_E = {p90_dE:.2f} keV")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/bdecay_angle_deltaE_concentration": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/bdecay_angle_deltaE_concentration": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -660,7 +660,7 @@ def test_bdecay_arm_matrix_peaked_near_zero(real_tensors, density_matrices, wand
     ax.axhline(y=median_arm, color="red", ls="--", label=f"ARM median = {median_arm:.3f} rad")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/bdecay_arm_peaked_near_zero": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/bdecay_arm_peaked_near_zero": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -715,7 +715,7 @@ def test_bg_angle_matrix_more_spread_than_signal(real_tensors, density_matrices,
     )
 
     fig.tight_layout()
-    wandb.log({"test/bg_angle_deltaE_spread": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/bg_angle_deltaE_spread": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -772,7 +772,7 @@ def test_bg_arm_matrix_not_peaked_at_zero(real_tensors, density_matrices, wandb_
     _plot_1d_overlay(axes[2], bdecay_arm_marginal, bg_arm_marginal, centers, _LABEL_ARM, "ARM marginal PDF")
 
     fig.tight_layout()
-    wandb.log({"test/bg_arm_not_peaked_at_zero": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/bg_arm_not_peaked_at_zero": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -824,7 +824,7 @@ def test_signal_entropy_lower_than_background_angle_feature(real_tensors, densit
     )
     fig.suptitle("Entropy comparison — angle feature pair", fontsize=12)
     fig.tight_layout()
-    wandb.log({"test/entropy_angle_signal_vs_bg": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/entropy_angle_signal_vs_bg": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -867,7 +867,7 @@ def test_signal_entropy_lower_than_background_arm_feature(real_tensors, density_
     )
     fig.suptitle("Entropy comparison — ARM feature pair", fontsize=12)
     fig.tight_layout()
-    wandb.log({"test/entropy_arm_signal_vs_bg": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/entropy_arm_signal_vs_bg": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -907,7 +907,7 @@ def test_angle_matrices_distinguishable_by_total_variation(real_tensors, density
         cmap="hot_r",
     )
     fig.tight_layout()
-    wandb.log({"test/tv_distance_angle": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/tv_distance_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -938,7 +938,7 @@ def test_arm_matrices_distinguishable_by_total_variation(real_tensors, density_m
         cmap="hot_r",
     )
     fig.tight_layout()
-    wandb.log({"test/tv_distance_arm": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/tv_distance_arm": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -978,7 +978,7 @@ def test_log_ratio_positive_in_signal_region_angle(real_tensors, density_matrice
                   "Background density (angle pair)", _LABEL_DE, _LABEL_ANGLE, cmap="plasma_r")
     fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
-    wandb.log({"test/signal_vs_bg_angle": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/signal_vs_bg_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1014,7 +1014,7 @@ def test_log_ratio_positive_in_signal_region_arm(real_tensors, density_matrices,
                   "Background density (ARM pair)", _LABEL_DE, _LABEL_ARM, cmap="plasma_r")
     fig.suptitle(f"Signal-region cells with P_signal > P_bg: {frac_positive:.1%}", fontsize=11)
     fig.tight_layout()
-    wandb.log({"test/signal_vs_bg_arm": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/signal_vs_bg_arm": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1071,7 +1071,7 @@ def test_majority_of_true_events_higher_bdecay_density_angle(real_tensors, densi
     ax.scatter(dE_true, angle_true, s=4, c="red", alpha=0.5, label="True events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/true_events_angle": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/true_events_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1119,7 +1119,7 @@ def test_majority_of_true_events_higher_bdecay_density_arm(real_tensors, density
     ax.scatter(dE_true, arm_true, s=4, c="red", alpha=0.5, label="True events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/true_events_arm": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/true_events_arm": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1168,7 +1168,7 @@ def test_majority_of_false_events_higher_bg_density_angle(real_tensors, density_
     ax.scatter(dE_bg, angle_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/false_events_angle": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/false_events_angle": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -1216,5 +1216,5 @@ def test_majority_of_false_events_higher_bg_density_arm(real_tensors, density_ma
     ax.scatter(dE_bg, arm_bg, s=2, c="black", alpha=0.3, label="Background events (n≤500)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    wandb.log({"test/false_events_arm": wandb.Image(fig)})
+    wandb.log({f"test/n_bins={dm['n_bins']}/false_events_arm": wandb.Image(fig)})
     plt.close(fig)

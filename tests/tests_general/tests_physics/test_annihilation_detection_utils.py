@@ -1,27 +1,33 @@
 """
-Unit tests for the build_density_matrices function in
-physics/annihilation_detection_utils.py.
+Unit tests for the Zoglauer-style density factorization implemented in
+physics/annihilation_detection_utils.py:build_density_matrices.
 
-build_density_matrices is the density-estimation orchestrator: it derives
-shared bin edges from the combined (signal + background) tensor, builds
-separate 2D probability matrices for beta-decay and background, then looks
-up per-event likelihood values for every event in the gen tensors.
+The function derives shared bin edges from the combined (signal + background)
+tensor, builds separate 2D probability matrices for beta-decay and
+background, factors ΔE out of the two joints via conditional_from_joint, and
+looks up per-event likelihood values. It returns six per-event likelihood
+tensors:
+
+    P_β(ΔE), P_bg(ΔE),
+    P_β(angle | ΔE), P_bg(angle | ΔE),
+    P_β(ARM   | ΔE), P_bg(ARM   | ΔE)
 
 All tests run against real feature data extracted from Activation.sim via the
-session-scoped real_tensors fixture in conftest.py.  No synthetic data or
-mocks are used.
+session-scoped ``likelihood_tensors`` fixture defined in ``conftest.py``,
+which is parametrized over ``BIN_SIZES = [20, 200, 2000]``. Every test
+therefore runs once per resolution.
 
 Requirements:
     - MEGALIB env variable set and data/Activation.sim present (handled by
-      the real_tensors fixture in conftest.py).
+      the real_tensors / likelihood_tensors fixtures in conftest.py).
 
-Covered tests (5):
-    1. Returns four tensors whose length equals the length of the gen tensors.
-    2. All returned probability values are non-negative.
-    3. NaN entries injected into gen tensors produce 0.0 in every output tensor.
-    4. True beta-decay events (from ground_truths) yield higher total beta
-       likelihoods than background likelihoods — the core physics contract.
-    5. All four output tensors share the same length (shape consistency check).
+Covered tests:
+    1. Returns six tensors whose length equals the number of gen events.
+    2. All returned likelihood values are non-negative.
+    3. NaN entries in the gen tensors produce 0.0 in every output tensor.
+    4. True beta-decay events yield higher total likelihoods in the β factors
+       than in the bg factors — the core physics contract.
+    5. All six output tensors share the same length.
 """
 
 import torch
@@ -32,26 +38,18 @@ from physics.annihilation_detection_utils import build_density_matrices
 # Helpers
 # ===========================================================================
 
+_TENSOR_KEYS = (
+    "p_beta_deltaE",
+    "p_bg_deltaE",
+    "p_beta_angle",
+    "p_bg_angle",
+    "p_beta_arm",
+    "p_bg_arm",
+)
 
-def _run_build(t, gen_dE=None, gen_angle=None, gen_arm=None):
-    """
-    Call build_density_matrices with the given real_tensors dict, optionally
-    overriding the gen tensors (e.g. to inject NaN values).
-    """
-    return build_density_matrices(
-        t["bdecay_tensor_delta_E"],
-        t["bdecay_tensor_annihilation_angle"],
-        t["bdecay_tensor_arm"],
-        t["bg_tensor_delta_E"],
-        t["bg_tensor_annihilation_angle"],
-        t["bg_tensor_arm"],
-        gen_dE if gen_dE is not None else t["gen_tensor_delta_E"],
-        gen_angle if gen_angle is not None else t["gen_tensor_annihilation_angle"],
-        gen_arm if gen_arm is not None else t["gen_tensor_arm"],
-        t["combined_tensor_delta_E"],
-        t["combined_tensor_annihilation_angle"],
-        t["combined_tensor_arm"],
-    )
+
+def _as_tuple(l):
+    return tuple(l[k] for k in _TENSOR_KEYS)
 
 
 # ===========================================================================
@@ -59,61 +57,58 @@ def _run_build(t, gen_dE=None, gen_angle=None, gen_arm=None):
 # ===========================================================================
 
 
-def test_returns_four_tensors_of_correct_length(real_tensors):
+def test_returns_six_tensors_of_correct_length(likelihood_tensors):
     """
-    build_density_matrices must return exactly four tensors, each with the
-    same number of elements as the gen tensors.
+    build_density_matrices must return exactly six tensors, each with length
+    equal to the number of gen events.
 
-    The four outputs are the per-event likelihood values for:
-        n_beta_deltaE_annihilation_angle  — P(event | beta-decay, angle feature)
-        n_bg_deltaE_annihilation_angle    — P(event | background, angle feature)
-        n_beta_deltaE_arm                 — P(event | beta-decay, ARM feature)
-        n_bg_deltaE_arm                   — P(event | background, ARM feature)
+    The six outputs are the per-event likelihood values used to build the
+    Zoglauer-style likelihood ratio R with ΔE counted once:
+        P_β(ΔE), P_bg(ΔE)
+        P_β(angle | ΔE), P_bg(angle | ΔE)
+        P_β(ARM   | ΔE), P_bg(ARM   | ΔE)
 
-    Every output tensor must have length == n_gen so that the downstream
-    Bayesian classifier can pair each likelihood value with the correct event.
+    Every output tensor must have length == n_gen so the downstream Bayesian
+    classifier can pair each likelihood value with the correct event.
     """
-    result = _run_build(real_tensors)
+    tensors = _as_tuple(likelihood_tensors)
+    n_gen = likelihood_tensors["n_gen"]
 
-    assert len(result) == 4, f"Expected 4 output tensors, got {len(result)}"
-    for i, tensor in enumerate(result):
-        assert tensor.numel() == real_tensors["n_gen"], (
-            f"Output tensor {i} has {tensor.numel()} elements; expected {real_tensors['n_gen']}"
+    assert len(tensors) == 6, f"Expected 6 output tensors, got {len(tensors)}"
+    for name, tensor in zip(_TENSOR_KEYS, tensors):
+        assert tensor.numel() == n_gen, (
+            f"{name} has {tensor.numel()} elements; expected {n_gen}"
         )
 
 
-def test_all_returned_values_are_non_negative(real_tensors):
+def test_all_returned_values_are_non_negative(likelihood_tensors):
     """
-    All four returned tensors must contain only non-negative values.
+    All six returned tensors must contain only non-negative values.
 
     They represent probability densities looked up from normalised histograms.
     Negative probabilities are physically meaningless and would corrupt the
-    log-likelihood ratio R() computed downstream.
-
-    This is verified on real Activation.sim data, where the feature
-    distributions span the actual dynamic range of the detector.
+    log-likelihood ratio computed downstream.
     """
-    n_beta_angle, n_bg_angle, n_beta_arm, n_bg_arm = _run_build(real_tensors)
-
-    for name, tensor in [
-        ("n_beta_angle", n_beta_angle),
-        ("n_bg_angle", n_bg_angle),
-        ("n_beta_arm", n_beta_arm),
-        ("n_bg_arm", n_bg_arm),
-    ]:
-        assert torch.all(tensor >= 0.0), f"{name} contains {(tensor < 0).sum().item()} negative values"
+    for name in _TENSOR_KEYS:
+        tensor = likelihood_tensors[name]
+        n_neg = int((tensor < 0).sum().item())
+        assert torch.all(tensor >= 0.0), f"{name} contains {n_neg} negative values"
 
 
 def test_nan_in_gen_tensors_returns_zero(real_tensors):
     """
     NaN entries in any gen tensor must produce 0.0 in the corresponding
-    position of all four output tensors.
+    position of every output tensor.
 
-    lookup_density_values marks NaN coordinates as invalid and fills their
-    output slots with 0.0.  This test verifies that build_density_matrices
-    propagates that behaviour correctly for both feature pairs
-    (delta_E / angle and delta_E / ARM) by injecting NaN at two known
-    indices into copies of the real gen tensors.
+    lookup_density_values and lookup_density_values_1d mark NaN coordinates as
+    invalid and fill their output slots with 0.0. This test injects NaN at
+    known indices into copies of the real gen tensors and verifies
+    build_density_matrices propagates that behaviour in both feature pairs
+    (ΔE / angle and ΔE / ARM) and in the ΔE marginals.
+
+    Uses build_density_matrices directly (at its production default
+    resolution) rather than the parametrized fixture, because the NaN
+    contract is bin-size-independent.
     """
     nan_indices = [0, 10]
 
@@ -126,75 +121,69 @@ def test_nan_in_gen_tensors_returns_zero(real_tensors):
         gen_angle[idx] = float("nan")
         gen_arm[idx] = float("nan")
 
-    n_beta_angle, n_bg_angle, n_beta_arm, n_bg_arm = _run_build(
-        real_tensors, gen_dE=gen_dE, gen_angle=gen_angle, gen_arm=gen_arm
+    outputs = build_density_matrices(
+        real_tensors["bdecay_tensor_delta_E"],
+        real_tensors["bdecay_tensor_annihilation_angle"],
+        real_tensors["bdecay_tensor_arm"],
+        real_tensors["bg_tensor_delta_E"],
+        real_tensors["bg_tensor_annihilation_angle"],
+        real_tensors["bg_tensor_arm"],
+        gen_dE,
+        gen_angle,
+        gen_arm,
+        real_tensors["combined_tensor_delta_E"],
+        real_tensors["combined_tensor_annihilation_angle"],
+        real_tensors["combined_tensor_arm"],
     )
 
-    for name, tensor in [
-        ("n_beta_angle", n_beta_angle),
-        ("n_bg_angle", n_bg_angle),
-        ("n_beta_arm", n_beta_arm),
-        ("n_bg_arm", n_bg_arm),
-    ]:
+    for name, tensor in zip(_TENSOR_KEYS, outputs):
         for idx in nan_indices:
             assert tensor[idx].item() == 0.0, (
                 f"{name}[{idx}] = {tensor[idx].item():.6f}; expected 0.0 for NaN gen input"
             )
 
 
-def test_true_bdecay_events_have_higher_beta_likelihood(real_tensors):
+def test_true_bdecay_events_have_higher_beta_likelihood(real_tensors, likelihood_tensors):
     """
-    For events that are truly beta-decay (ground_truths == True), the total
-    beta-decay likelihood must exceed the total background likelihood across
-    both feature pairs.
+    For events the simulation labels as beta-decay (ground_truths == True),
+    the total β-class likelihood must exceed the total bg-class likelihood
+    across all three factored sub-spaces: ΔE marginal, angle|ΔE conditional,
+    and ARM|ΔE conditional.
 
-    This is the core physics contract of build_density_matrices: the 2D
-    probability matrices must capture the correct class-conditional densities
-    so that the downstream Bayesian classifier can distinguish signal from
-    background.
-
-    The test uses real simulation ground truths from Activation.sim rather
-    than synthetic labels, making it a meaningful end-to-end sanity check of
-    the entire density-estimation step.
-
-    Expected outcome:
-        sum(n_beta_angle[gt]) > sum(n_bg_angle[gt])
-        sum(n_beta_arm[gt])   > sum(n_bg_arm[gt])
-    where gt is the boolean mask of true beta-decay events.
+    This is the core physics contract of the density factorization — the
+    class-conditional densities must favour the correct class on true events.
+    It holds across bin sizes (the fixture sweeps 20/200/2000), so this
+    assertion is checked at every resolution.
     """
-    gt = real_tensors["ground_truths"]  # bool tensor, True = beta-decay
+    gt = real_tensors["ground_truths"]
+    t = likelihood_tensors
 
-    n_beta_angle, n_bg_angle, n_beta_arm, n_bg_arm = _run_build(real_tensors)
-
-    beta_angle_signal = n_beta_angle[gt].sum()
-    bg_angle_signal = n_bg_angle[gt].sum()
-    beta_arm_signal = n_beta_arm[gt].sum()
-    bg_arm_signal = n_bg_arm[gt].sum()
-
-    assert beta_angle_signal > bg_angle_signal, (
-        f"True bdecay events: expected n_beta_angle sum ({beta_angle_signal:.6f}) "
-        f"> n_bg_angle sum ({bg_angle_signal:.6f})"
-    )
-    assert beta_arm_signal > bg_arm_signal, (
-        f"True bdecay events: expected n_beta_arm sum ({beta_arm_signal:.6f}) "
-        f"> n_bg_arm sum ({bg_arm_signal:.6f})"
-    )
+    pairs = [
+        ("deltaE", t["p_beta_deltaE"], t["p_bg_deltaE"]),
+        ("angle|ΔE", t["p_beta_angle"], t["p_bg_angle"]),
+        ("ARM|ΔE", t["p_beta_arm"], t["p_bg_arm"]),
+    ]
+    for label, p_beta, p_bg in pairs:
+        beta_sum = p_beta[gt].sum()
+        bg_sum = p_bg[gt].sum()
+        assert beta_sum > bg_sum, (
+            f"[{label}] True bdecay events: expected β likelihood sum "
+            f"({beta_sum:.6f}) > bg likelihood sum ({bg_sum:.6f}) "
+            f"at n_bins={t['n_bins']}"
+        )
 
 
-def test_all_four_outputs_have_identical_length(real_tensors):
+def test_all_six_outputs_have_identical_length(likelihood_tensors):
     """
-    All four output tensors must have exactly the same number of elements.
+    All six output tensors must have exactly the same number of elements.
 
-    The downstream likelihood ratio R() operates element-wise across all
-    four tensors simultaneously.  Any length mismatch would silently truncate
-    or broadcast incorrectly, producing wrong classification results.
-
-    This test acts as a shape-contract safety net against future refactoring.
+    The downstream likelihood ratio R() operates element-wise across every
+    factor simultaneously. Any length mismatch would silently broadcast or
+    truncate, producing wrong classification results. Acts as a shape-contract
+    safety net against future refactoring.
     """
-    outputs = _run_build(real_tensors)
-
-    lengths = [tensor.numel() for tensor in outputs]
+    lengths = [likelihood_tensors[k].numel() for k in _TENSOR_KEYS]
     assert len(set(lengths)) == 1, (
         f"Output tensors have inconsistent lengths: {lengths}. "
-        "All four must be equal for element-wise R() computation."
+        "All six must be equal for element-wise R() computation."
     )
