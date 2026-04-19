@@ -1,28 +1,10 @@
-"""
-Point-source localization via Compton cone-stacking on a COSI .tra file.
-
-Wraps MEGAlib's MBackprojectionFarField from Python. Runs on any machine with
-MEGAlib + PyROOT installed. Before importing, source MEGAlib's environment:
-    source $MEGALIB/bin/source-megalib.sh
-
-Typical usage:
-    from physics.compton_cone_reconstruction import FarFieldImager
-
-    imager = FarFieldImager(
-        geometry_file="Max.geo.setup",
-        n_phi=360, n_theta=180,
-        coordinate_system="spheric",
-    )
-    n = imager.backproject_file("MySource.tra")
-    theta_rad, phi_rad = imager.peak_direction()
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
 import ROOT as M
+from tqdm import tqdm
 
 # --------------------------------------------------------------------------- #
 # MEGAlib + wrapper setup (idempotent)
@@ -209,10 +191,12 @@ class FarFieldImager:
 
         count = 0
         try:
-            while True:
-                evt = reader.GetNextEvent()
-                if not evt:
-                    break
+            for evt in tqdm(
+                iter(lambda: reader.GetNextEvent(), None),
+                desc="Backprojecting events",
+                unit=" events",
+                total=max_events,
+            ):
                 M.SetOwnership(evt, True)
                 if self.backproject_event(evt):
                     count += 1
