@@ -1,32 +1,3 @@
-"""β⁺-decay vs background classifier built on a Zoglauer-style Bayesian scheme.
-
-This module adapts the Bayesian Compton Sequence Reconstruction (B-CSR)
-methodology from Zoglauer's PhD §4.5.3. The original B-CSR classifies
-*correct vs wrong interaction sequence* for a single γ-ray; here the same
-likelihood-ratio framework is repurposed to classify *β⁺-decay vs background*
-events.
-
-Scope / current implementation
-------------------------------
-Sub-spaces used: (ΔE), (annihilation_angle | ΔE), (ARM | ΔE).
-ΔE is factored out of the two 2D joints P(ΔE, y) via
-``conditional_from_joint`` so it contributes to the likelihood ratio exactly
-once, matching the ``Π_i p(m_i | C)`` independence assumption of eq. 4.26.
-
-Intentionally omitted (future work, not part of the present implementation):
-    * Compton-absorption probability a_C sub-space (§4.5.3 central interaction).
-    * Photo-absorption probability a_P sub-space (final interaction).
-    * Geometric distance factor d_E.
-    * Detector-type dimension and interaction-multiplicity N.
-    * Separate dθ-criterion sub-space for tracked electrons.
-
-Likelihood-ratio form (Zoglauer eq. 4.26 adapted):
-    R = [P(β)/P(bg)] · [P_β(ΔE)/P_bg(ΔE)]
-                     · [P_β(angle|ΔE)/P_bg(angle|ΔE)]
-                     · [P_β(ARM|ΔE)/P_bg(ARM|ΔE)]
-    p(β | m) = R / (R + 1)
-"""
-
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
@@ -236,28 +207,28 @@ def build_density_matrices(
         bdecay_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
-        smoothing=1.0,
+        smoothing=0.0,
     )
     bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
-        smoothing=1.0,
+        smoothing=0.0,
     )
     bg_joint_deltaE_angle, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
-        smoothing=1.0,
+        smoothing=0.0,
     )
     bg_joint_deltaE_arm, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
-        smoothing=1.0,
+        smoothing=0.0,
     )
 
     # --- ΔE marginals (1D). Use the same deltaE_angle_bins as the canonical

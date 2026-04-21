@@ -24,6 +24,7 @@ from physics.annihilation_detection_utils import (
     create_tensors,
 )
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
+from physics.compton_cone_reconstruction import FarFieldImager
 from physics.matrix_calculations import (
     build_density_matrix,
     build_density_matrix_1d,
@@ -46,6 +47,7 @@ def real_tensors():
     megalib_root = os.environ["MEGALIB"]
     geo_file = f"{megalib_root}/resource/examples/geomega/special/Max.geo.setup"
     sim_file = "data/Activation.sim"
+    tra_file = "data/Activation.tra"
 
     cfg = OmegaConf.create(
         {
@@ -57,6 +59,18 @@ def real_tensors():
             }
         }
     )
+
+    # Replicates the mainline pipeline in run.py: run the far-field
+    # backprojection once per session so ARM has a real reconstructed source
+    # direction instead of a hard-coded axis.
+    imager = FarFieldImager(
+        geometry_file=geo_file,
+        n_phi=360,
+        n_theta=180,
+        coordinate_system="spheric",
+    )
+    imager.backproject_file(tra_file)
+    reconstructed_unit_vector = imager.peak_direction_cartesian()
 
     reader = get_reader(geo_file, sim_file)
 
@@ -71,7 +85,12 @@ def real_tensors():
         gen_list_dE,
         gen_list_angle,
         gen_list_arm,
-    ) = compute_event_features(cfg, ref_energy=511, reader=reader)
+    ) = compute_event_features(
+        cfg,
+        ref_energy=511,
+        reader=reader,
+        reconstructed_unit_vector=reconstructed_unit_vector,
+    )
 
     (
         bdecay_dE,
