@@ -1,7 +1,6 @@
 from typing import Any
 
 import ROOT as M
-
 from mathematics.calculations import calculate_tolerance
 
 

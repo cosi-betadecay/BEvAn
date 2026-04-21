@@ -202,21 +202,29 @@ def build_density_matrices(
     # spacing concentrates resolution where the signal lives (Zoglauer B-CSR
     # §4.5.3 uses the same principle for energies and angle residuals). The
     # annihilation_angle axis is a bounded cosine and stays linear.
+    # log_x_floor lowered from 0.1 to 1e-3 so well-reconstructed β⁺ events
+    # (whose ΔE clusters well below 0.1 keV, inside the 3σ ≈ 2.87 keV
+    # tolerance) are not all compressed into the first bin alongside merely
+    # "lucky" background events.
     _, deltaE_angle_bins, angle_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_annihilation_angle,
         spacing_x="log",
         spacing_y="linear",
+<<<<<<< HEAD
         log_x_floor=0.1,
         n_bins_x=10000,
         n_bins_y=10000,
+=======
+        log_x_floor=1e-3,
+>>>>>>> 7a49d97 (some changes, trying to get better recall)
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         combined_tensor_delta_E,
         combined_tensor_arm,
         spacing_x="log",
         spacing_y="log",
-        log_x_floor=0.1,
+        log_x_floor=1e-3,
         log_y_floor=1e-3,
         n_bins_x=10000,
         n_bins_y=10000,
@@ -224,29 +232,38 @@ def build_density_matrices(
 
     # --- 2D joints per class (needed to derive the angle|ΔE and ARM|ΔE
     #     conditionals) ---
+    # Laplace smoothing (α=1.0 per cell) is applied to the per-class joints
+    # so that bins the minority class never populated still return a small
+    # non-zero density at lookup time — otherwise a β⁺ test event landing in
+    # an empty β⁺ bin contributes log(eps) ≈ −18 nats against itself, a
+    # dominant silent source of false negatives.
     bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
+        smoothing=1.0,
     )
     bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
         bdecay_tensor_delta_E,
         bdecay_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
+        smoothing=1.0,
     )
     bg_joint_deltaE_angle, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_annihilation_angle,
         x_bins=deltaE_angle_bins,
         y_bins=angle_bins,
+        smoothing=1.0,
     )
     bg_joint_deltaE_arm, _, _ = build_density_matrix(
         bg_tensor_delta_E,
         bg_tensor_arm,
         x_bins=deltaE_arm_bins,
         y_bins=arm_bins,
+        smoothing=1.0,
     )
 
     # --- ΔE marginals (1D). Use the same deltaE_angle_bins as the canonical
@@ -255,9 +272,11 @@ def build_density_matrices(
     #     due to floating-point ties. We build both 1D marginals independently
     #     so lookups use matching edges. ---
     bdecay_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(
-        bdecay_tensor_delta_E, x_bins=deltaE_angle_bins
+        bdecay_tensor_delta_E, x_bins=deltaE_angle_bins, smoothing=1.0
     )
-    bg_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(bg_tensor_delta_E, x_bins=deltaE_angle_bins)
+    bg_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(
+        bg_tensor_delta_E, x_bins=deltaE_angle_bins, smoothing=1.0
+    )
 
     # --- Conditionals P(y | ΔE) per class, by row-normalizing the joint. ---
     bdecay_cond_angle = conditional_from_joint(bdecay_joint_deltaE_angle, axis=0)

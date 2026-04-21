@@ -13,9 +13,7 @@ def theta_geo(
     x0 = pos[:, 0, :]  # (B, 3)
     x1 = pos[:, 1, :]  # (B, 3)
 
-    v_in = torch.as_tensor(
-        reconstructed_unit_vector, device=positions.device, dtype=positions.dtype
-    )
+    v_in = torch.as_tensor(reconstructed_unit_vector, device=positions.device, dtype=positions.dtype)
     if v_in.ndim == 1:
         v_in = v_in.expand(x0.shape[0], -1)
     v_out = x1 - x0
