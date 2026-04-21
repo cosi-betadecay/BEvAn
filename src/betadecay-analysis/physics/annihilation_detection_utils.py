@@ -30,10 +30,10 @@ Likelihood-ratio form (Zoglauer eq. 4.26 adapted):
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
+import wandb
 from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 
-import wandb
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
@@ -211,13 +211,7 @@ def build_density_matrices(
         combined_tensor_annihilation_angle,
         spacing_x="log",
         spacing_y="linear",
-<<<<<<< HEAD
-        log_x_floor=0.1,
-        n_bins_x=10000,
-        n_bins_y=10000,
-=======
         log_x_floor=1e-3,
->>>>>>> 7a49d97 (some changes, trying to get better recall)
     )
     _, deltaE_arm_bins, arm_bins = build_density_matrix(
         combined_tensor_delta_E,
