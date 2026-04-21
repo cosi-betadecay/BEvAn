@@ -98,7 +98,7 @@ def _plot_heatmap(
     norm = mcolors.LogNorm(vmin=vmin, vmax=data.max())
 
     # rasterized=True collapses the ~n_bins² quad patches into a single
-    # raster image at render time — dramatic speedup for fine grids (2000×2000
+    # raster image at render time — dramatic speedup for fine grids (1000×1000
     # goes from seconds-per-plot with OOM risk to tens of ms). linewidth=0 +
     # edgecolors="none" prevent matplotlib from drawing per-cell borders,
     # which is a second silent cost at large grids. Visual output is
@@ -303,6 +303,89 @@ def test_concentrated_data_fills_single_cell():
 
 
 # ===========================================================================
+# build_density_matrix — Laplace smoothing sweep
+# ===========================================================================
+
+
+# Covers the three physically meaningful regimes:
+#   - 0.0   : legacy behaviour, empty cells stay exactly zero
+#   - 1e-6  : numerically negligible floor (stabilizes log-ratios without
+#             perturbing the lookup values on populated cells)
+#   - 1.0   : production-strength Laplace prior (α=1 per cell) — this is what
+#             build_density_matrix_1d is called with in the production
+#             build_density_matrices pipeline
+_SMOOTHING_VALUES = [0.0, 1e-6, 1.0]
+
+
+@pytest.mark.parametrize("smoothing", _SMOOTHING_VALUES, ids=[f"alpha={a}" for a in _SMOOTHING_VALUES])
+def test_smoothing_preserves_probability_normalization(smoothing):
+    """Regardless of the smoothing strength, the returned matrix must still sum
+    to 1.0: smoothing adds α to every cell *before* renormalization, so the
+    normalization invariant is unaffected."""
+    torch.manual_seed(0)
+    x = torch.rand(500)
+    y = torch.rand(500)
+
+    probs, _, _ = build_density_matrix(x, y, n_bins_x=20, n_bins_y=20, smoothing=smoothing)
+
+    assert torch.isclose(probs.sum(), torch.tensor(1.0), atol=1e-5), (
+        f"smoothing={smoothing}: probs.sum() = {probs.sum().item():.8f}"
+    )
+
+
+@pytest.mark.parametrize("smoothing", _SMOOTHING_VALUES, ids=[f"alpha={a}" for a in _SMOOTHING_VALUES])
+def test_smoothing_controls_empty_cell_floor(smoothing):
+    """With all samples in one corner, 399 of 400 cells are empty. Without
+    smoothing (α=0) those cells stay exactly 0; with α>0 they lift to a
+    uniform, strictly positive floor equal to α / total_count_after_smoothing.
+    """
+    x = torch.zeros(100)
+    y = torch.zeros(100)
+
+    probs, _, _ = build_density_matrix(x, y, n_bins_x=20, n_bins_y=20, smoothing=smoothing)
+
+    empty_cells = probs.flatten()
+    # The populated bin (0, 0) is the unique max — exclude it from the "empty" set.
+    max_idx = int(torch.argmax(empty_cells).item())
+    mask = torch.ones_like(empty_cells, dtype=torch.bool)
+    mask[max_idx] = False
+    empty_vals = empty_cells[mask]
+
+    if smoothing == 0.0:
+        assert torch.all(empty_vals == 0.0), (
+            f"α=0 must leave empty cells at exactly 0; got max {empty_vals.max().item():.3e}"
+        )
+    else:
+        assert torch.all(empty_vals > 0.0), (
+            f"α={smoothing} must lift every empty cell above 0; got min {empty_vals.min().item():.3e}"
+        )
+        # All empty cells should share the same floor value under a uniform prior.
+        assert torch.allclose(empty_vals, empty_vals.mean().expand_as(empty_vals), atol=1e-8)
+
+
+@pytest.mark.parametrize("smoothing", _SMOOTHING_VALUES, ids=[f"alpha={a}" for a in _SMOOTHING_VALUES])
+def test_smoothing_strength_orders_empty_cell_mass(smoothing):
+    """Ordering contract: larger α redistributes more mass into empty bins, so
+    a populated bin's probability decreases monotonically as α grows. Pinning
+    the three regimes (0, 1e-6, 1) lets us catch silent changes to the
+    smoothing semantics."""
+    # Use the same seed + data so the only moving part is α.
+    torch.manual_seed(0)
+    x = torch.zeros(100)
+    y = torch.zeros(100)
+
+    probs, _, _ = build_density_matrix(x, y, n_bins_x=20, n_bins_y=20, smoothing=smoothing)
+    peak = probs.max().item()
+
+    # Populated-bin peak value under uniform smoothing α over 400 cells:
+    #   (100 + α) / (100 + 400 α)
+    expected_peak = (100 + smoothing) / (100 + 400 * smoothing)
+    assert abs(peak - expected_peak) < 1e-5, (
+        f"α={smoothing}: peak {peak:.6f} != expected {expected_peak:.6f}"
+    )
+
+
+# ===========================================================================
 # build_density_matrix — real-data structural tests
 # ===========================================================================
 
@@ -369,9 +452,14 @@ def test_sized_feature_functions_ignore_nan_padding():
     )
     sizes = torch.tensor([2, 3])
 
+    # arm() now requires a reconstructed source direction (the far-field
+    # backprojection peak in production); a fixed unit vector is sufficient
+    # here since this test only checks NaN-padding semantics, not ARM physics.
+    reconstructed_unit_vector = torch.tensor([0.0, 0.0, 1.0])
+
     masked_delta_e = delta_E(energies, sizes=sizes)
     masked_angle = annihilation_angle(positions, sizes=sizes)
-    masked_arm = arm(energies, positions, cfg, sizes=sizes)
+    masked_arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
 
     assert torch.isclose(masked_delta_e, torch.tensor([0.0])).all()
     assert torch.isfinite(masked_angle).all(), (

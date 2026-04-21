@@ -26,6 +26,7 @@ import wandb
 from omegaconf import OmegaConf
 
 from physics.annihilation_detection_utils import compute_event_features, create_tensors
+from physics.compton_cone_reconstruction import FarFieldImager
 from physics.matrix_calculations import (
     build_density_matrix,
     build_density_matrix_1d,
@@ -36,14 +37,14 @@ from physics.matrix_calculations import (
 from utils.reader_extraction import get_reader
 
 # Resolutions swept by density_matrices / likelihood_tensors. 20×20 is coarse
-# enough that every bin is well-populated, 2000×2000 is the production
+# enough that every bin is well-populated, 1000×1000 is the production
 # default. Intermediate 200×200 bridges the two.
-BIN_SIZES = [20, 200, 2000]
+BIN_SIZES = [20, 200, 1000]
 
 
 # Module-level LRU-of-1 caches for the parametrized heavy fixtures. With
 # scope="session", pytest would hold all three bin-size instances alive until
-# end-of-session, which at n_bins=2000 pushes peak memory into OOM territory.
+# end-of-session, which at n_bins=1000 pushes peak memory into OOM territory.
 # Instead we use function-scope fixtures that hit these caches: tests at the
 # same n_bins reuse the build, and when pytest moves to the next n_bins the
 # previous entry is explicitly evicted and gc'd before the new build starts.
@@ -72,6 +73,7 @@ def real_tensors():
     megalib_root = os.environ["MEGALIB"]
     geo_file = f"{megalib_root}/resource/examples/geomega/special/Max.geo.setup"
     sim_file = "data/Activation.sim"
+    tra_file = "data/Activation.tra"
 
     cfg = OmegaConf.create(
         {
@@ -83,6 +85,18 @@ def real_tensors():
             }
         }
     )
+
+    # Replicates the mainline pipeline in run.py: run the far-field
+    # backprojection once per session so ARM has a real reconstructed source
+    # direction instead of a hard-coded axis.
+    imager = FarFieldImager(
+        geometry_file=geo_file,
+        n_phi=360,
+        n_theta=180,
+        coordinate_system="spheric",
+    )
+    imager.backproject_file(tra_file)
+    reconstructed_unit_vector = imager.peak_direction_cartesian()
 
     reader = get_reader(geo_file, sim_file)
 
@@ -97,7 +111,12 @@ def real_tensors():
         gen_list_dE,
         gen_list_angle,
         gen_list_arm,
-    ) = compute_event_features(cfg, ref_energy=511, reader=reader)
+    ) = compute_event_features(
+        cfg,
+        ref_energy=511,
+        reader=reader,
+        reconstructed_unit_vector=reconstructed_unit_vector,
+    )
 
     (
         bdecay_dE,
@@ -243,7 +262,7 @@ def density_matrices(real_tensors, request):
 def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
     """Construct the six per-event likelihood tensors at a given resolution.
     Mirrors ``annihilation_detection_utils.build_density_matrices`` but with
-    a configurable bin count (production hardcodes 2000)."""
+    a configurable bin count (production hardcodes 1000)."""
     t = real_tensors
 
     _, deltaE_angle_bins, angle_bins = build_density_matrix(

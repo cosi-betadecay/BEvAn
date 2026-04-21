@@ -14,7 +14,7 @@ tensors:
 
 All tests run against real feature data extracted from Activation.sim via the
 session-scoped ``likelihood_tensors`` fixture defined in ``conftest.py``,
-which is parametrized over ``BIN_SIZES = [20, 200, 2000]``. Every test
+which is parametrized over ``BIN_SIZES = [20, 200, 1000]``. Every test
 therefore runs once per resolution.
 
 Requirements:
@@ -152,7 +152,7 @@ def test_true_bdecay_events_have_higher_beta_likelihood(real_tensors, likelihood
 
     This is the core physics contract of the density factorization — the
     class-conditional densities must favour the correct class on true events.
-    It holds across bin sizes (the fixture sweeps 20/200/2000), so this
+    It holds across bin sizes (the fixture sweeps 20/200/1000), so this
     assertion is checked at every resolution.
     """
     gt = real_tensors["ground_truths"]
