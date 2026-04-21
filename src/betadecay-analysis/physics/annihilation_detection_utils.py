@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import ROOT as M
 import torch
-import wandb
 from tqdm import tqdm
 from utils.plots import plot_confusion_matrix
 
+import wandb
 from physics.bayesian_annihilation import BayesianAnnihiliationModel
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
