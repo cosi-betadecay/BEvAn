@@ -2,23 +2,23 @@ import omegaconf
 import torch
 
 
-def reconstruct_incoming_direction():
-    # TODO: Develop/use a reconstruction algorithm to get the incoming direction of particle. This would enable more accurate ARM calculations.
-    return
-
-
 def theta_geo(
-    positions: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
+    positions: torch.Tensor,
+    cfg: omegaconf.dictconfig.DictConfig,
+    reconstructed_unit_vector,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     sigma_x = cfg.likelihoods.arm.sigma_x
 
     pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
     x0 = pos[:, 0, :]  # (B, 3)
     x1 = pos[:, 1, :]  # (B, 3)
-    x2 = pos[:, 2, :]  # (B, 3)
 
-    v_in = x1 - x0
-    v_out = x2 - x1
+    v_in = torch.as_tensor(
+        reconstructed_unit_vector, device=positions.device, dtype=positions.dtype
+    )
+    if v_in.ndim == 1:
+        v_in = v_in.expand(x0.shape[0], -1)
+    v_out = x1 - x0
 
     L_in = torch.clamp(torch.norm(v_in, dim=1), min=1e-3)
     L_out = torch.clamp(torch.norm(v_out, dim=1), min=1e-3)
@@ -51,11 +51,11 @@ def theta_kin(
 
     electron_mass_energy = 511.0  # keV
     if energies.ndim == 1:
-        E_1 = energies[1:].sum()
-        E_2 = energies[2:].sum()
+        E_1 = energies.sum()
+        E_2 = energies[1:].sum()
     else:
-        E_1 = energies[:, 1:].sum(dim=1)
-        E_2 = energies[:, 2:].sum(dim=1)
+        E_1 = energies[:, 0:].sum(dim=1)
+        E_2 = energies[:, 1:].sum(dim=1)
 
     cos_theta_kin = 1 - electron_mass_energy * (1 / E_2 - 1 / E_1)
     cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)

@@ -12,6 +12,7 @@ from physics.annihilation_detection_utils import (
 
 def annihilation_extractor(
     cfg: omegaconf.dictconfig.DictConfig,
+    reconstructed_unit_vector,
     ref_energy: int = 511,
 ) -> None:
     reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
@@ -27,7 +28,7 @@ def annihilation_extractor(
         gen_list_delta_E,
         gen_list_annihilation_angle,
         gen_list_arm,
-    ) = compute_event_features(cfg, ref_energy, reader)
+    ) = compute_event_features(cfg, ref_energy, reader, reconstructed_unit_vector)
 
     (
         bdecay_tensor_delta_E,

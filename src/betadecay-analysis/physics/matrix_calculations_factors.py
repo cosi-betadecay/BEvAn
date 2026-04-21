@@ -137,7 +137,7 @@ def annihilation_angle(
 
 
 ############################################
-# Agular Resolution Measure (ARM)
+# Angular Resolution Measure (ARM)
 ############################################
 
 
@@ -145,6 +145,7 @@ def arm(
     energies: torch.Tensor,
     positions: torch.Tensor,
     cfg: omegaconf.dictconfig.DictConfig,
+    reconstructed_unit_vector,
     sizes: torch.Tensor | None = None,
 ) -> torch.Tensor:
 
@@ -164,17 +165,31 @@ def arm(
         for size in torch.unique(sizes, sorted=True):
             size_int = int(size.item())
             group = sizes == size
-            if size_int < 3:
-                outputs.append(positions.new_tensor(1.0).reshape(1))
+            if size_int < 2:
+                outputs.append(positions.new_tensor(float("nan")).reshape(1))
                 continue
-            outputs.append(arm(energies[group, :size_int], positions[group, :size_int, :], cfg))
-        return torch.stack(outputs).min().reshape(1)
+            outputs.append(
+                arm(
+                    energies[group, :size_int],
+                    positions[group, :size_int, :],
+                    cfg,
+                    reconstructed_unit_vector,
+                )
+            )
+
+        stacked = torch.stack(outputs).flatten()
+        finite = stacked[torch.isfinite(stacked)]
+        if finite.numel() == 0:
+            return positions.new_tensor(float("nan")).reshape(1)
+        return finite.amin().reshape(1)
 
     n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
-    if n_pos < 3:
-        return positions.new_tensor(1.0)  # TODO: find a good replacement for this that actually makes sense
+    if n_pos < 2:
+        return positions.new_tensor(float("nan")).reshape(1)
 
-    arm_value = torch.min(torch.abs(theta_geo(positions, cfg)[0] - theta_kin(energies, cfg)[0]))
+    arm_value = torch.min(
+        torch.abs(theta_geo(positions, cfg, reconstructed_unit_vector)[0] - theta_kin(energies, cfg)[0])
+    )
 
     return arm_value.reshape(1)
 
@@ -187,13 +202,6 @@ def arm(
 def delta_E(
     energies: torch.Tensor, ref_energy: float = 511.0, sizes: torch.Tensor | None = None
 ) -> torch.Tensor:
-    """Annihilation-energy residual |ΣE − ref_energy| (default ref = 511 keV).
-
-    This is **not** Zoglauer's E_in (the photon energy before a Compton
-    interaction, §4.5.3). It is an absolute distance from the expected total
-    deposit for a fully absorbed β⁺ single-photon annihilation signature,
-    used here as a signal-vs-background discriminator.
-    """
     if sizes is not None:
         if energies.ndim != 2 or sizes.ndim != 1:
             raise ValueError(

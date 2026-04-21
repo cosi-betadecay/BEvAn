@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
 import ROOT as M
+import torch
 from tqdm import tqdm
 
 # --------------------------------------------------------------------------- #
@@ -87,8 +89,8 @@ class FarFieldImager:
         n_phi: int = 360,
         n_theta: int = 180,
         coordinate_system: str = "spheric",
-        phi_range: tuple[float, float] = (0.0, 2.0 * np.pi),
-        theta_range: tuple[float, float] = (0.0, np.pi),
+        phi_range: tuple[float, float] = (0.0, 2.0 * math.pi),
+        theta_range: tuple[float, float] = (0.0, math.pi),
     ) -> None:
         _ensure_megalib_loaded()
         _declare_wrapper()
@@ -138,8 +140,11 @@ class FarFieldImager:
             raise RuntimeError("MBackprojectionFarField.SetDimensions failed")
         self.bp.PrepareBackprojection()
 
-        # Accumulator across events + per-event scratch buffers
-        self.accumulated = np.zeros(self.n_pixels, dtype=np.float64)
+        # Accumulator across events + per-event scratch buffers.
+        # _event_image/_event_bins must remain numpy: PyROOT binds them to the
+        # C++ ``double*`` / ``int*`` arguments of CallBackproject via numpy's
+        # array interface; torch tensors do not expose the same buffer.
+        self.accumulated = torch.zeros(self.n_pixels, dtype=torch.float64)
         self._event_image = np.zeros(self.n_pixels, dtype=np.float64)
         self._event_bins = np.zeros(self.n_pixels, dtype=np.int32)
 
@@ -147,9 +152,9 @@ class FarFieldImager:
 
     def reset(self) -> None:
         """Zero the accumulated image."""
-        self.accumulated.fill(0.0)
+        self.accumulated.zero_()
 
-    def image_2d(self) -> np.ndarray:
+    def image_2d(self) -> torch.Tensor:
         """Accumulated image reshaped as ``(n_theta, n_phi)``."""
         return self.accumulated.reshape(self.n_theta, self.n_phi)
 
@@ -173,7 +178,9 @@ class FarFieldImager:
             return False
 
         # Scatter-add: each used bin receives its event image value.
-        np.add.at(self.accumulated, self._event_bins[:n], self._event_image[:n])
+        bins = torch.from_numpy(self._event_bins[:n].astype(np.int64))
+        values = torch.from_numpy(self._event_image[:n])
+        self.accumulated.index_put_((bins,), values, accumulate=True)
         return True
 
     def backproject_file(
@@ -211,7 +218,9 @@ class FarFieldImager:
     def peak_direction(self) -> tuple[float, float]:
         """``(theta, phi)`` of the brightest pixel, in radians."""
         img = self.image_2d()
-        theta_idx, phi_idx = np.unravel_index(int(np.argmax(img)), img.shape)
+        flat_idx = int(torch.argmax(img).item())
+        theta_idx = flat_idx // self.n_phi
+        phi_idx = flat_idx % self.n_phi
 
         theta_min, theta_max = self.theta_range
         phi_min, phi_max = self.phi_range
@@ -219,22 +228,23 @@ class FarFieldImager:
         phi = phi_min + (phi_idx + 0.5) * (phi_max - phi_min) / self.n_phi
         return theta, phi
 
-    def peak_direction_cartesian(self) -> np.ndarray:
+    def peak_direction_cartesian(self) -> torch.Tensor:
         """Unit vector from the coordinate origin to the peak pixel."""
         theta, phi = self.peak_direction()
-        return np.array(
+        return torch.tensor(
             [
-                np.sin(theta) * np.cos(phi),
-                np.sin(theta) * np.sin(phi),
-                np.cos(theta),
-            ]
+                math.sin(theta) * math.cos(phi),
+                math.sin(theta) * math.sin(phi),
+                math.cos(theta),
+            ],
+            dtype=torch.float64,
         )
 
     # --- persistence ------------------------------------------------------- #
 
     def save_image_numpy(self, path: str | Path) -> None:
         """Save the accumulated image as ``.npy``."""
-        np.save(str(path), self.image_2d())
+        np.save(str(path), self.image_2d().cpu().numpy())
 
 
 if __name__ == "__main__":

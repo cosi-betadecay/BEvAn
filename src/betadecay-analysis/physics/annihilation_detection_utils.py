@@ -47,7 +47,7 @@ from physics.matrix_calculations import (
 from physics.matrix_calculations_factors import annihilation_angle, arm, delta_E
 
 
-def compute_event_features(cfg, ref_energy, reader):
+def compute_event_features(cfg, ref_energy, reader, reconstructed_unit_vector):
     ground_truths = []
 
     # Lists beta decay
@@ -92,7 +92,7 @@ def compute_event_features(cfg, ref_energy, reader):
 
         _delta_E = delta_E(energies, sizes=sizes)
         _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes)
-        _arm = arm(energies, positions, cfg, sizes=sizes)
+        _arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
 
         gen_list_delta_E.append(_delta_E)
         gen_list_annihilation_angle.append(_annihilation_angle)
