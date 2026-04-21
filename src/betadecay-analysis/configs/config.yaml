@@ -1,0 +1,9 @@
+defaults:
+  - _self_
+  - likelihoods
+  - wandb
+
+setup:
+  geo_file: ${oc.env:MEGALIB}/resource/examples/geomega/special/Max.geo.setup
+  sim_file: data/Activation.sim
+  tra_file: data/Activation.tra

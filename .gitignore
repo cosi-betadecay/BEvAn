@@ -27,3 +27,12 @@ wandb
 
 # Hydra
 outputs/
+
+# UV
+uv.lock
+
+# Claude
+/.claude
+
+# Logs
+*.log
