@@ -5,7 +5,7 @@ Also do inference from the bayesian network for the 80% data to get that too.
 """
 
 import torch
-from statistics.matrix_calculations import (
+from modeling.matrix_calculations import (
     build_density_matrix,
     build_density_matrix_1d,
     conditional_from_joint,
