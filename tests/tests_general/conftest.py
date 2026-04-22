@@ -1,11 +1,12 @@
 """
 Parent-level fixtures for tests_general.
 
-Provides ``real_tensors``, ``wandb_run``, ``train_eval_split``, and
-``likelihood_tensors`` (parametrized over BIN_SIZES) to every sibling
-sub-directory. The deeper tests_physics conftest defines its own
-``real_tensors`` / ``wandb_run`` and will shadow the ones here for tests
-collected inside tests_physics.
+Provides ``real_tensors``, ``wandb_run``, ``train_eval_split``,
+``density_matrices`` (parametrized over BIN_SIZES), ``likelihood_tensors``
+(parametrized over BIN_SIZES), and ``real_trainer`` (parametrized over
+BIN_SIZES) to every sibling sub-directory. The deeper tests_physics conftest
+defines its own ``real_tensors`` / ``wandb_run`` and will shadow the ones
+here for tests collected inside tests_physics.
 
 Naming convention for the ``real_tensors`` dict matches tests_physics
 (``bdecay_tensor_delta_E``, etc.) so any utility code can move between
@@ -49,6 +50,7 @@ BIN_SIZES = [20, 200, 1000]
 # Function-scope fixtures hit these caches: tests at the same n_bins reuse
 # the build, and when pytest moves to the next n_bins the previous entry is
 # evicted and gc'd before the new build starts.
+_density_matrices_cache: dict[int, dict] = {}
 _likelihood_tensors_cache: dict[int, dict] = {}
 _trainer_cache: dict[int, dict] = {}
 
@@ -159,6 +161,81 @@ def wandb_run():
     )
     yield run
     wandb.finish()
+
+
+def _build_density_matrices(real_tensors: dict, n_bins: int) -> dict:
+    """Construct 2D probability matrices for the two feature pairs at a given
+    resolution. ΔE and ARM axes use log spacing; annihilation_angle linear."""
+    t = real_tensors
+
+    _, x_bins_angle, y_bins_angle = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_annihilation_angle"],
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=0.1,
+    )
+    bdecay_angle_probs, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_annihilation_angle"],
+        x_bins=x_bins_angle,
+        y_bins=y_bins_angle,
+    )
+    bg_angle_probs, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_annihilation_angle"],
+        x_bins=x_bins_angle,
+        y_bins=y_bins_angle,
+    )
+
+    _, x_bins_arm, y_bins_arm = build_density_matrix(
+        t["combined_tensor_delta_E"],
+        t["combined_tensor_arm"],
+        n_bins_x=n_bins,
+        n_bins_y=n_bins,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=0.1,
+        log_y_floor=1e-3,
+    )
+    bdecay_arm_probs, _, _ = build_density_matrix(
+        t["bdecay_tensor_delta_E"],
+        t["bdecay_tensor_arm"],
+        x_bins=x_bins_arm,
+        y_bins=y_bins_arm,
+    )
+    bg_arm_probs, _, _ = build_density_matrix(
+        t["bg_tensor_delta_E"],
+        t["bg_tensor_arm"],
+        x_bins=x_bins_arm,
+        y_bins=y_bins_arm,
+    )
+
+    return {
+        "bdecay_angle": bdecay_angle_probs,
+        "bg_angle": bg_angle_probs,
+        "x_bins_angle": x_bins_angle,
+        "y_bins_angle": y_bins_angle,
+        "bdecay_arm": bdecay_arm_probs,
+        "bg_arm": bg_arm_probs,
+        "x_bins_arm": x_bins_arm,
+        "y_bins_arm": y_bins_arm,
+        "n_bins": n_bins,
+    }
+
+
+@pytest.fixture(scope="function", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
+def density_matrices(real_tensors, request):
+    """2D per-class probability matrices for (ΔE, angle) and (ΔE, ARM) at
+    ``request.param`` × ``request.param`` resolution. Function-scoped with an
+    LRU-of-1 cache for memory boundedness at high n_bins."""
+    n_bins = request.param
+    _evict_other_params(_density_matrices_cache, n_bins)
+    if n_bins not in _density_matrices_cache:
+        _density_matrices_cache[n_bins] = _build_density_matrices(real_tensors, n_bins)
+    return _density_matrices_cache[n_bins]
 
 
 def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
