@@ -23,8 +23,6 @@ import os
 import pytest
 import torch
 import wandb
-from omegaconf import OmegaConf
-
 from dataset.datasets import Datasets
 from modeling.matrix_calculations import (
     build_density_matrix,
@@ -33,6 +31,7 @@ from modeling.matrix_calculations import (
     lookup_density_values,
     lookup_density_values_1d,
 )
+from omegaconf import OmegaConf
 from physics.compton_cone_reconstruction import FarFieldImager
 from utils.reader_extraction import get_reader
 
@@ -288,24 +287,16 @@ def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
         y_bins=arm_bins,
     )
 
-    bdecay_marginal_dE, _ = build_density_matrix_1d(
-        t["bdecay_tensor_delta_E"], x_bins=deltaE_angle_bins
-    )
-    bg_marginal_dE, _ = build_density_matrix_1d(
-        t["bg_tensor_delta_E"], x_bins=deltaE_angle_bins
-    )
+    bdecay_marginal_dE, _ = build_density_matrix_1d(t["bdecay_tensor_delta_E"], x_bins=deltaE_angle_bins)
+    bg_marginal_dE, _ = build_density_matrix_1d(t["bg_tensor_delta_E"], x_bins=deltaE_angle_bins)
 
     bdecay_cond_angle = conditional_from_joint(bdecay_joint_angle, axis=0)
     bdecay_cond_arm = conditional_from_joint(bdecay_joint_arm, axis=0)
     bg_cond_angle = conditional_from_joint(bg_joint_angle, axis=0)
     bg_cond_arm = conditional_from_joint(bg_joint_arm, axis=0)
 
-    p_beta_deltaE = lookup_density_values_1d(
-        t["gen_tensor_delta_E"], bdecay_marginal_dE, deltaE_angle_bins
-    )
-    p_bg_deltaE = lookup_density_values_1d(
-        t["gen_tensor_delta_E"], bg_marginal_dE, deltaE_angle_bins
-    )
+    p_beta_deltaE = lookup_density_values_1d(t["gen_tensor_delta_E"], bdecay_marginal_dE, deltaE_angle_bins)
+    p_bg_deltaE = lookup_density_values_1d(t["gen_tensor_delta_E"], bg_marginal_dE, deltaE_angle_bins)
     p_beta_angle = lookup_density_values(
         t["gen_tensor_delta_E"],
         t["gen_tensor_annihilation_angle"],
