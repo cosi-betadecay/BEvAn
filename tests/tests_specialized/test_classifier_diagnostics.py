@@ -146,6 +146,74 @@ def test_precision_recall_curve(real_posterior_scores, wandb_run):
 
 
 # --------------------------------------------------------------------------- #
+# Combined Eval Plot — ROC + PR side-by-side
+# --------------------------------------------------------------------------- #
+
+
+def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
+    """Single evaluation figure with ROC and Precision-Recall curves side-by-side.
+
+    One-glance summary of classifier skill at a given bin resolution. Re-asserts
+    the same invariants as the dedicated ROC / PR tests (AUC > 0.5,
+    AP > prevalence) so a failure in either metric surfaces even when only this
+    eval-plot is run.
+    """
+    model = real_posterior_scores["model"]
+    valid = real_posterior_scores["valid"]
+    n_bins = real_posterior_scores["n_bins"]
+    scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
+    labels = real_posterior_scores["labels"][valid]
+
+    fpr, tpr = _roc_curve(labels, scores)
+    auc = _auc(fpr, tpr)
+
+    precision, recall = _precision_recall_curve(labels, scores)
+    ap = _average_precision(labels, scores)
+    prevalence = float(labels.mean())
+
+    assert auc > 0.5, f"ROC AUC = {auc:.3f} — classifier is at or below chance"
+    assert ap > prevalence, f"AP ({ap:.3f}) did not beat the prevalence baseline ({prevalence:.3f})"
+
+    fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(11, 5))
+
+    ax_roc.plot(fpr, tpr, label=f"ROC (AUC = {auc:.3f})")
+    ax_roc.plot([0, 1], [0, 1], "--", color="gray", label="chance")
+    ax_roc.set_xlabel("False Positive Rate")
+    ax_roc.set_ylabel("True Positive Rate")
+    ax_roc.set_title("ROC")
+    ax_roc.set_xlim(0.0, 1.0)
+    ax_roc.set_ylim(0.0, 1.0)
+    ax_roc.legend(loc="lower right")
+
+    ax_pr.plot(recall, precision, label=f"PR (AP = {ap:.3f})")
+    ax_pr.axhline(
+        prevalence,
+        linestyle="--",
+        color="gray",
+        label=f"baseline (prevalence = {prevalence:.2f})",
+    )
+    ax_pr.set_xlabel("Recall (efficiency)")
+    ax_pr.set_ylabel("Precision (purity)")
+    ax_pr.set_title("Precision-Recall")
+    ax_pr.set_xlim(0.0, 1.0)
+    ax_pr.set_ylim(0.0, 1.05)
+    ax_pr.legend(loc="lower left")
+
+    fig.suptitle(f"Classifier evaluation — P(β | D) vs truth (n_bins={n_bins})")
+    fig.tight_layout()
+
+    wandb_run.log(
+        {
+            f"eval/n_bins={n_bins}/auc": auc,
+            f"eval/n_bins={n_bins}/average_precision": ap,
+            f"eval/n_bins={n_bins}/prevalence": prevalence,
+            f"eval/n_bins={n_bins}/roc_pr": wandb.Image(fig),
+        }
+    )
+    plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
 # Score Distribution per Class
 # --------------------------------------------------------------------------- #
 

@@ -1,10 +1,3 @@
-"""
-This code should take in the 20% data & the according point source vector from compton
-cones from the dataloader.py, and do eval on the matrices that were trained in train.py,
-just with its own data (meaning the 20% data).
-Do inference from the bayesian network for the 20% data to get that too.
-"""
-
 from modeling.calculate_probablities import predict
 from modeling.matrix_calculations import (
     lookup_density_values,

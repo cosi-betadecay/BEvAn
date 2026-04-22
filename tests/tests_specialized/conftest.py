@@ -32,9 +32,9 @@ from physics.compton_cone_reconstruction import FarFieldImager
 from utils.reader_extraction import get_reader
 
 # Resolutions swept by real_posterior_scores. 20×20 is coarse enough that
-# every bin is well-populated, 1000×1000 is the production default. 200×200
+# every bin is well-populated, 1000×1000 is the production default. 300×300
 # bridges the two so the curse-of-dimensionality transition is visible.
-BIN_SIZES = [20, 200, 1000]
+BIN_SIZES = [20, 300, 1000]
 
 
 @pytest.fixture(scope="session")

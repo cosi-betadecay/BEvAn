@@ -36,8 +36,8 @@ import pytest
 import torch
 import wandb
 from modeling.matrix_calculations import build_density_matrix, lookup_density_values
-from physics.physics_factors import annihilation_angle, arm, delta_E
 from omegaconf import OmegaConf
+from physics.physics_factors import annihilation_angle, arm, delta_E
 
 # ===========================================================================
 # Module-level plot helpers

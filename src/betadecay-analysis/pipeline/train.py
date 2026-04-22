@@ -1,9 +1,3 @@
-"""
-This code should take in the 80% data & the according point source vector from compton
-cones from the dataloader.py, and accordingly fill up the matrices in /physics.
-Also do inference from the bayesian network for the 80% data to get that too.
-"""
-
 import torch
 from modeling.matrix_calculations import (
     build_density_matrix,
