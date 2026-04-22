@@ -3,7 +3,7 @@ from statistics.bayesian_annihilation import BayesianAnnihiliationModel
 import matplotlib.pyplot as plt
 import torch
 import wandb
-from physics.matrix_calculations import lookup_density_values, lookup_density_values_1d
+from statistics.matrix_calculations import lookup_density_values, lookup_density_values_1d
 from utils.plots import plot_confusion_matrix
 
 
