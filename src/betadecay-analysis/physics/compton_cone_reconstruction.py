@@ -245,26 +245,3 @@ class FarFieldImager:
     def save_image_numpy(self, path: str | Path) -> None:
         """Save the accumulated image as ``.npy``."""
         np.save(str(path), self.image_2d().cpu().numpy())
-
-
-if __name__ == "__main__":
-    import os
-
-    repo_root = Path(__file__).resolve().parents[3]
-    geometry_file = os.path.expandvars("$MEGALIB/resource/examples/geomega/special/Max.geo.setup")
-    tra_file = repo_root / "data" / "Activation.tra"
-
-    imager = FarFieldImager(
-        geometry_file=geometry_file,
-        n_phi=360,
-        n_theta=180,
-        coordinate_system="spheric",
-    )
-    n_events = imager.backproject_file(tra_file)
-    print(f"Accumulated {n_events} Compton events from {tra_file}")
-
-    theta_rad, phi_rad = imager.peak_direction()
-    print(f"theta_rad = {theta_rad}, phi_rad = {phi_rad}")
-
-    unit_vector = imager.peak_direction_cartesian()
-    print(f"unit vector = {unit_vector}")
