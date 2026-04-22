@@ -3,14 +3,9 @@ from typing import Any
 import omegaconf
 import ROOT as M
 import torch
-from physics.annihilation_detection_utils import (
-    build_density_matrix,
-    build_density_matrix_1d,
-    conditional_from_joint,
-)
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
-from physics.matrix_calculations_factors import annihilation_angle, arm, delta_E
+from physics.physics_factors import annihilation_angle, arm, delta_E
 from tqdm import tqdm
 
 
@@ -215,85 +210,3 @@ class Datasets:
             combined_eval_arm,
         )
         return trainer, evaluator
-
-    def build_density_matrices(
-        self,
-        bdecay_tensor_delta_E,
-        bdecay_tensor_annihilation_angle,
-        bdecay_tensor_arm,
-        bg_tensor_delta_E,
-        bg_tensor_annihilation_angle,
-        bg_tensor_arm,
-        combined_tensor_delta_E,
-        combined_tensor_annihilation_angle,
-        combined_tensor_arm,
-    ):
-        _, deltaE_angle_bins, angle_bins = build_density_matrix(
-            combined_tensor_delta_E,
-            combined_tensor_annihilation_angle,
-            spacing_x="log",
-            spacing_y="linear",
-            log_x_floor=1e-3,
-            n_bins_x=200,
-            n_bins_y=200,
-        )
-        _, deltaE_arm_bins, arm_bins = build_density_matrix(
-            combined_tensor_delta_E,
-            combined_tensor_arm,
-            spacing_x="log",
-            spacing_y="log",
-            log_x_floor=1e-3,
-            log_y_floor=1e-3,
-            n_bins_x=200,
-            n_bins_y=200,
-        )
-
-        bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
-            bdecay_tensor_delta_E,
-            bdecay_tensor_annihilation_angle,
-            x_bins=deltaE_angle_bins,
-            y_bins=angle_bins,
-            smoothing=0.0,
-        )
-        bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
-            bdecay_tensor_delta_E,
-            bdecay_tensor_arm,
-            x_bins=deltaE_arm_bins,
-            y_bins=arm_bins,
-            smoothing=0.0,
-        )
-        bg_joint_deltaE_angle, _, _ = build_density_matrix(
-            bg_tensor_delta_E,
-            bg_tensor_annihilation_angle,
-            x_bins=deltaE_angle_bins,
-            y_bins=angle_bins,
-            smoothing=0.0,
-        )
-        bg_joint_deltaE_arm, _, _ = build_density_matrix(
-            bg_tensor_delta_E,
-            bg_tensor_arm,
-            x_bins=deltaE_arm_bins,
-            y_bins=arm_bins,
-            smoothing=0.0,
-        )
-
-        bdecay_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(
-            bdecay_tensor_delta_E, x_bins=deltaE_angle_bins, smoothing=1.0
-        )
-        bg_marginal_deltaE_angle_grid, _ = build_density_matrix_1d(
-            bg_tensor_delta_E, x_bins=deltaE_angle_bins, smoothing=1.0
-        )
-
-        bdecay_cond_angle = conditional_from_joint(bdecay_joint_deltaE_angle, axis=0)
-        bdecay_cond_arm = conditional_from_joint(bdecay_joint_deltaE_arm, axis=0)
-        bg_cond_angle = conditional_from_joint(bg_joint_deltaE_angle, axis=0)
-        bg_cond_arm = conditional_from_joint(bg_joint_deltaE_arm, axis=0)
-
-        return (
-            bdecay_marginal_deltaE_angle_grid,
-            bg_marginal_deltaE_angle_grid,
-            bdecay_cond_angle,
-            bdecay_cond_arm,
-            bg_cond_angle,
-            bg_cond_arm,
-        )

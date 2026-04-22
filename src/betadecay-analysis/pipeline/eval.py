@@ -5,8 +5,8 @@ just with its own data (meaning the 20% data).
 Do inference from the bayesian network for the 20% data to get that too.
 """
 
-from physics.annihilation_detection_utils import predict
-from physics.matrix_calculations import (
+from statistics.calculate_probablities import predict
+from statistics.matrix_calculations import (
     lookup_density_values,
     lookup_density_values_1d,
 )
