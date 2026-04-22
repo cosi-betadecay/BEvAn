@@ -25,15 +25,15 @@ import torch
 import wandb
 from omegaconf import OmegaConf
 
-from physics.annihilation_detection_utils import compute_event_features, create_tensors
-from physics.compton_cone_reconstruction import FarFieldImager
-from physics.matrix_calculations import (
+from dataset.datasets import Datasets
+from modeling.matrix_calculations import (
     build_density_matrix,
     build_density_matrix_1d,
     conditional_from_joint,
     lookup_density_values,
     lookup_density_values_1d,
 )
+from physics.compton_cone_reconstruction import FarFieldImager
 from utils.reader_extraction import get_reader
 
 # Resolutions swept by density_matrices / likelihood_tensors. 20×20 is coarse
@@ -99,26 +99,10 @@ def real_tensors():
     reconstructed_unit_vector = imager.peak_direction_cartesian()
 
     reader = get_reader(geo_file, sim_file)
+    datasets = Datasets(cfg, 511, reader, reconstructed_unit_vector)
 
     (
         ground_truths,
-        bdecay_list_dE,
-        bdecay_list_angle,
-        bdecay_list_arm,
-        bg_list_dE,
-        bg_list_angle,
-        bg_list_arm,
-        gen_list_dE,
-        gen_list_angle,
-        gen_list_arm,
-    ) = compute_event_features(
-        cfg,
-        ref_energy=511,
-        reader=reader,
-        reconstructed_unit_vector=reconstructed_unit_vector,
-    )
-
-    (
         bdecay_dE,
         bdecay_angle,
         bdecay_arm,
@@ -131,20 +115,14 @@ def real_tensors():
         combined_dE,
         combined_angle,
         combined_arm,
-    ) = create_tensors(
-        bdecay_list_dE,
-        bdecay_list_angle,
-        bdecay_list_arm,
-        bg_list_dE,
-        bg_list_angle,
-        bg_list_arm,
-        gen_list_dE,
-        gen_list_angle,
-        gen_list_arm,
-    )
+    ) = datasets.compute_event_features(cfg, 511, reader, reconstructed_unit_vector)
 
     return {
-        "ground_truths": torch.tensor(ground_truths, dtype=torch.bool),
+        "imager": imager,
+        "reconstructed_unit_vector": reconstructed_unit_vector,
+        "geo_file": geo_file,
+        "tra_file": tra_file,
+        "ground_truths": torch.as_tensor(ground_truths, dtype=torch.bool),
         "bdecay_tensor_delta_E": bdecay_dE,
         "bdecay_tensor_annihilation_angle": bdecay_angle,
         "bdecay_tensor_arm": bdecay_arm,

@@ -380,9 +380,7 @@ def test_smoothing_strength_orders_empty_cell_mass(smoothing):
     # Populated-bin peak value under uniform smoothing α over 400 cells:
     #   (100 + α) / (100 + 400 α)
     expected_peak = (100 + smoothing) / (100 + 400 * smoothing)
-    assert abs(peak - expected_peak) < 1e-5, (
-        f"α={smoothing}: peak {peak:.6f} != expected {expected_peak:.6f}"
-    )
+    assert abs(peak - expected_peak) < 1e-5, f"α={smoothing}: peak {peak:.6f} != expected {expected_peak:.6f}"
 
 
 # ===========================================================================

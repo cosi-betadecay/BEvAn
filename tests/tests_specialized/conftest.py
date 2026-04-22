@@ -17,26 +17,24 @@ import os
 import pytest
 import torch
 import wandb
-from omegaconf import OmegaConf
-from physics.annihilation_detection_utils import (
-    R,
-    compute_event_features,
-    create_tensors,
-)
-from physics.bayesian_annihilation import BayesianAnnihiliationModel
-from physics.compton_cone_reconstruction import FarFieldImager
-from physics.matrix_calculations import (
+from dataset.datasets import Datasets
+from modeling.bayesian_annihilation import BayesianAnnihiliationModel
+from modeling.calculate_probablities import R
+from modeling.matrix_calculations import (
     build_density_matrix,
     build_density_matrix_1d,
     conditional_from_joint,
     lookup_density_values,
     lookup_density_values_1d,
 )
+from omegaconf import OmegaConf
+from physics.compton_cone_reconstruction import FarFieldImager
 from utils.reader_extraction import get_reader
 
 # Resolutions swept by real_posterior_scores. 20×20 is coarse enough that
-# every bin is well-populated, 2000×2000 is the production default.
-BIN_SIZES = [20, 200, 2000]
+# every bin is well-populated, 1000×1000 is the production default. 200×200
+# bridges the two so the curse-of-dimensionality transition is visible.
+BIN_SIZES = [20, 200, 1000]
 
 
 @pytest.fixture(scope="session")
@@ -73,26 +71,10 @@ def real_tensors():
     reconstructed_unit_vector = imager.peak_direction_cartesian()
 
     reader = get_reader(geo_file, sim_file)
+    datasets = Datasets(cfg, 511, reader, reconstructed_unit_vector)
 
     (
         ground_truths,
-        bdecay_list_dE,
-        bdecay_list_angle,
-        bdecay_list_arm,
-        bg_list_dE,
-        bg_list_angle,
-        bg_list_arm,
-        gen_list_dE,
-        gen_list_angle,
-        gen_list_arm,
-    ) = compute_event_features(
-        cfg,
-        ref_energy=511,
-        reader=reader,
-        reconstructed_unit_vector=reconstructed_unit_vector,
-    )
-
-    (
         bdecay_dE,
         bdecay_angle,
         bdecay_arm,
@@ -105,17 +87,7 @@ def real_tensors():
         combined_dE,
         combined_angle,
         combined_arm,
-    ) = create_tensors(
-        bdecay_list_dE,
-        bdecay_list_angle,
-        bdecay_list_arm,
-        bg_list_dE,
-        bg_list_angle,
-        bg_list_arm,
-        gen_list_dE,
-        gen_list_angle,
-        gen_list_arm,
-    )
+    ) = datasets.compute_event_features(cfg, 511, reader, reconstructed_unit_vector)
 
     return {
         "ground_truths": ground_truths,
@@ -198,9 +170,10 @@ def _build_density_matrices_at(t, n_bins):
 @pytest.fixture(scope="session", params=BIN_SIZES, ids=[f"n_bins={n}" for n in BIN_SIZES])
 def real_posterior_scores(real_tensors, request):
     """Build the Bayesian classifier at resolution ``request.param`` and
-    return the model, ground-truth labels, valid-event mask, and bin count.
-    Parametrized over BIN_SIZES so every diagnostic test runs once per
-    resolution."""
+    return the model, ground-truth labels, valid-event mask, bin count, prior
+    counts, and the per-feature per-event likelihood lookups so downstream
+    tests can ablate individual feature contributions without rebuilding
+    the matrices."""
     n_bins = request.param
 
     (
@@ -228,7 +201,20 @@ def real_posterior_scores(real_tensors, request):
     valid = torch.isfinite(ratio).numpy()
     labels = torch.tensor(real_tensors["ground_truths"], dtype=torch.bool).numpy().astype("int64")
 
-    return {"model": model, "labels": labels, "valid": valid, "n_bins": n_bins}
+    return {
+        "model": model,
+        "labels": labels,
+        "valid": valid,
+        "n_bins": n_bins,
+        "n_beta_decay": n_beta_decay,
+        "n_bg": n_bg,
+        "p_beta_deltaE": p_beta_deltaE,
+        "p_bg_deltaE": p_bg_deltaE,
+        "p_beta_angle": p_beta_angle,
+        "p_bg_angle": p_bg_angle,
+        "p_beta_arm": p_beta_arm,
+        "p_bg_arm": p_bg_arm,
+    }
 
 
 @pytest.fixture(scope="session")
