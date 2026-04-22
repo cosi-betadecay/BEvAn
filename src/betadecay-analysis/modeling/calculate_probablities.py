@@ -120,7 +120,7 @@ def predict(
         p_bg_arm_given_deltaE,
     )
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
-    ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
+    ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
 
     tp = torch.sum(ground_truths & predictions).item()
     fp = torch.sum(~ground_truths & predictions).item()
