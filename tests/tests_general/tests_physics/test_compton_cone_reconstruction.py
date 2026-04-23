@@ -1,19 +1,3 @@
-"""
-Unit + real-data tests for physics/compton_cone_reconstruction.py.
-
-The FarFieldImager wraps MEGAlib's MBackprojectionFarField for far-field
-point-source localization. The accumulated sky image is exposed both as a
-flat (n_pixels,) tensor and as the reshaped (n_theta, n_phi) image.
-
-Test split:
-    - Construction & shape contracts (no real data needed beyond a geometry).
-    - Reset / accumulator behaviour (synthetic).
-    - Real-data sky image: shape, peak direction, image concentration —
-      drawn from the cached ``real_tensors["imager"]`` so we don't pay
-      for a second backprojection. Two W&B-logged plots: the full sky
-      heatmap and the peak's local neighbourhood.
-"""
-
 import math
 import os
 

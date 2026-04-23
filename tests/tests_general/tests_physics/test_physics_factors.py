@@ -1,23 +1,3 @@
-"""
-Unit tests for physics/physics_factors.py.
-
-Covers the three per-event features plus the two low-level cosine helpers:
-
-    - delta_E(energies, ref_energy, sizes)           — |ΣE − ref| residual
-    - annihilation_angle(positions, n_hits, sizes)   — min pair-vector cosine
-    - arm(energies, positions, cfg, v_in, sizes)     — |θ_geo − θ_kin| residual
-    - all_vector_cosines_matrix_calculation          — all-pairs cosine min
-    - all_vector_cosines_blockwise                   — chunked variant
-
-Pure tensor functions, so most coverage is synthetic-input contract tests.
-Two real-data tests plot the per-class distributions of delta_E, the
-annihilation cosine, and ARM to W&B so regressions in the feature extraction
-(or in the upstream ``event_data_processing`` / ``FarFieldImager``) surface
-as visible distribution drift.
-"""
-
-import math
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -80,7 +60,7 @@ def test_delta_E_2d_input_returns_min_across_batch():
         [
             [200.0, 200.0],  # sum 400 → diff 111
             [255.0, 256.0],  # sum 511 → diff   0
-            [1000.0, 0.0],   # sum 1000 → diff 489
+            [1000.0, 0.0],  # sum 1000 → diff 489
         ]
     )
     out = delta_E(energies, ref_energy=511.0)
@@ -250,9 +230,7 @@ def test_arm_with_sizes_size_below_2_returns_nan():
 
 def test_arm_with_sizes_invalid_shape_raises():
     energies = torch.tensor([100.0, 200.0], dtype=torch.float64)  # 1D not 2D
-    positions = torch.tensor(
-        [[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]], dtype=torch.float64
-    )
+    positions = torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]], dtype=torch.float64)
     v_in = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64)
     with pytest.raises(ValueError, match="Sized arm expects"):
         arm(energies, positions, _cfg(), v_in, sizes=torch.tensor([2]))

@@ -1,34 +1,3 @@
-"""
-Unit tests for physics/matrix_calculations.py.
-
-Covers:
-    - build_density_matrix   (11 tests — 8 edge-case, 3 real-data)
-    - lookup_density_values  ( 7 tests — 6 edge-case, 1 real-data)
-    - Physics tests          (14 tests — TRUE vs FALSE event matrix analysis)
-
-Test strategy
--------------
-1. Edge-case / contract tests  (inline tensors)
-   Require specific, controlled inputs to verify mathematical guarantees:
-   NaN/inf filtering, ValueError on empty input, exact probability values,
-   boundary conditions, and clamping behaviour.
-
-2. Real-data structural tests  (real_tensors fixture)
-   Verify correct behaviour on Activation.sim feature distributions.
-
-3. Physics tests  (real_tensors + density_matrices + wandb_run fixtures)
-   Assert that the density matrices are physically meaningful by checking
-   how they behave for TRUE (beta-decay) vs FALSE (background) events.
-   Every test logs one diagnostic plot to Weights & Biases.
-
-   Test groups:
-     - TRUE events structure  (2 tests)  — mass concentrated at low delta_E / ARM
-     - FALSE events structure (2 tests)  — mass more spread, not peaked near zero
-     - Entropy comparison     (2 tests)  — signal always less entropic than background
-     - Distinguishability     (4 tests)  — total variation + log-ratio sign checks
-     - Ground-truth accuracy  (4 tests)  — event-level density ratio on gen data
-"""
-
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np

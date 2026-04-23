@@ -1,7 +1,4 @@
-"""Unit tests for physics/event_processing.py."""
-
 import torch
-
 from physics.event_processing import event_data_processing
 
 
@@ -80,8 +77,12 @@ def test_event_data_processing_returns_padded_combinations_with_sizes():
     assert actual_energy_rows == expected_energy_rows
     seq = torch.arange(energies.shape[1]).unsqueeze(0)
     valid = seq < sizes.cpu().unsqueeze(1)
-    assert torch.all(torch.isnan(energies.cpu()[~valid])), "Padding entries should be NaN beyond each candidate size"
-    assert torch.all(torch.isnan(positions.cpu()[~valid])), "Padded positions should be NaN beyond each candidate size"
+    assert torch.all(torch.isnan(energies.cpu()[~valid])), (
+        "Padding entries should be NaN beyond each candidate size"
+    )
+    assert torch.all(torch.isnan(positions.cpu()[~valid])), (
+        "Padded positions should be NaN beyond each candidate size"
+    )
 
 
 def test_zero_hit_event_returns_none_pair():
@@ -93,5 +94,3 @@ def test_zero_hit_event_returns_none_pair():
     assert energies is None
     assert positions is None
     assert sizes is None
-
-

@@ -1,22 +1,3 @@
-"""
-Tests for pipeline/train.py — the Trainer class.
-
-Trainer.fit() consumes the 10-tuple emitted by Datasets.split_dataset, builds
-shared bin edges from the combined-train tensors, then fills per-class joint
-matrices, marginals, and conditionals. It also calls Evaluator(self).evaluate
-on the training split as a side-effect, which logs metrics under split_name
-"train" to W&B.
-
-The production code hardcodes the matrix bin count to 200×200. To sweep
-``BIN_SIZES = [20, 200, 1000]`` we monkeypatch ``pipeline.train.
-build_density_matrix`` so each parametrized run uses a different resolution.
-
-Test split:
-    - Synthetic-data unit tests (one bin size, focused on contracts)
-    - Real-data parametrized tests (full BIN_SIZES sweep, plot fitted
-      matrices to W&B for visual inspection)
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -51,9 +32,7 @@ def _synthetic_train_tuple(seed: int = 0):
     combined_dE = torch.cat([bdecay_dE, bg_dE])
     combined_angle = torch.cat([bdecay_angle, bg_angle])
     combined_arm = torch.cat([bdecay_arm, bg_arm])
-    gt_train = torch.cat(
-        [torch.ones(n_b, dtype=torch.bool), torch.zeros(n_g, dtype=torch.bool)]
-    )
+    gt_train = torch.cat([torch.ones(n_b, dtype=torch.bool), torch.zeros(n_g, dtype=torch.bool)])
     return (
         gt_train,
         bdecay_dE,
@@ -134,12 +113,9 @@ def test_fit_conditionals_rows_sum_to_one_or_zero(wandb_run):
         trainer.bg_cond_arm,
     ]:
         row_sums = matrix.sum(dim=1)
-        ones_or_zeros = torch.isclose(row_sums, torch.ones_like(row_sums), atol=1e-5) | (
-            row_sums == 0.0
-        )
+        ones_or_zeros = torch.isclose(row_sums, torch.ones_like(row_sums), atol=1e-5) | (row_sums == 0.0)
         assert torch.all(ones_or_zeros), (
-            "row sums of a conditional matrix must be 1 or 0; found "
-            f"{row_sums[~ones_or_zeros][:5].tolist()}"
+            f"row sums of a conditional matrix must be 1 or 0; found {row_sums[~ones_or_zeros][:5].tolist()}"
         )
 
 
@@ -187,7 +163,15 @@ def test_fit_logs_train_split_metrics_to_wandb(wandb_run):
         Trainer(_empty_cfg()).fit(_synthetic_train_tuple())
     finally:
         wandb.log = real_log
-    for key in ["train/TP", "train/FP", "train/FN", "train/TN", "train/precision", "train/recall", "train/f1_score"]:
+    for key in [
+        "train/TP",
+        "train/FP",
+        "train/FN",
+        "train/TN",
+        "train/precision",
+        "train/recall",
+        "train/f1_score",
+    ]:
         assert key in captured, f"Trainer.fit did not log {key!r}"
 
 
@@ -266,7 +250,9 @@ def test_real_fit_no_nan_or_inf_in_fitted_matrices(real_trainer):
         "bg_cond_arm",
     ]:
         m = getattr(trainer, name)
-        assert torch.all(torch.isfinite(m)), f"{name} has non-finite values at n_bins={real_trainer['n_bins']}"
+        assert torch.all(torch.isfinite(m)), (
+            f"{name} has non-finite values at n_bins={real_trainer['n_bins']}"
+        )
 
 
 def test_real_fit_marginal_distribution_visualisation(real_trainer, wandb_run):

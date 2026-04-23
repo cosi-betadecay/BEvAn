@@ -1,20 +1,3 @@
-"""
-Class-conditional feature overlap diagnostics + likelihood-term ablation.
-
-Probes whether the eval F1 ceiling is set by the model (binning, smoothing)
-or by the underlying feature reconstruction. Two checks:
-
-1. Per-feature class overlap (ARM, annihilation_angle, ΔE): plot β vs bg
-   class-conditional histograms and quantify their overlap with the
-   Bhattacharyya coefficient and total-variation distance. Heavy overlap
-   means the feature itself can't separate the classes — no amount of
-   binning or smoothing tweak will recover signal that isn't there.
-2. ΔE-only F1 vs full F1: rebuild the likelihood ratio from the ΔE marginal
-   alone (drop angle and ARM conditional terms) and compare F1 to the full
-   classifier's F1. If the gap is small, ARM and angle aren't contributing
-   discriminative signal beyond ΔE.
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")

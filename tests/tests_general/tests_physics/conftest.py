@@ -1,22 +1,3 @@
-"""
-Session-scoped pytest fixtures shared across tests_physics.
-
-The ``real_tensors`` fixture iterates ``data/Activation.sim`` through the same
-event-reading and feature-extraction pipeline the production code uses.
-Because it is session-scoped, MEGAlib opens and iterates the file only once
-per test run, regardless of how many test functions consume it.
-
-The ``density_matrices`` and ``likelihood_tensors`` fixtures are parametrized
-over ``BIN_SIZES`` so every physics test that consumes them runs once per
-resolution. This exposes how much of each assertion depends on sparse-bin
-memorization vs. genuine feature separation.
-
-Requirements:
-    - The MEGALIB environment variable must point to a valid MEGAlib installation.
-    - data/Activation.sim must exist relative to the project root (where pytest
-      is invoked from).
-"""
-
 import gc
 import os
 

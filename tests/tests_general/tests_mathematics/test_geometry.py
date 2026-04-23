@@ -1,23 +1,3 @@
-"""
-Unit tests for mathematics/geometry.py.
-
-The module exposes two angle estimators used to build the ARM (Angular
-Resolution Measure) feature:
-
-    - theta_geo(positions, cfg, reconstructed_unit_vector)
-        Geometric scatter angle between the reconstructed source direction
-        and the inter-hit vector. Returns (θ_geo, σ_θ_geo).
-
-    - theta_kin(energies, cfg)
-        Compton-kinematic scatter angle from the energy-loss law
-        cos θ = 1 − 511·(1/E_2 − 1/E_1). Returns (θ_kin, σ_θ_kin).
-
-Both are pure tensor functions, so the bulk of coverage is synthetic-input
-contract tests. A handful of W&B-instrumented sweeps log angle + uncertainty
-plots so the geometry's behaviour across the (L, E) plane is visible at a
-glance.
-"""
-
 import math
 
 import matplotlib

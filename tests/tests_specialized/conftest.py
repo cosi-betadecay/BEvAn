@@ -1,17 +1,3 @@
-"""
-Session-scoped fixtures for tests_specialized.
-
-Loads Activation.sim once through MEGAlib/ROOT, then builds the Bayesian
-classifier at several density-matrix resolutions so the diagnostic tests can
-run at each resolution in turn. The parametrization over n_bins exposes how
-much of the classifier's apparent skill comes from sparse-bin memorization
-vs. real feature separation.
-
-Requirements:
-    - MEGALIB environment variable points to a MEGAlib installation.
-    - data/Activation.sim exists relative to the project root.
-"""
-
 import os
 
 import pytest

@@ -1,23 +1,3 @@
-"""
-Density matrix visualization at multiple bin resolutions.
-
-For each pair of features, renders side-by-side (signal | background)
-probability heatmaps at BIN_SIZES = [20, 300, 1000]:
-
-    1) P(ΔE, ARM)
-    2) P(ΔE, annihilation angle)
-    3) P(ARM, annihilation angle)
-
-Bin edges are derived from the combined (signal + background) feature
-tensors so the per-class matrices share the same coordinate system. ΔE and
-ARM are residual-like (peak near 0, long tail) and use log spacing;
-annihilation angle is a bounded cosine and uses linear spacing.
-
-No classifier is built here — these are the raw density-matrix diagnostics
-that explain how class separation evolves with resolution before the
-curse of dimensionality kicks in at 1000×1000.
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")

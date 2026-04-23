@@ -1,18 +1,3 @@
-"""
-Unit + real-data tests for modeling/calculate_probablities.py.
-
-The module wires together density lookup, the likelihood-ratio R, and the
-predict() endpoint that turns ratios into W&B-logged classification metrics.
-
-Coverage:
-    - R(...)             — pure log-ratio composition; synthetic + real
-    - get_probabilities  — six lookups against pre-built matrices
-    - predict(...)       — smoke + real-data F1 attribution sweeps
-
-Real-data sweeps are parametrized over BIN_SIZES = [20, 200, 1000] via the
-``likelihood_tensors`` fixture in tests_general/conftest.py.
-"""
-
 import math
 
 import matplotlib
@@ -23,7 +8,6 @@ import numpy as np
 import torch
 import wandb
 from modeling.calculate_probablities import R, get_probabilities, predict
-
 
 # ---------------------------------------------------------------------------
 # R() — pure log-ratio composition
@@ -62,7 +46,7 @@ def test_R_uses_eps_to_avoid_log_zero():
 
 def test_R_factorises_as_product_of_subratios():
     """log R = (log P_β/P_bg)_ΔE + (log)_angle + (log)_arm  ⇒
-       R = R_ΔE · R_angle · R_arm."""
+    R = R_ΔE · R_angle · R_arm."""
     p1 = torch.tensor([0.4])
     q1 = torch.tensor([0.1])
     p2 = torch.tensor([0.3])
@@ -309,8 +293,20 @@ def test_real_R_distribution_separates_classes(likelihood_tensors, wandb_run):
 
     fig, ax = plt.subplots(figsize=(7, 4))
     edges = np.linspace(min(log_r.min(), -10), max(log_r.max(), 10), 100)
-    ax.hist(log_r_bg, bins=edges, alpha=0.5, density=True, label=f"true bg (n={log_r_bg.size}, μ={log_r_bg.mean():.2f})")
-    ax.hist(log_r_beta, bins=edges, alpha=0.5, density=True, label=f"true β (n={log_r_beta.size}, μ={log_r_beta.mean():.2f})")
+    ax.hist(
+        log_r_bg,
+        bins=edges,
+        alpha=0.5,
+        density=True,
+        label=f"true bg (n={log_r_bg.size}, μ={log_r_bg.mean():.2f})",
+    )
+    ax.hist(
+        log_r_beta,
+        bins=edges,
+        alpha=0.5,
+        density=True,
+        label=f"true β (n={log_r_beta.size}, μ={log_r_beta.mean():.2f})",
+    )
     ax.axvline(0.0, color="gray", linestyle="--", linewidth=1, label="R = 1")
     ax.set_xlabel("log R")
     ax.set_ylabel("density")

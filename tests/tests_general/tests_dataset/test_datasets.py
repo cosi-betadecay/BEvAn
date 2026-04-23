@@ -1,20 +1,3 @@
-"""
-Unit + real-data tests for dataset/datasets.py.
-
-The Datasets class wraps two responsibilities:
-
-    1. ``compute_event_features`` — iterate the MEGAlib reader and produce
-       per-class and per-event feature tensors (ΔE, annihilation_angle, ARM).
-       Real-data only — exercised through the ``real_tensors`` fixture.
-
-    2. ``split_dataset`` — stratified 80/20 partition of the per-class tensors
-       with a fixed seed (42). Pure logic, exercised both with synthetic
-       inputs and with the real per-class tensors.
-
-Real-data tests log per-class histograms and split-balance bars to W&B so
-the splits' health can be inspected visually.
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -107,9 +90,7 @@ def test_split_train_and_eval_are_disjoint():
     bg_angle = torch.arange(200, dtype=torch.float32) * -2.0
     bg_arm = torch.arange(200, dtype=torch.float32) * 0.02
 
-    train, evaluator = ds.split_dataset(
-        bdecay_dE, bdecay_angle, bdecay_arm, bg_dE, bg_angle, bg_arm
-    )
+    train, evaluator = ds.split_dataset(bdecay_dE, bdecay_angle, bdecay_arm, bg_dE, bg_angle, bg_arm)
 
     bdecay_train_set = set(train[1].tolist())
     bdecay_eval_set = set(evaluator[1].tolist())

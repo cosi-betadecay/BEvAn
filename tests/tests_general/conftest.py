@@ -1,22 +1,3 @@
-"""
-Parent-level fixtures for tests_general.
-
-Provides ``real_tensors``, ``wandb_run``, ``train_eval_split``,
-``density_matrices`` (parametrized over BIN_SIZES), ``likelihood_tensors``
-(parametrized over BIN_SIZES), and ``real_trainer`` (parametrized over
-BIN_SIZES) to every sibling sub-directory. The deeper tests_physics conftest
-defines its own ``real_tensors`` / ``wandb_run`` and will shadow the ones
-here for tests collected inside tests_physics.
-
-Naming convention for the ``real_tensors`` dict matches tests_physics
-(``bdecay_tensor_delta_E``, etc.) so any utility code can move between
-subdirectories without renaming.
-
-Requirements:
-    - The MEGALIB environment variable must point to a valid MEGAlib install.
-    - data/Activation.sim must exist relative to where pytest is invoked.
-"""
-
 import gc
 import os
 
@@ -289,12 +270,8 @@ def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
         y_bins=arm_bins,
     )
 
-    bdecay_marginal_dE, _ = build_density_matrix_1d(
-        t["bdecay_tensor_delta_E"], x_bins=deltaE_angle_bins
-    )
-    bg_marginal_dE, _ = build_density_matrix_1d(
-        t["bg_tensor_delta_E"], x_bins=deltaE_angle_bins
-    )
+    bdecay_marginal_dE, _ = build_density_matrix_1d(t["bdecay_tensor_delta_E"], x_bins=deltaE_angle_bins)
+    bg_marginal_dE, _ = build_density_matrix_1d(t["bg_tensor_delta_E"], x_bins=deltaE_angle_bins)
 
     bdecay_cond_angle = conditional_from_joint(bdecay_joint_angle, axis=0)
     bdecay_cond_arm = conditional_from_joint(bdecay_joint_arm, axis=0)
@@ -304,10 +281,18 @@ def _build_likelihood_tensors(real_tensors: dict, n_bins: int) -> dict:
     p_beta_deltaE = lookup_density_values_1d(t["gen_tensor_delta_E"], bdecay_marginal_dE, deltaE_angle_bins)
     p_bg_deltaE = lookup_density_values_1d(t["gen_tensor_delta_E"], bg_marginal_dE, deltaE_angle_bins)
     p_beta_angle = lookup_density_values(
-        t["gen_tensor_delta_E"], t["gen_tensor_annihilation_angle"], bdecay_cond_angle, deltaE_angle_bins, angle_bins
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        bdecay_cond_angle,
+        deltaE_angle_bins,
+        angle_bins,
     )
     p_bg_angle = lookup_density_values(
-        t["gen_tensor_delta_E"], t["gen_tensor_annihilation_angle"], bg_cond_angle, deltaE_angle_bins, angle_bins
+        t["gen_tensor_delta_E"],
+        t["gen_tensor_annihilation_angle"],
+        bg_cond_angle,
+        deltaE_angle_bins,
+        angle_bins,
     )
     p_beta_arm = lookup_density_values(
         t["gen_tensor_delta_E"], t["gen_tensor_arm"], bdecay_cond_arm, deltaE_arm_bins, arm_bins
@@ -401,5 +386,3 @@ def likelihood_tensors(real_tensors, request):
     if n_bins not in _likelihood_tensors_cache:
         _likelihood_tensors_cache[n_bins] = _build_likelihood_tensors(real_tensors, n_bins)
     return _likelihood_tensors_cache[n_bins]
-
-

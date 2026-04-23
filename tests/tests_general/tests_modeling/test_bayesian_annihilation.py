@@ -1,15 +1,3 @@
-"""
-Unit tests for modeling/bayesian_annihilation.py.
-
-The BayesianAnnihiliationModel takes a per-event likelihood ratio
-R = P(D|β) / P(D|bg), the per-class training counts, and applies Bayes'
-theorem to produce posterior P(β|D), P(bg|D), and a hard inference call.
-
-The class is pure math, so coverage is done with synthetic ratios sweeping
-the input space. Several W&B-instrumented tests log decision-boundary and
-posterior plots so the prior's effect on the classifier is visible.
-"""
-
 import math
 
 import matplotlib
@@ -21,7 +9,6 @@ import pytest
 import torch
 import wandb
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
-
 
 # ---------------------------------------------------------------------------
 # Prior contract

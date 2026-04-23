@@ -1,20 +1,3 @@
-"""
-Tests for pipeline/eval.py — the Evaluator class.
-
-Evaluator.evaluate() takes a data tuple from Datasets.split_dataset, looks up
-per-event likelihoods from the trainer's pre-built matrices, computes the
-posterior via the Bayesian model, and logs TP/FP/FN/TN + derived metrics to
-W&B under the supplied ``split_name`` prefix.
-
-Two main lines of coverage:
-
-    - Synthetic smoke tests against a hand-constructed Trainer stand-in.
-    - Real-data parametrized tests that use the ``real_trainer`` fixture
-      (defined in tests_general/conftest.py, parametrized over BIN_SIZES
-      = [20, 200, 1000]). These exercise the full train → eval hand-off and
-      diagnose the train/eval F1 gap at each resolution.
-"""
-
 import dataclasses
 import math
 
@@ -31,7 +14,6 @@ from modeling.matrix_calculations import (
     conditional_from_joint,
 )
 from pipeline.eval import Evaluator
-
 
 # ---------------------------------------------------------------------------
 # Synthetic stand-in — just enough attributes for Evaluator to work
@@ -73,12 +55,23 @@ def _build_synthetic_trainerlike(seed: int = 0):
     combined_arm = torch.cat([bdecay_arm, bg_arm])
 
     _, dEa_bins, a_bins = build_density_matrix(
-        combined_dE, combined_angle, n_bins_x=20, n_bins_y=20,
-        spacing_x="log", spacing_y="linear", log_x_floor=1e-3,
+        combined_dE,
+        combined_angle,
+        n_bins_x=20,
+        n_bins_y=20,
+        spacing_x="log",
+        spacing_y="linear",
+        log_x_floor=1e-3,
     )
     _, dEarm_bins, arm_bins = build_density_matrix(
-        combined_dE, combined_arm, n_bins_x=20, n_bins_y=20,
-        spacing_x="log", spacing_y="log", log_x_floor=1e-3, log_y_floor=1e-3,
+        combined_dE,
+        combined_arm,
+        n_bins_x=20,
+        n_bins_y=20,
+        spacing_x="log",
+        spacing_y="log",
+        log_x_floor=1e-3,
+        log_y_floor=1e-3,
     )
     bdecay_j_a, _, _ = build_density_matrix(bdecay_dE, bdecay_angle, x_bins=dEa_bins, y_bins=a_bins)
     bdecay_j_arm, _, _ = build_density_matrix(bdecay_dE, bdecay_arm, x_bins=dEarm_bins, y_bins=arm_bins)
