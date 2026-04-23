@@ -146,23 +146,28 @@ def test_precision_recall_curve(real_posterior_scores, wandb_run):
 
 
 # --------------------------------------------------------------------------- #
-# Combined Eval Plot — ROC + PR side-by-side
+# Held-out Eval Plot — ROC + PR on the 20% split
 # --------------------------------------------------------------------------- #
 
 
-def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
-    """Single evaluation figure with ROC and Precision-Recall curves side-by-side.
+def test_eval_plot_roc_pr(eval_posterior_scores, wandb_run):
+    """ROC + PR curves on the held-out 20% eval split.
 
-    One-glance summary of classifier skill at a given bin resolution. Re-asserts
-    the same invariants as the dedicated ROC / PR tests (AUC > 0.5,
-    AP > prevalence) so a failure in either metric surfaces even when only this
-    eval-plot is run.
+    Consumes ``eval_posterior_scores``, not ``real_posterior_scores``: the
+    density matrices were built from the 80% train split, then scored on the
+    disjoint 20% eval split whose events the classifier never saw. This is
+    the curve that reflects generalization — it will (typically) sit below
+    the train-set ROC / PR curves at high n_bins, where the matrices start
+    memorising individual train events.
+
+    Logged to ``eval/...`` namespace so it can be cross-referenced with the
+    train-set ``roc/...`` and ``pr/...`` curves in the same W&B run.
     """
-    model = real_posterior_scores["model"]
-    valid = real_posterior_scores["valid"]
-    n_bins = real_posterior_scores["n_bins"]
+    model = eval_posterior_scores["model"]
+    valid = eval_posterior_scores["valid"]
+    n_bins = eval_posterior_scores["n_bins"]
     scores = model.beta_decay_given_data_probability().detach().cpu().numpy().astype("float64")[valid]
-    labels = real_posterior_scores["labels"][valid]
+    labels = eval_posterior_scores["labels"][valid]
 
     fpr, tpr = _roc_curve(labels, scores)
     auc = _auc(fpr, tpr)
@@ -170,9 +175,12 @@ def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
     precision, recall = _precision_recall_curve(labels, scores)
     ap = _average_precision(labels, scores)
     prevalence = float(labels.mean())
+    n_eval = int(valid.sum())
 
-    assert auc > 0.5, f"ROC AUC = {auc:.3f} — classifier is at or below chance"
-    assert ap > prevalence, f"AP ({ap:.3f}) did not beat the prevalence baseline ({prevalence:.3f})"
+    assert auc > 0.5, f"Eval ROC AUC = {auc:.3f} — classifier generalises at or below chance"
+    assert ap > prevalence, (
+        f"Eval AP ({ap:.3f}) did not beat the prevalence baseline ({prevalence:.3f}) on held-out data"
+    )
 
     fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(11, 5))
 
@@ -180,7 +188,7 @@ def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
     ax_roc.plot([0, 1], [0, 1], "--", color="gray", label="chance")
     ax_roc.set_xlabel("False Positive Rate")
     ax_roc.set_ylabel("True Positive Rate")
-    ax_roc.set_title("ROC")
+    ax_roc.set_title("ROC (held-out eval)")
     ax_roc.set_xlim(0.0, 1.0)
     ax_roc.set_ylim(0.0, 1.0)
     ax_roc.legend(loc="lower right")
@@ -194,12 +202,14 @@ def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
     )
     ax_pr.set_xlabel("Recall (efficiency)")
     ax_pr.set_ylabel("Precision (purity)")
-    ax_pr.set_title("Precision-Recall")
+    ax_pr.set_title("Precision-Recall (held-out eval)")
     ax_pr.set_xlim(0.0, 1.0)
     ax_pr.set_ylim(0.0, 1.05)
     ax_pr.legend(loc="lower left")
 
-    fig.suptitle(f"Classifier evaluation — P(β | D) vs truth (n_bins={n_bins})")
+    fig.suptitle(
+        f"Held-out eval — P(β | D) vs truth (n_bins={n_bins}, n_eval={n_eval})",
+    )
     fig.tight_layout()
 
     wandb_run.log(
@@ -207,6 +217,7 @@ def test_eval_plot_roc_pr(real_posterior_scores, wandb_run):
             f"eval/n_bins={n_bins}/auc": auc,
             f"eval/n_bins={n_bins}/average_precision": ap,
             f"eval/n_bins={n_bins}/prevalence": prevalence,
+            f"eval/n_bins={n_bins}/n_eval": n_eval,
             f"eval/n_bins={n_bins}/roc_pr": wandb.Image(fig),
         }
     )
