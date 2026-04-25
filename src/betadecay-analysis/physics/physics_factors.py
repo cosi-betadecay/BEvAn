@@ -142,44 +142,22 @@ def annihilation_angle(
 ############################################
 
 
-_ARM_WRAPPER_DECLARED = False
+def arm(event_tra: Any) -> torch.Tensor:
+    """Compton sequence quality factor from Revan/MERCSR.
 
+    Replaces the ARM-based feature: ``GetARMGamma`` requires a sky source
+    direction, but the activation simulation has positrons annihilating
+    inside the detector volume — there is no sky direction to resolve
+    against. ``GetComptonQualityFactor1`` is intrinsic to the event:
+    Revan's Bayesian CSR scores how well the chosen hit ordering fits a
+    real Compton chain. Lower = better fit.
 
-def _declare_arm_wrapper() -> None:
-    """Inline a C++ helper around ``MComptonEvent::GetARMGamma``.
-
-    The native signature is
-        double GetARMGamma(const MVector&, const MCoordinateSystem&)
-    PyROOT cannot bind a Python value to the ``const MCoordinateSystem&``
-    parameter because ``MCoordinateSystem`` is a scoped enum. Forwarding
-    through a wrapper that takes the enum by value sidesteps the binding.
+    The variable keeps the legacy name "arm" so the rest of the pipeline
+    (density matrices, train/eval splits, W&B keys) continues to thread
+    it through the same slot in the likelihood ratio. Rename later if
+    this feature sticks.
     """
-    global _ARM_WRAPPER_DECLARED
-    if _ARM_WRAPPER_DECLARED:
-        return
-    M.gInterpreter.Declare(
-        """
-        double CallGetARMGamma(MComptonEvent* event,
-                               double x, double y, double z,
-                               MCoordinateSystem cs) {
-            return event->GetARMGamma(MVector(x, y, z), cs);
-        }
-        """
-    )
-    _ARM_WRAPPER_DECLARED = True
-
-
-def arm(event_tra: Any, reconstructed_unit_vector: torch.Tensor) -> torch.Tensor:
-    _declare_arm_wrapper()
-    far = (reconstructed_unit_vector).tolist()
-    arm_rad = M.CallGetARMGamma(
-        event_tra,
-        float(far[0]),
-        float(far[1]),
-        float(far[2]),
-        M.MCoordinateSystem.c_Cartesian3D,
-    )
-    return torch.tensor([abs(float(arm_rad))], dtype=torch.float32)
+    return torch.tensor([float(event_tra.GetComptonQualityFactor1())], dtype=torch.float32)
 
 
 ############################################
