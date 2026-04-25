@@ -1,6 +1,5 @@
 from typing import Any
 
-import ROOT as M
 import torch
 from tqdm import tqdm
 
@@ -143,21 +142,7 @@ def annihilation_angle(
 
 
 def arm(event_tra: Any) -> torch.Tensor:
-    """Compton sequence quality factor from Revan/MERCSR.
-
-    Replaces the ARM-based feature: ``GetARMGamma`` requires a sky source
-    direction, but the activation simulation has positrons annihilating
-    inside the detector volume — there is no sky direction to resolve
-    against. ``GetComptonQualityFactor1`` is intrinsic to the event:
-    Revan's Bayesian CSR scores how well the chosen hit ordering fits a
-    real Compton chain. Lower = better fit.
-
-    The variable keeps the legacy name "arm" so the rest of the pipeline
-    (density matrices, train/eval splits, W&B keys) continues to thread
-    it through the same slot in the likelihood ratio. Rename later if
-    this feature sticks.
-    """
-    return torch.tensor([float(event_tra.ComptonQualityFactor1())], dtype=torch.float32)
+    return torch.tensor([float(event_tra.dPhi())], dtype=torch.float32)
 
 
 ############################################
