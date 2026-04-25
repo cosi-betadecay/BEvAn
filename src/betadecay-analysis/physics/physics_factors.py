@@ -171,13 +171,13 @@ def _declare_arm_wrapper() -> None:
 
 def arm(event_tra: Any, reconstructed_unit_vector: torch.Tensor) -> torch.Tensor:
     _declare_arm_wrapper()
-    far = (reconstructed_unit_vector * 1e20).tolist()
+    far = (reconstructed_unit_vector).tolist()
     arm_rad = M.CallGetARMGamma(
         event_tra,
         float(far[0]),
         float(far[1]),
         float(far[2]),
-        M.MCoordinateSystem.c_Spheric,
+        M.MCoordinateSystem.c_Cartesian3D,
     )
     return torch.tensor([abs(float(arm_rad))], dtype=torch.float32)
 
