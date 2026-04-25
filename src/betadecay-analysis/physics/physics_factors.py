@@ -157,7 +157,7 @@ def arm(event_tra: Any) -> torch.Tensor:
     it through the same slot in the likelihood ratio. Rename later if
     this feature sticks.
     """
-    return torch.tensor([float(event_tra.GetComptonQualityFactor1())], dtype=torch.float32)
+    return torch.tensor([float(event_tra.ComptonQualityFactor1())], dtype=torch.float32)
 
 
 ############################################
