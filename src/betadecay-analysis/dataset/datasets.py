@@ -50,6 +50,9 @@ class Datasets:
             M.SetOwnership(event_sim, True)
             n_hits = event_sim.GetNHTs()
 
+            if n_hits == 0:
+                continue
+
             gt = ground_truth_bdecay(event_sim, ref_energy)
             ground_truths.append(gt)
 
