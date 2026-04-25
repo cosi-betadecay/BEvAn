@@ -132,6 +132,11 @@ def predict(
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
+    print(f"{split_name} - TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
+    print(
+        f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, F1 Score: {f1_score:.4f}"
+    )
+
     fig = plot_confusion_matrix(tp, fp, fn, tn)
     wandb.log(
         {
