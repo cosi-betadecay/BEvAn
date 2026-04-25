@@ -2,8 +2,8 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-
 import wandb
+
 from utils.calculations import as_np
 
 
@@ -203,7 +203,7 @@ def plot_energy_vs_arm(prediction_scores, energy_sums, arms, label: str):
         weights=weights,
     )
 
-    #H = gaussian_filter(H, sigma=1.0)
+    # H = gaussian_filter(H, sigma=1.0)
 
     # LogNorm requires strictly positive values
     if not np.any(H > 0):
