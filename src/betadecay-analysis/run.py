@@ -37,9 +37,9 @@ def main(
     unit_vector = imager.peak_direction_cartesian()
 
     ref_energy = 511.0
-    reader = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
+    reader_sim, reader_tra = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
-    datasets = Datasets(cfg, ref_energy, reader, unit_vector)
+    datasets = Datasets(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
     (
         _ground_truths,
         bdecay_tensor_delta_E,
@@ -54,7 +54,7 @@ def main(
         _combined_tensor_delta_E,
         _combined_tensor_annihilation_angle,
         _combined_tensor_arm,
-    ) = datasets.compute_event_features(cfg, ref_energy, reader, unit_vector)
+    ) = datasets.compute_event_features(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
 
     train, eval = datasets.split_dataset(
         bdecay_tensor_delta_E,
