@@ -142,10 +142,43 @@ def annihilation_angle(
 ############################################
 
 
+_ARM_WRAPPER_DECLARED = False
+
+
+def _declare_arm_wrapper() -> None:
+    """Inline a C++ helper around ``MComptonEvent::GetARMGamma``.
+
+    The native signature is
+        double GetARMGamma(const MVector&, const MCoordinateSystem&)
+    PyROOT cannot bind a Python value to the ``const MCoordinateSystem&``
+    parameter because ``MCoordinateSystem`` is a scoped enum. Forwarding
+    through a wrapper that takes the enum by value sidesteps the binding.
+    """
+    global _ARM_WRAPPER_DECLARED
+    if _ARM_WRAPPER_DECLARED:
+        return
+    M.gInterpreter.Declare(
+        """
+        double CallGetARMGamma(MComptonEvent* event,
+                               double x, double y, double z,
+                               MCoordinateSystem cs) {
+            return event->GetARMGamma(MVector(x, y, z), cs);
+        }
+        """
+    )
+    _ARM_WRAPPER_DECLARED = True
+
+
 def arm(event_tra: Any, reconstructed_unit_vector: torch.Tensor) -> torch.Tensor:
+    _declare_arm_wrapper()
     far = (reconstructed_unit_vector * 1e20).tolist()
-    test_position = M.MVector(far[0], far[1], far[2])
-    arm_rad = event_tra.GetARMGamma(test_position, M.MCoordinateSystem.c_Spheric)
+    arm_rad = M.CallGetARMGamma(
+        event_tra,
+        float(far[0]),
+        float(far[1]),
+        float(far[2]),
+        M.MCoordinateSystem.c_Spheric,
+    )
     return torch.tensor([abs(float(arm_rad))], dtype=torch.float32)
 
 
