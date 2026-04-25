@@ -56,8 +56,8 @@ def real_tensors():
     imager.backproject_file(tra_file)
     reconstructed_unit_vector = imager.peak_direction_cartesian()
 
-    reader = get_reader(geo_file, sim_file)
-    datasets = Datasets(cfg, 511, reader, reconstructed_unit_vector)
+    reader_sim, reader_tra = get_reader(geo_file, sim_file)
+    datasets = Datasets(cfg, 511, reader_sim, reader_tra, reconstructed_unit_vector)
 
     (
         ground_truths,
@@ -73,7 +73,7 @@ def real_tensors():
         combined_dE,
         combined_angle,
         combined_arm,
-    ) = datasets.compute_event_features(cfg, 511, reader, reconstructed_unit_vector)
+    ) = datasets.compute_event_features(cfg, 511, reader_sim, reader_tra, reconstructed_unit_vector)
 
     return {
         # ``datasets`` is exposed so downstream fixtures (train_eval_split)
