@@ -142,7 +142,9 @@ def annihilation_angle(
 
 
 def arm(event_tra: Any) -> torch.Tensor:
-    return torch.tensor([float(event_tra.dPhi())], dtype=torch.float32)
+    Eg = float(event_tra.Eg())
+    Ee = float(event_tra.Ee())
+    return torch.tensor([min(abs(Eg - 511.0), abs(Ee - 511.0))], dtype=torch.float32)
 
 
 ############################################
