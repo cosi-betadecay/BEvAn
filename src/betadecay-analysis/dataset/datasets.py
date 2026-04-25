@@ -14,17 +14,19 @@ class Datasets:
         self,
         cfg: omegaconf.dictconfig.DictConfig,
         ref_energy: float,
-        reader: Any,
+        reader_sim: Any,
+        reader_tra: Any,
         reconstructed_unit_vector: torch.Tensor,
     ):
         self.cfg = cfg
         self.ref_energy = ref_energy
-        self.reader = reader
+        self.reader_sim = reader_sim
+        self.reader_tra = reader_tra
         self.reconstructed_unit_vector = reconstructed_unit_vector
         self.train_percentage = 0.8
         self.eval_percentage = 0.2
 
-    def compute_event_features(self, cfg, ref_energy, reader, reconstructed_unit_vector):
+    def compute_event_features(self, cfg, ref_energy, reader_sim, reader_tra, reconstructed_unit_vector):
         ground_truths = []
 
         # Lists beta decay
@@ -40,18 +42,25 @@ class Datasets:
         gen_list_annihilation_angle = []
         gen_list_arm = []
 
-        for event in tqdm(
-            iter(lambda: reader.GetNextEvent(), None),
+        for event_sim in tqdm(
+            iter(lambda: reader_sim.GetNextEvent(), None),
             desc="Processing events",
             unit=" events",
         ):
-            M.SetOwnership(event, True)
-            n_hits = event.GetNHTs()
+            M.SetOwnership(event_sim, True)
+            n_hits = event_sim.GetNHTs()
 
-            gt = ground_truth_bdecay(event, ref_energy)
+            gt = ground_truth_bdecay(event_sim, ref_energy)
             ground_truths.append(gt)
 
-            energies, positions, sizes = event_data_processing(event)
+            event_tra = reader_tra.GetNextEvent()
+            M.SetOwnership(event_tra, True)
+
+            assert event_sim.GetID() == event_tra.GetId(), (
+                f"Mismatched IDs: sim={event_sim.GetID()} tra={event_tra.GetId()}"
+            )
+
+            energies, positions, sizes = event_data_processing(event_tra)
             if energies is None or positions is None or sizes is None:
                 gen_list_delta_E.append(float("nan"))
                 gen_list_annihilation_angle.append(float("nan"))
@@ -68,7 +77,7 @@ class Datasets:
 
             _delta_E = delta_E(energies, sizes=sizes)
             _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes)
-            _arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
+            _arm = arm(event_tra, reconstructed_unit_vector)
 
             gen_list_delta_E.append(_delta_E)
             gen_list_annihilation_angle.append(_annihilation_angle)
