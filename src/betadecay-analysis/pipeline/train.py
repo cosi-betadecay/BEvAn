@@ -49,28 +49,28 @@ class Trainer:
             bdecay_train_annihilation_angle,
             x_bins=self.deltaE_angle_bins,
             y_bins=self.angle_bins,
-            smoothing=0.0,
+            smoothing=0.1,
         )
         bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
             bdecay_train_delta_E,
             bdecay_train_arm,
             x_bins=self.deltaE_arm_bins,
             y_bins=self.arm_bins,
-            smoothing=0.0,
+            smoothing=0.1,
         )
         bg_joint_deltaE_angle, _, _ = build_density_matrix(
             bg_train_delta_E,
             bg_train_annihilation_angle,
             x_bins=self.deltaE_angle_bins,
             y_bins=self.angle_bins,
-            smoothing=0.0,
+            smoothing=0.1,
         )
         bg_joint_deltaE_arm, _, _ = build_density_matrix(
             bg_train_delta_E,
             bg_train_arm,
             x_bins=self.deltaE_arm_bins,
             y_bins=self.arm_bins,
-            smoothing=0.0,
+            smoothing=0.1,
         )
 
         self.bdecay_marginal_deltaE, _ = build_density_matrix_1d(
