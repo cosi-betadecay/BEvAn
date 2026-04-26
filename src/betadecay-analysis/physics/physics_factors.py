@@ -1,6 +1,6 @@
-from typing import Any
-
+import omegaconf
 import torch
+from mathematics.geometry import theta_geo, theta_kin
 from tqdm import tqdm
 
 ############################################
@@ -141,10 +141,57 @@ def annihilation_angle(
 ############################################
 
 
-def arm(event_tra: Any) -> torch.Tensor:
-    Eg = float(event_tra.Eg())
-    Ee = float(event_tra.Ee())
-    return torch.tensor([min(abs(Eg - 511.0), abs(Ee - 511.0))], dtype=torch.float32)
+def arm(
+    energies: torch.Tensor,
+    positions: torch.Tensor,
+    cfg: omegaconf.dictconfig.DictConfig,
+    reconstructed_unit_vector,
+    sizes: torch.Tensor | None = None,
+) -> torch.Tensor:
+
+    if sizes is not None:
+        if energies.ndim != 2 or positions.ndim != 3 or sizes.ndim != 1:
+            raise ValueError(
+                "Sized arm expects energies shape (B, N), positions shape (B, N, 3), and sizes shape (B,), "
+                f"got {tuple(energies.shape)}, {tuple(positions.shape)}, and {tuple(sizes.shape)}"
+            )
+        if energies.shape[0] != sizes.shape[0] or positions.shape[0] != sizes.shape[0]:
+            raise ValueError(
+                "Energies/positions batch dimension and sizes length must match, "
+                f"got {tuple(energies.shape)}, {tuple(positions.shape)}, and {tuple(sizes.shape)}"
+            )
+
+        outputs = []
+        for size in torch.unique(sizes, sorted=True):
+            size_int = int(size.item())
+            group = sizes == size
+            if size_int < 2:
+                outputs.append(positions.new_tensor(float("nan")).reshape(1))
+                continue
+            outputs.append(
+                arm(
+                    energies[group, :size_int],
+                    positions[group, :size_int, :],
+                    cfg,
+                    reconstructed_unit_vector,
+                )
+            )
+
+        stacked = torch.stack(outputs).flatten()
+        finite = stacked[torch.isfinite(stacked)]
+        if finite.numel() == 0:
+            return positions.new_tensor(float("nan")).reshape(1)
+        return finite.amin().reshape(1)
+
+    n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
+    if n_pos < 2:
+        return positions.new_tensor(float("nan")).reshape(1)
+
+    arm_value = torch.min(
+        torch.abs(theta_geo(positions, cfg, reconstructed_unit_vector)[0] - theta_kin(energies, cfg)[0])
+    )
+
+    return arm_value.reshape(1)
 
 
 ############################################
