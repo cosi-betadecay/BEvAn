@@ -1,6 +1,7 @@
 import itertools
 from typing import Any
 
+import ROOT as M
 import torch
 
 
@@ -12,6 +13,23 @@ def event_data_processing(
 
     if n_hits == 0:
         return None, None, None
+
+    if event_tra.GetType() == M.MPhysicalEvent.c_Photo:
+        energies = torch.tensor([event_tra.GetEnergy()])
+        positions = torch.tensor(
+            [
+                (
+                    event_tra.GetPosition().X(),
+                    event_tra.GetPosition().Y(),
+                    event_tra.GetPosition().Z(),
+                )
+            ],
+            dtype=torch.float32,
+            device=device,
+        )
+        sizes = torch.tensor([1])
+
+        return energies, positions, sizes
 
     # Load event data onto GPU
     energies = torch.tensor(
