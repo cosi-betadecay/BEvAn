@@ -11,9 +11,6 @@ def event_data_processing(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event_tra.GetNHits()
 
-    if n_hits == 0:
-        return None, None, None
-
     if event_tra.GetType() == M.MPhysicalEvent.c_Photo:
         energies = torch.tensor([event_tra.GetEnergy()])
         positions = torch.tensor(
@@ -30,6 +27,9 @@ def event_data_processing(
         sizes = torch.tensor([1])
 
         return energies, positions, sizes
+
+    if n_hits == 0:
+        return None, None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
