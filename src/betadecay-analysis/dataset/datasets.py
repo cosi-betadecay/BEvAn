@@ -80,7 +80,7 @@ class Datasets:
 
             _delta_E = delta_E(energies, sizes=sizes)
             _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes)
-            _arm = arm(energies, positions, cfg, reconstructed_unit_vector)
+            _arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
 
             gen_list_delta_E.append(_delta_E)
             gen_list_annihilation_angle.append(_annihilation_angle)
