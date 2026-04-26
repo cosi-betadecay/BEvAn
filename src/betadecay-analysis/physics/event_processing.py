@@ -12,20 +12,15 @@ def event_data_processing(
     n_hits = event_tra.GetNHits()
 
     if event_tra.GetType() == M.MPhysicalEvent.c_Photo:
-        energies = torch.tensor([event_tra.GetEnergy()])
+        E = float(event_tra.GetEnergy())
+        P = event_tra.GetPosition()
+        energies = torch.tensor([[E]], dtype=torch.float32, device=device)  # (1, 1)
         positions = torch.tensor(
-            [
-                (
-                    event_tra.GetPosition().X(),
-                    event_tra.GetPosition().Y(),
-                    event_tra.GetPosition().Z(),
-                )
-            ],
+            [[(P.X(), P.Y(), P.Z())]],
             dtype=torch.float32,
-            device=device,
+            device=device,  # (1, 1, 3)
         )
-        sizes = torch.tensor([1])
-
+        sizes = torch.tensor([1], device=device)  # (1,)
         return energies, positions, sizes
 
     if n_hits == 0:
