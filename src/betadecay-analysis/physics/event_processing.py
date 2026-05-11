@@ -50,7 +50,7 @@ def event_data_processing(
     combos = []
     sizes = []
 
-    for r in range(1, n_hits + 1):
+    for r in range(1, min(n_hits + 1, 8)):  # Boggs & Jean (2000)
         for c in itertools.combinations(range(n_hits), r):
             combos.append(c)
             sizes.append(r)
