@@ -159,7 +159,7 @@ def lookup_density_values(
 def build_density_matrix_1d(
     x: torch.Tensor,
     x_bins: torch.Tensor | None = None,
-    n_bins_x: int = 200,
+    n_bins_x: int = 20,
     spacing_x: str = "linear",
     log_x_floor: float | None = None,
     smoothing: float = 0.0,

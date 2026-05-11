@@ -23,6 +23,55 @@ class Evaluator:
             combined_arm,
         ) = data
         t = self.trainer
+        double_count = bool(t.cfg.modeling.double_count_deltaE)
+
+        if double_count:
+            # Double-counting mode: look up the two 2D joints directly.
+            # P(ΔE, angle) and P(ΔE, ARM) — ΔE evidence will appear in both
+            # factors of the likelihood ratio.
+            p_beta_deltaE_angle = lookup_density_values(
+                combined_delta_E,
+                combined_annihilation_angle,
+                t.bdecay_joint_deltaE_angle,
+                t.deltaE_angle_bins,
+                t.angle_bins,
+            )
+            p_bg_deltaE_angle = lookup_density_values(
+                combined_delta_E,
+                combined_annihilation_angle,
+                t.bg_joint_deltaE_angle,
+                t.deltaE_angle_bins,
+                t.angle_bins,
+            )
+            p_beta_deltaE_arm = lookup_density_values(
+                combined_delta_E,
+                combined_arm,
+                t.bdecay_joint_deltaE_arm,
+                t.deltaE_arm_bins,
+                t.arm_bins,
+            )
+            p_bg_deltaE_arm = lookup_density_values(
+                combined_delta_E,
+                combined_arm,
+                t.bg_joint_deltaE_arm,
+                t.deltaE_arm_bins,
+                t.arm_bins,
+            )
+
+            predict(
+                ground_truths,
+                p_beta_deltaE_angle,
+                p_bg_deltaE_angle,
+                p_beta_deltaE_arm,
+                p_bg_deltaE_arm,
+                None,
+                None,
+                t.n_beta_decay,
+                t.n_bg,
+                split_name=split_name,
+                double_count=True,
+            )
+            return
 
         p_beta_deltaE = lookup_density_values_1d(
             combined_delta_E, t.bdecay_marginal_deltaE, t.deltaE_angle_bins

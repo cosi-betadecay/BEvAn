@@ -73,10 +73,41 @@ def R(
     p_bg_deltaE: torch.Tensor,
     p_beta_angle_given_deltaE: torch.Tensor,
     p_bg_angle_given_deltaE: torch.Tensor,
-    p_beta_arm_given_deltaE: torch.Tensor,
-    p_bg_arm_given_deltaE: torch.Tensor,
+    p_beta_arm_given_deltaE: torch.Tensor | None = None,
+    p_bg_arm_given_deltaE: torch.Tensor | None = None,
     eps: float = 1e-8,
+    double_count: bool = False,
 ) -> torch.Tensor:
+    """Compute the per-event likelihood ratio R = P(D|β) / P(D|bg).
+
+    When ``double_count`` is False (default), this uses the conditional
+    factorization that avoids double-counting ΔE:
+
+        R = [P(ΔE|β)/P(ΔE|bg)]
+            · [P(angle|ΔE,β)/P(angle|ΔE,bg)]
+            · [P(ARM|ΔE,β)/P(ARM|ΔE,bg)]
+
+    and expects the six conditional/marginal lookups in the standard order.
+
+    When ``double_count`` is True, the first four arguments are reinterpreted
+    as the two 2D joints and the last two arguments are ignored:
+
+        p_beta_deltaE          → P(ΔE, angle | β)
+        p_bg_deltaE            → P(ΔE, angle | bg)
+        p_beta_angle_given_dE  → P(ΔE, ARM   | β)
+        p_bg_angle_given_dE    → P(ΔE, ARM   | bg)
+
+    giving R = [P(ΔE,angle|β)/P(ΔE,angle|bg)] · [P(ΔE,ARM|β)/P(ΔE,ARM|bg)],
+    which double-counts ΔE.
+    """
+    if double_count:
+        log_r = (
+            torch.log(p_beta_deltaE + eps)
+            - torch.log(p_bg_deltaE + eps)
+            + torch.log(p_beta_angle_given_deltaE + eps)
+            - torch.log(p_bg_angle_given_deltaE + eps)
+        )
+        return torch.exp(log_r)
 
     log_r = (
         torch.log(p_beta_deltaE + eps)
@@ -100,6 +131,7 @@ def predict(
     n_beta_decay: int,
     n_bg: int,
     split_name: str = "eval",
+    double_count: bool = False,
 ):
     """Classify events, apply the class prior, log diagnostics.
 
@@ -110,6 +142,9 @@ def predict(
     ``split_name`` prefixes every W&B metric key (e.g. ``"train/f1_score"``
     vs ``"eval/f1_score"``) so calls on different splits in the same run do
     not overwrite each other.
+
+    ``double_count`` selects the likelihood-ratio formula; see :func:`R`.
+    In double-counting mode the last two arguments may be ``None``.
     """
     ratio = R(
         p_beta_deltaE,
@@ -118,6 +153,7 @@ def predict(
         p_bg_angle_given_deltaE,
         p_beta_arm_given_deltaE,
         p_bg_arm_given_deltaE,
+        double_count=double_count,
     )
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)

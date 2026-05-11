@@ -5,6 +5,8 @@ from modeling.matrix_calculations import (
     conditional_from_joint,
 )
 
+from pipeline.eval import Evaluator
+
 
 class Trainer:
     def __init__(self, cfg):
@@ -30,8 +32,8 @@ class Trainer:
             spacing_x="log",
             spacing_y="linear",
             log_x_floor=1e-3,
-            n_bins_x=200,
-            n_bins_y=200,
+            n_bins_x=20,
+            n_bins_y=20,
         )
         _, self.deltaE_arm_bins, self.arm_bins = build_density_matrix(
             combined_train_delta_E,
@@ -40,37 +42,37 @@ class Trainer:
             spacing_y="log",
             log_x_floor=1e-3,
             log_y_floor=1e-3,
-            n_bins_x=200,
-            n_bins_y=200,
+            n_bins_x=20,
+            n_bins_y=20,
         )
 
-        bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
+        self.bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
             bdecay_train_delta_E,
             bdecay_train_annihilation_angle,
             x_bins=self.deltaE_angle_bins,
             y_bins=self.angle_bins,
-            smoothing=0.1,
+            smoothing=0,
         )
-        bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
+        self.bdecay_joint_deltaE_arm, _, _ = build_density_matrix(
             bdecay_train_delta_E,
             bdecay_train_arm,
             x_bins=self.deltaE_arm_bins,
             y_bins=self.arm_bins,
-            smoothing=0.1,
+            smoothing=0,
         )
-        bg_joint_deltaE_angle, _, _ = build_density_matrix(
+        self.bg_joint_deltaE_angle, _, _ = build_density_matrix(
             bg_train_delta_E,
             bg_train_annihilation_angle,
             x_bins=self.deltaE_angle_bins,
             y_bins=self.angle_bins,
-            smoothing=0.1,
+            smoothing=0,
         )
-        bg_joint_deltaE_arm, _, _ = build_density_matrix(
+        self.bg_joint_deltaE_arm, _, _ = build_density_matrix(
             bg_train_delta_E,
             bg_train_arm,
             x_bins=self.deltaE_arm_bins,
             y_bins=self.arm_bins,
-            smoothing=0.1,
+            smoothing=0,
         )
 
         self.bdecay_marginal_deltaE, _ = build_density_matrix_1d(
@@ -80,15 +82,13 @@ class Trainer:
             bg_train_delta_E, x_bins=self.deltaE_angle_bins, smoothing=1.0
         )
 
-        self.bdecay_cond_angle = conditional_from_joint(bdecay_joint_deltaE_angle, axis=0)
-        self.bdecay_cond_arm = conditional_from_joint(bdecay_joint_deltaE_arm, axis=0)
-        self.bg_cond_angle = conditional_from_joint(bg_joint_deltaE_angle, axis=0)
-        self.bg_cond_arm = conditional_from_joint(bg_joint_deltaE_arm, axis=0)
+        self.bdecay_cond_angle = conditional_from_joint(self.bdecay_joint_deltaE_angle, axis=0)
+        self.bdecay_cond_arm = conditional_from_joint(self.bdecay_joint_deltaE_arm, axis=0)
+        self.bg_cond_angle = conditional_from_joint(self.bg_joint_deltaE_angle, axis=0)
+        self.bg_cond_arm = conditional_from_joint(self.bg_joint_deltaE_arm, axis=0)
 
         self.n_beta_decay = int(torch.isfinite(bdecay_train_delta_E).sum().item())
         self.n_bg = int(torch.isfinite(bg_train_delta_E).sum().item())
-
-        from pipeline.eval import Evaluator
 
         Evaluator(self).evaluate(train, split_name="train")
 
