@@ -1,7 +1,6 @@
 import itertools
 from typing import Any
 
-import ROOT as M
 import torch
 
 
@@ -44,29 +43,17 @@ def lever_arm_mask(
 
 
 def event_data_processing(
-    event_tra: Any,
+    event_sim: Any,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_hits = event_tra.GetNHits()
-
-    if event_tra.GetType() == M.MPhysicalEvent.c_Photo:
-        E = float(event_tra.GetEnergy())
-        P = event_tra.GetPosition()
-        energies = torch.tensor([[E]], dtype=torch.float32, device=device)  # (1, 1)
-        positions = torch.tensor(
-            [[(P.X(), P.Y(), P.Z())]],
-            dtype=torch.float32,
-            device=device,  # (1, 1, 3)
-        )
-        sizes = torch.tensor([1], device=device)  # (1,)
-        return energies, positions, sizes
+    n_hits = event_sim.GetNHTs()
 
     if n_hits == 0:
         return None, None, None
 
     # Load event data onto GPU
     energies = torch.tensor(
-        [event_tra.GetHit(i).GetEnergy() for i in range(n_hits)],
+        [event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)],
         dtype=torch.float32,
         device=device,
     )
@@ -74,9 +61,9 @@ def event_data_processing(
     positions = torch.tensor(
         [
             (
-                event_tra.GetHit(i).GetPosition().X(),
-                event_tra.GetHit(i).GetPosition().Y(),
-                event_tra.GetHit(i).GetPosition().Z(),
+                event_sim.GetHTAt(i).GetPosition().X(),
+                event_sim.GetHTAt(i).GetPosition().Y(),
+                event_sim.GetHTAt(i).GetPosition().Z(),
             )
             for i in range(n_hits)
         ],

@@ -56,14 +56,7 @@ class Datasets:
             gt = ground_truth_bdecay(event_sim, ref_energy)
             ground_truths.append(gt)
 
-            event_tra = reader_tra.GetNextEvent()
-            M.SetOwnership(event_tra, True)
-
-            assert event_sim.GetID() == event_tra.GetId(), (
-                f"Mismatched IDs: sim={event_sim.GetID()} tra={event_tra.GetId()}"
-            )
-
-            energies, positions, sizes = event_data_processing(event_tra)
+            energies, positions, sizes = event_data_processing(event_sim)
             if energies is None or positions is None or sizes is None:
                 gen_list_delta_E.append(float("nan"))
                 gen_list_annihilation_angle.append(float("nan"))
