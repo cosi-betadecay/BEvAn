@@ -175,10 +175,10 @@ def test_theta_kin_batched_independence():
 
 
 def test_theta_kin_matches_compton_formula_directly():
-    """For unclamped cos values, θ_kin must equal arccos(1 − 511·(1/E_2 − 1/E_1))."""
-    energies = torch.tensor([[700.0, 300.0]], dtype=torch.float64)  # E_1 = 1000, E_2 = 300
+    """Under the β⁺ hypothesis (E_in = 511 keV), θ_kin = arccos(2 − 511/E_2)."""
+    energies = torch.tensor([[255.5, 255.5]], dtype=torch.float64)  # E_2 = 255.5
     angle, _ = theta_kin(energies, _cfg())
-    cos_expected = 1.0 - 511.0 * (1.0 / 300.0 - 1.0 / 1000.0)
+    cos_expected = 2.0 - 511.0 / 255.5
     assert -1.0 <= cos_expected <= 1.0
     assert torch.isclose(
         angle.squeeze(),
@@ -201,8 +201,8 @@ def test_theta_kin_sigma_is_strictly_positive():
 
 
 def test_theta_kin_sigma_increases_at_low_energy():
-    """σ_cos_θ ∝ √(1/E_1² + 1/E_2²), so events with lower energies must
-    have larger uncertainty (signal-poor → angle-uncertain)."""
+    """Under the β⁺ hypothesis E_1 is fixed at 511 keV, so σ_cos_θ ∝ 1/E_2 —
+    events with lower scattered-photon energy must have larger uncertainty."""
     high_e = torch.tensor([[800.0, 600.0]], dtype=torch.float64)
     low_e = torch.tensor([[80.0, 60.0]], dtype=torch.float64)
     _, sigma_high = theta_kin(high_e, _cfg())
@@ -252,35 +252,34 @@ def test_theta_geo_uncertainty_vs_baseline_sweep(wandb_run):
 
 
 def test_theta_kin_uncertainty_vs_energy_sweep(wandb_run):
-    """σ_θ_kin as a function of E_1 (with E_2 fixed proportional); expect
-    monotonic decrease with rising energy."""
+    """σ_θ_kin as a function of E_2 under the β⁺ hypothesis (E_1 = 511 keV fixed);
+    expect monotonic decrease with rising scattered-photon energy."""
     cfg = _cfg(n_sigma_cos_theta_kin=1)
-    E1_values = np.geomspace(60.0, 2000.0, 80)
+    E2_values = np.geomspace(30.0, 1000.0, 80)
     sigmas = []
     angles = []
-    for E1 in E1_values:
-        E2 = 0.5 * E1
-        energies = torch.tensor([[E1 - E2, E2]], dtype=torch.float64)
+    for E2 in E2_values:
+        energies = torch.tensor([[300.0, float(E2)]], dtype=torch.float64)
         angle, sigma = theta_kin(energies, cfg)
         sigmas.append(float(sigma.item()))
         angles.append(float(angle.item()))
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].plot(E1_values, sigmas, lw=2)
+    axes[0].plot(E2_values, sigmas, lw=2)
     axes[0].set_xscale("log")
     axes[0].set_yscale("log")
-    axes[0].set_xlabel("E_1 (keV)")
+    axes[0].set_xlabel("E_2 (keV)")
     axes[0].set_ylabel("σ_θ_kin (rad)")
-    axes[0].set_title("theta_kin uncertainty vs total energy")
-    axes[1].plot(E1_values, angles, lw=2)
+    axes[0].set_title("theta_kin uncertainty vs scattered-photon energy")
+    axes[1].plot(E2_values, angles, lw=2)
     axes[1].set_xscale("log")
-    axes[1].set_xlabel("E_1 (keV)")
+    axes[1].set_xlabel("E_2 (keV)")
     axes[1].set_ylabel("θ_kin (rad)")
-    axes[1].set_title("theta_kin angle vs total energy (E_2 = E_1/2)")
+    axes[1].set_title("theta_kin angle vs E_2 (β⁺ hypothesis)")
     wandb_run.log({"geometry/theta_kin_vs_energy": wandb.Image(fig)})
     plt.close(fig)
 
-    assert sigmas[0] > sigmas[-1], "σ_θ_kin must decrease with rising E_1"
+    assert sigmas[0] > sigmas[-1], "σ_θ_kin must decrease with rising E_2"
 
 
 def test_theta_geo_angle_heatmap_over_polar_sweep(wandb_run):
