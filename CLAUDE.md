@@ -1,44 +1,68 @@
-# gstack
-Use the /browse skill from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
+# CLAUDE.md
 
-Available gstack skills (invoke with /skill-name):
-- /browse — browser automation and web browsing
-- /design — HTML/visual design tools
-- /design-html — HTML design variant
-- /design-shotgun — multi-variant design generation
-- /review — code review
-- /plan-design-review — plan + design review
-- /autoplan — automatic planning
-- /pair-agent — pair programming agent
-- /benchmark — benchmarking
-- /investigate — investigation/research
-- /learn — learning assistant
-- /freeze / /unfreeze — freeze/unfreeze codebase changes
-- /checkpoint — save a checkpoint
-- /careful — cautious mode
-- /canary — canary deployment checks
-- /qa / /qa-only — QA testing
-- /health — project health check
-- /retro — retrospective
-- /codex — code documentation
-- /gstack-upgrade — upgrade gstack itself
+Project-specific guidance for Claude Code when working in this repository.
 
-## Skill routing
+## Project
 
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-The skill has specialized workflows that produce better results than ad-hoc answers.
+COSI 511 keV annihilation analysis. Classifies MEGAlib-simulated events as
+β⁺-decay annihilation signal vs background using Compton kinematics and a
+Zoglauer-style Bayesian likelihood-ratio scheme (B-CSR, PhD §4.5.3). See
+`README.md` for the science overview and `docs/math.md` for the math.
 
-Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke office-hours
-- Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
-- QA, test the site, find bugs → invoke qa
-- Code review, check my diff → invoke review
-- Update docs after shipping → invoke document-release
-- Weekly retro → invoke retro
-- Design system, brand → invoke design-consultation
-- Visual audit, design polish → invoke design-review
-- Architecture review → invoke plan-eng-review
-- Save progress, checkpoint, resume → invoke checkpoint
-- Code quality, health check → invoke health
+## Environment
+
+- Python 3.10 (pinned in `pyproject.toml`).
+- Requires MEGAlib + ROOT with `MEGALIB` set in the shell environment.
+- Dependencies managed with `uv`. Setup: `uv sync && source .venv/bin/activate`.
+- W&B logging is required by the entry-point scripts. `WANDB_API_KEY` must be
+  in `.env`.
+- Default input data: `data/Activation.sim` (MEGAlib `.sim` format,
+  documented in `docs/MEGAlib.md`).
+
+## Repository layout
+
+- `src/betadecay-analysis/run.py` — Hydra + W&B entry point.
+- `src/betadecay-analysis/configs/` — Hydra configs (`config.yaml`,
+  `wandb.yaml`, `likelihoods.yaml`).
+- `src/betadecay-analysis/physics/` — event processing, ground truths,
+  Compton-cone reconstruction, physics factors.
+- `src/betadecay-analysis/modeling/` — likelihood-ratio construction,
+  Bayesian posterior, density-matrix building.
+- `src/betadecay-analysis/pipeline/` — `train.py` and `eval.py` orchestration.
+- `src/betadecay-analysis/mathematics/` — energy-tolerance and geometry helpers.
+- `src/betadecay-analysis/dataset/` — dataset assembly.
+- `src/betadecay-analysis/utils/` — ROOT reader, plots, calculations.
+- `tests/tests_general/`, `tests/tests_specialized/` — pytest suites.
+- `scripts/generate_test_summary.py` — JUnit → Markdown summary.
+- `docs/` — `MEGAlib.md`, `math.md`, `event_reconstruction.md`,
+  `test-summary.md`.
+
+Note: README still references the older flat physics-only layout; the active
+code has been split across `physics/`, `modeling/`, and `pipeline/`. Prefer
+reading the directory tree over the README's layout section when navigating.
+
+## Style and tooling
+
+- Ruff is the formatter/linter. Line length 100. Select rules `E,F,W,D,I`
+  with Google-style pydocstyle. Tests are exempt from `D` rules.
+- isort first-party packages: `physics`, `mathematics`, `utils`, `experiments`.
+- Keep Google-style docstrings on public functions in `src/`.
+
+## Tests
+
+Tests need a ROOT-enabled environment. Standard workflow:
+
+```bash
+python3 -m pytest --junitxml=artifacts/pytest-junit.xml
+python3 scripts/generate_test_summary.py artifacts/pytest-junit.xml \
+  --output docs/test-summary.md
+```
+
+## Working notes
+
+- The branch `60-use-native-megalib-code` is the current working branch;
+  `main` is the PR base.
+- Don't introduce mocks for ROOT/MEGAlib in tests — the suite is intended to
+  run against a real ROOT install.
+- The synthetic event generator in `utils/` is the right tool for unit-level
+  sanity checks of likelihoods and classifier behavior.
