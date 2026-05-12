@@ -98,4 +98,4 @@ class BayesianAnnihiliationModel:
         Returns:
             torch.Tensor: Batched classification output.
         """
-        return self.beta_decay_given_data_probability() >= self.background_given_data_probability()
+        return self.beta_decay_given_data_probability() >= 0.7 * self.background_given_data_probability()
