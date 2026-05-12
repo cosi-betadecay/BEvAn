@@ -32,8 +32,8 @@ class Trainer:
             spacing_x="log",
             spacing_y="linear",
             log_x_floor=1e-3,
-            n_bins_x=20,
-            n_bins_y=20,
+            n_bins_x=25,
+            n_bins_y=25,
         )
         _, self.deltaE_arm_bins, self.arm_bins = build_density_matrix(
             combined_train_delta_E,
@@ -42,8 +42,8 @@ class Trainer:
             spacing_y="log",
             log_x_floor=1e-3,
             log_y_floor=1e-3,
-            n_bins_x=20,
-            n_bins_y=20,
+            n_bins_x=25,
+            n_bins_y=25,
         )
 
         self.bdecay_joint_deltaE_angle, _, _ = build_density_matrix(
