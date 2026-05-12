@@ -99,10 +99,10 @@ def event_data_processing(
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
 
-    # keep = lever_arm_mask(pos_combo)  # Boggs & Jean (2000) §6.9
-    # energy_combo = energy_combo[keep]
-    # pos_combo = pos_combo[keep]
-    # sizes = sizes[keep]
+    keep = lever_arm_mask(pos_combo)  # Boggs & Jean (2000) §6.9
+    energy_combo = energy_combo[keep]
+    pos_combo = pos_combo[keep]
+    sizes = sizes[keep]
 
     if energy_combo.numel() == 0 or pos_combo.numel() == 0:
         return None, None, None
