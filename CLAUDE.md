@@ -7,8 +7,8 @@ pipeline. This file is the policy — read it at the start of every iteration.
 
 ## Mission
 
-Maximize `eval/f1_score` on the held-out split, subject to the constraints
-below. Each iteration: form one hypothesis, edit, evaluate, log result,
+Maximize eval **MCC** (computed from the TP/FP/FN/TN that `run.py` prints
+on stdout) on the held-out split, subject to the constraints below. Each iteration: form one hypothesis, edit, evaluate, log result,
 keep or revert.
 
 **Run autonomously. Do not ask the user questions.** Make the reasonable
@@ -40,28 +40,49 @@ this one file*.
 
 ## Reward
 
-**Primary:** `eval/f1_score` from a full pipeline run.
+**Primary:** **MCC** (Matthews correlation coefficient) on the eval split,
+computed from the raw confusion matrix that `run.py` prints.
 
-Extract by running:
+Why MCC, not F1: F1 ignores TN, so filters that game the class balance can
+look neutral to F1 but are actually worse. MCC uses all four cells, has no
+threshold or β to tune, and is harder to game. Range is [-1, 1]; higher is
+better.
+
+### How to get the reward
+
+Run the pipeline, capture stdout, and parse the two `eval - ` lines:
 
 ```bash
 python -m betadecay_analysis.run 2>&1 | tee runs/iter_$ITER.log
-grep "eval - " runs/iter_$ITER.log | tail -1
+grep "^eval - " runs/iter_$ITER.log
 ```
 
-The line emitted at `modeling/calculate_probablities.py:173` looks like:
-`eval - Precision: 0.8123, Recall: 0.7044, FPR: 0.0512, F1 Score: 0.7544`
+Those lines come from `modeling/calculate_probablities.py:171-173` and
+look like:
 
-Parse the F1 value. This is the scalar reward.
+```
+eval - TP: 1234, FP: 56, FN: 78, TN: 9012
+eval - Precision: 0.9565, Recall: 0.9405, FPR: 0.0062, F1 Score: 0.9484
+```
+
+Compute MCC from the four counts:
+
+```
+MCC = (TP*TN - FP*FN) / sqrt((TP+FP) * (TP+FN) * (TN+FP) * (TN+FN))
+```
+
+If any factor in the denominator is zero, treat MCC as 0.
+
+Also parse precision, recall, FPR, F1 from the second line and log them
+in the scoreboard as diagnostic columns — they make trade-offs visible
+even though MCC is the decision metric.
 
 **Guardrails (any violation = automatic revert):**
-- `eval/recall` must not drop below `baseline_recall - 0.05`
-- Fraction of events surviving reconstruction must stay ≥ 50% of baseline
-  (compute from log: count of events fed into `predict`)
-- `run.py` must complete without errors
+- `eval/recall ≥ baseline_recall - 0.05` (don't crush signal to chase MCC).
+- `run.py` must complete without errors.
 
-**Do not run pytest. Do not touch the test suite.** The only evaluation
-is running `run.py` and parsing its stdout for the eval metrics line.
+**No pytest. No test edits.** The only evaluation is running `run.py` and
+parsing its stdout.
 
 ## Constraints (hard)
 
@@ -99,14 +120,14 @@ Every iteration follows these steps in order:
 3. **Edit** `event_processing.py`. One coherent change per iteration.
 
 4. **Evaluate**
-   - Run `run.py`. Parse stdout for the `eval - ...` line and extract
-     F1, precision, recall, FPR, and survival rate.
+   - Run `run.py`. Parse the two `eval - ` lines from stdout to get
+     TP/FP/FN/TN, then compute MCC. Also record precision, recall, FPR, F1.
    - If `run.py` errors out, revert (`git checkout -- event_processing.py`)
-     and log as failed iteration.
+     and log the row as `reverted` with the error in Notes.
    - Do NOT run pytest.
 
 5. **Decide**
-   - **Keep** if F1 > best-so-far AND guardrails pass: `git add -A && git commit -m "iter N: <hypothesis>, F1=<x>"`.
+   - **Keep** if MCC > best-so-far AND guardrails pass: `git add -A && git commit -m "iter N: <hypothesis>, MCC=<x>"`.
    - **Revert** otherwise: `git checkout -- src/betadecay-analysis/physics/event_processing.py`.
 
 6. **Log to `SCOREBOARD.md`** — append one row to the table (never
@@ -121,14 +142,14 @@ iter 0; append one row per iteration thereafter.
 ```
 # Scoreboard
 
-Best so far: iter <n>, F1=<x>
+Best so far: iter <n>, MCC=<x>
 
-| Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | F1 | Δ vs best | Precision | Recall | FPR | Survival % | Notes / next idea |
-|--------|-----------------|--------|------------|--------------|----|-----------|-----------|--------|-----|------------|-------------------|
-| 0 | 2026-06-09T12:34:56Z | baseline | — | unmodified repo | 0.7544 | — | 0.8123 | 0.7044 | 0.0512 | 100% | starting point |
-| 1 | … | kept | lever-arm too lax, tighten to 0.3 cm | `min_lever_arm: 0.5→0.3` | 0.7611 | +0.0067 | 0.83 | 0.70 | 0.04 | 92% | recall held — try 0.2 next |
-| 2 | … | reverted | … | … | … | … | … | … | … | … | … |
-| 3 | … | reverted | … | new geometric filter | — | — | — | — | — | — | run.py crashed: NaN in cos_theta; retry with clamp |
+| Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | MCC | Δ vs best | F1 | Precision | Recall | FPR | TP / FP / FN / TN | Notes / next idea |
+|--------|-----------------|--------|------------|--------------|-----|-----------|----|-----------|--------|-----|--------------------|-------------------|
+| 0 | 2026-06-09T12:34:56Z | baseline | — | unmodified repo | 0.8412 | — | 0.7544 | 0.8123 | 0.7044 | 0.0512 | 1234 / 56 / 78 / 9012 | starting point |
+| 1 | … | kept | lever-arm too lax, tighten to 0.3 cm | `min_lever_arm: 0.5→0.3` | 0.8487 | +0.0075 | 0.7611 | 0.83 | 0.70 | 0.04 | … | recall held — try 0.2 next |
+| 2 | … | reverted | aggressive energy-window | added ±20 keV window around 511 | 0.83 | -0.01 | … | … | … | … | … | dropped MCC, recall tanked |
+| 3 | … | reverted | new geometric filter | added back-to-back precut | — | — | — | — | — | — | — | run.py crashed: NaN in cos_theta; retry with clamp |
 ```
 
 Rules:
@@ -140,7 +161,7 @@ Rules:
 - **What changed** is the actual diff in one line (constant change,
   filter added, function introduced). Be specific enough that a future
   iteration can tell whether an idea was already tried.
-- **Δ vs best** is signed F1 delta vs the best-so-far row at the time
+- **Δ vs best** is signed MCC delta vs the best-so-far row at the time
   of this iteration (not vs the previous row).
 - **Notes / next idea** is where you record what you learned and, if
   useful, the next thing to try. This column is the planning log —
@@ -155,7 +176,7 @@ Halt the loop and report to the user when ANY:
 - 10 consecutive iterations without a new best.
 - 3 consecutive iterations where `run.py` errors out (likely something
   structural is wrong — log it in the scoreboard and halt, do not ask).
-- F1 ≥ 0.95.
+- MCC ≥ 0.95.
 
 ## Idea backlog (seed — extend, don't exhaust blindly)
 
@@ -195,7 +216,7 @@ Mark each in the scoreboard as `tried` when used, even if reverted.
 - Tweaking the same constant repeatedly in tiny steps. Sweep, then move on.
 - Bundling multiple changes in one iteration ("I'll change lever-arm AND
   hit cap"). One change per iter — you can't attribute the reward otherwise.
-- Reporting F1 from training split. Only `eval/f1_score` counts.
+- Reporting metrics from the training split. Only the `eval - ` lines count.
 - Caching old results — every iteration runs the full pipeline fresh.
 
 ## On the first iteration (iter 0 = baseline)
@@ -203,9 +224,10 @@ Mark each in the scoreboard as `tried` when used, even if reverted.
 **Do not touch any code on the first run.** Iter 0 is a pure baseline:
 
 1. Run `run.py` on the unmodified repo.
-2. Parse F1, precision, recall, FPR, and survival count from stdout.
+2. Parse TP/FP/FN/TN from stdout, compute MCC, also record F1,
+   precision, recall, FPR.
 3. Append iter 0 to `SCOREBOARD.md` as the baseline row (no diff, no
    hypothesis — just "baseline, no changes").
-4. Use these numbers as `baseline_f1`, `baseline_recall`,
-   `baseline_survival` for all guardrail checks going forward.
+4. Use these numbers as `baseline_mcc`, `baseline_recall` for guardrail
+   checks and as the initial "Best so far" row.
 5. Only then begin iter 1 with your first hypothesis.
