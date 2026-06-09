@@ -50,19 +50,28 @@ Parse the F1 value. This is the scalar reward.
 - `eval/recall` must not drop below `baseline_recall - 0.05`
 - Fraction of events surviving reconstruction must stay ≥ 50% of baseline
   (compute from log: count of events fed into `predict`)
-- All existing tests must pass: `pytest tests/ -x -q`
+- `run.py` must complete without errors
+
+**Do not run pytest. Do not touch the test suite.** The only evaluation
+is running `run.py` and parsing its stdout for the eval metrics line.
 
 ## Constraints (hard)
 
-1. **Only edit** `src/betadecay-analysis/physics/event_processing.py`.
-   No edits to other source files, configs, or tests.
-2. Do not change public function signatures imported elsewhere
+1. **Read access: entire repository.** You are encouraged to read any
+   file in the repo — `physics_factors.py`, `compton_cone_reconstruction.py`,
+   `modeling/`, `pipeline/`, configs, docs, tests — to understand how
+   subsets flow downstream and what features your filters should preserve.
+   Reading is unlimited; **editing is not**.
+2. **Write access: exactly one file** —
+   `src/betadecay-analysis/physics/event_processing.py`. No edits anywhere
+   else, ever.
+3. Do not change public function signatures imported elsewhere
    (grep first: `grep -rn "from physics.event_processing" src/ tests/`).
-3. Do not introduce new dependencies.
-4. Do not use revan or read `.tra` files — this branch is `not-using-revan`.
-5. Do not silently drop the 7-hit cap (Boggs & Jean) without justifying it
+4. Do not introduce new dependencies.
+5. Do not use revan or read `.tra` files — this branch lineage is `not-using-revan`.
+6. Do not silently drop the 7-hit cap (Boggs & Jean) without justifying it
    in the scoreboard entry.
-6. No mocking, no test edits to make things pass.
+7. Do not run pytest. Do not edit tests.
 
 ## Per-iteration protocol
 
@@ -81,9 +90,11 @@ Every iteration follows these steps in order:
 3. **Edit** `event_processing.py`. One coherent change per iteration.
 
 4. **Evaluate**
-   - `pytest tests/ -x -q` — if fail, revert (`git checkout -- event_processing.py`)
+   - Run `run.py`. Parse stdout for the `eval - ...` line and extract
+     F1, precision, recall, FPR, and survival rate.
+   - If `run.py` errors out, revert (`git checkout -- event_processing.py`)
      and log as failed iteration.
-   - Run the pipeline and extract F1, recall, survival rate.
+   - Do NOT run pytest.
 
 5. **Decide**
    - **Keep** if F1 > best-so-far AND guardrails pass: `git add -A && git commit -m "iter N: <hypothesis>, F1=<x>"`.
@@ -116,7 +127,7 @@ Update "Best so far" line whenever a new best is kept.
 Halt the loop and report to the user when ANY:
 - 50 iterations completed.
 - 10 consecutive iterations without a new best.
-- 3 consecutive iterations with `pytest` failures (likely something
+- 3 consecutive iterations where `run.py` errors out (likely something
   structural is wrong; ask the user).
 - F1 ≥ 0.95.
 
@@ -145,13 +156,14 @@ Mark each in the scoreboard as `tried` when used, even if reverted.
 
 ## Anti-patterns (do not do)
 
-- **NEVER TOUCH ANY FILE OTHER THAN `src/betadecay-analysis/physics/event_processing.py`.**
+- **NEVER EDIT ANY FILE OTHER THAN `src/betadecay-analysis/physics/event_processing.py`.**
   Not `physics_factors.py`. Not `compton_cone_reconstruction.py`. Not
   configs, not tests, not `run.py`, not `pyproject.toml`, not docs, not
-  CLAUDE.md, not the scoreboard's structure. **Zero exceptions.** If you
-  genuinely believe a change outside this file is required, STOP the loop
-  and report to the user — do not edit. Violating this rule invalidates
-  the entire run.
+  CLAUDE.md, not the scoreboard's structure. **Zero exceptions.** Reading
+  any file in the repo is fine and encouraged — editing is forbidden.
+  If you genuinely believe a change outside this file is required, STOP
+  the loop and report to the user. Violating this rule invalidates the
+  entire run.
 - Removing or weakening the subset enumeration itself. The enumeration is
   correct; your job is to **filter** its output, not replace it.
 - Tweaking the same constant repeatedly in tiny steps. Sweep, then move on.
