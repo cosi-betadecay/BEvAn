@@ -90,8 +90,15 @@ def all_vector_cosines_blockwise(
 
 
 def annihilation_angle(
-    positions: torch.Tensor, n_hits: int | None = None, sizes: torch.Tensor | None = None
+    positions: torch.Tensor,
+    n_hits: int | None = None,
+    sizes: torch.Tensor | None = None,
+    energies: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    # ``energies`` (per-hit deposited energy, shape matching ``positions``:
+    # (B, N) for the sized path) is threaded through so the two-photon joint
+    # angle/energy constraint can gate candidate pairs. It is currently a
+    # no-op pass-through (Phase 0); the returned cosine is unchanged.
     if sizes is not None:
         if positions.ndim != 3 or sizes.ndim != 1:
             raise ValueError(
@@ -111,7 +118,12 @@ def annihilation_angle(
             if size_int < 3:
                 outputs.append(positions.new_tensor(float("nan")).reshape(1))
                 continue
-            outputs.append(annihilation_angle(positions[group, :size_int, :], n_hits=size_int))
+            group_energies = energies[group, :size_int] if energies is not None else None
+            outputs.append(
+                annihilation_angle(
+                    positions[group, :size_int, :], n_hits=size_int, energies=group_energies
+                )
+            )
 
         stacked = torch.stack(outputs).flatten()
         finite = stacked[torch.isfinite(stacked)]
