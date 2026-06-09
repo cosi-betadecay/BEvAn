@@ -37,10 +37,39 @@ def event_data_processing(
     combos = []
     sizes = []
 
+    # ARM-targeted subset augmentation (SSD / Boggs & Jean §3).
+    #
+    # For events with <=7 hits the enumeration below already emits EVERY subset,
+    # and two of the three features are order-invariant and therefore already
+    # globally optimal over that pool: delta_E is a sum, annihilation_angle is a
+    # min over all pairwise inter-hit vectors. They cannot be improved by adding
+    # candidates. `arm` is the exception: theta_geo reads the first/second hit as
+    # the scatter origin and direction, and theta_kin splits energy as
+    # E_2 = (subset total) - E_first, so arm depends on the *ordering* of a
+    # subset. Yet the enumeration only ever emits the physically-arbitrary
+    # ascending-index ordering, so arm's argmin never sees the kinematically
+    # sensible orderings.
+    #
+    # Augment (do not remove): for each subset of size >=2, also emit the
+    # SSD-preferred ordering with hits sorted by descending deposited energy
+    # (E_1 > E_2 > ...), per Boggs & Jean §3's "prefer the order where the first
+    # scatter deposits more energy". `arm` takes a min over candidates, so this
+    # lets its argmin reach a physics-ordered version. delta_E/angle are
+    # unchanged (order-invariant), so the reward is cleanly attributable to arm.
+    # Bounded at <=2x combos (one extra ordering per subset, skipped when it
+    # coincides with the ascending order) to avoid the combinatorial blow-up a
+    # full (first, second) permutation would cause on high-multiplicity events.
+    energies_cpu = energies.tolist()
+
     for r in range(1, min(n_hits + 1, 8)):  # Boggs & Jean (2000)
         for c in itertools.combinations(range(n_hits), r):
             combos.append(c)
             sizes.append(r)
+            if r >= 2:
+                ordered = tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))
+                if ordered != c:
+                    combos.append(ordered)
+                    sizes.append(r)
 
     max_r = max(sizes)
     n_combo = len(combos)
