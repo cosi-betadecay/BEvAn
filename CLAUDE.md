@@ -133,8 +133,23 @@ Every iteration follows these steps in order:
    - Do NOT run pytest.
 
 5. **Decide**
-   - **Keep** if MCC > best-so-far AND guardrails pass: `git add -A && git commit -m "iter N: <hypothesis>, MCC=<x>"`.
-   - **Revert** otherwise: `git checkout -- src/betadecay-analysis/physics/event_processing.py`.
+   - **New best** (MCC > best-so-far AND guardrails pass):
+     1. Update SCOREBOARD.md (status `kept`, update "Best so far" line).
+     2. `git add src/betadecay-analysis/physics/event_processing.py SCOREBOARD.md`
+     3. `git commit -m "iter N: <hypothesis>, MCC=<x>"`
+     4. `git push origin rl-cli` — **only on a new best, never otherwise.**
+   - **Not a new best, or guardrail violation, or run.py crashed**:
+     1. `git checkout -- src/betadecay-analysis/physics/event_processing.py`
+     2. Append a `reverted` row to SCOREBOARD.md locally.
+     3. **Do not commit. Do not push.** SCOREBOARD.md changes for reverted
+        iterations stay uncommitted — they're working state only.
+
+   Rationale: GitHub only sees confirmed improvements. Failed experiments
+   stay in SCOREBOARD.md as uncommitted working state — they're memory
+   for the loop. When the next new-best is reached, SCOREBOARD.md is
+   committed in full (including all the intervening reverted rows), so
+   each pushed commit tells the story: "I tried N things, this one
+   worked." Reverted rows never produce their own commit or push.
 
 6. **Log to `SCOREBOARD.md`** — append one row to the table (never
    rewrite or reorder existing rows).
