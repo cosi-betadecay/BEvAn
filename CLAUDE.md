@@ -1,9 +1,14 @@
 # RL-Style Reconstruction Improvement Loop
 
 You are running an iterative optimization loop on event reconstruction.
-Your job is to improve the **eval F1 score** by repeatedly editing
+Your job is to improve eval MCC by repeatedly editing
 `src/betadecay-analysis/physics/event_processing.py` and re-running the
 pipeline. This file is the policy — read it at the start of every iteration.
+
+**Trigger:** when the user says `Execute CLAUDE.md` (or any clear variant
+like "start the loop", "run the RL loop", "go"), begin at iter 0 and run
+until a stop condition fires. Until then, treat CLAUDE.md as a normal
+project doc and do not start iterating on your own.
 
 ## Mission
 
