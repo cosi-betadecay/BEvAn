@@ -137,7 +137,13 @@ def event_data_processing(
                         seen.add(o)
                         cand.append(o)
             if r == 2:
-                return cand  # no CKD redundancy for 2-hit subsets
+                # No CKD redundancy for 2-hit subsets, so use SSD instead
+                # (Boggs & Jean §3): a real 2-site photon deposits more energy
+                # in the first scatter, so feed arm only the E_1>=E_2 ordering.
+                # This denies background 2-site subsets the reverse ordering that
+                # can give a spurious low arm; delta_E/angle are unaffected.
+                a, b = c
+                return [(a, b) if energies_cpu[a] >= energies_cpu[b] else (b, a)]
             scored = [(o, _ckd_residual(o)) for o in cand]
             consistent = [o for o, res in scored if res is None or res <= CKD_ORDER_MAX]
             if consistent:

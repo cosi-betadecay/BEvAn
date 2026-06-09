@@ -1,6 +1,6 @@
 # Scoreboard V2
 
-Best so far: iter 9, MCC=0.8773
+Best so far: iter 13, MCC=0.8785
 
 | Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | MCC | Δ vs best | F1 | Precision | Recall | FPR | TP / FP / FN / TN | Notes / next idea |
 |--------|-----------------|--------|------------|--------------|-----|-----------|----|-----------|--------|-----|--------------------|-------------------|
@@ -35,3 +35,13 @@ Best so far: iter 9, MCC=0.8773
 **What's exhausted.** (1) Augmentation of subset *membership* — iters 3,4 byte-identical (more orderings on size≥5 / larger subsets never change `arm`'s per-event min; the 7-hit cap costs no signal). (2) Subset *removal* of every kind — energy/lever-arm/n_hits (V1) and CKD-χ² (iters 5,6) — all near-zero-sum. (3) Ordering-filter refinements — threshold sweep peaks at 0.05 (iters 8,9,10); size-2 physical-E2 is a no-op (iter 11); strict unphysical rejection hurts (iter 12).
 
 **The ceiling.** The residual 120 FP are background events that are 511-annihilation-like in *all three* features (low `delta_E`, back-to-back `angle`, now CKD-consistent `arm`). `event_processing.py` can only influence `arm` orderings; `delta_E`/`angle` are structurally fixed. **Breaking through requires a new discriminating FEATURE downstream (out of scope for this loop):** e.g. (a) a two-photon joint constraint (both annihilation photons summing to ~1022 keV, theory §7) added to `physics_factors.py`/`modeling/`; (b) below-instrument / backscatter rejection using the reconstructed first-scatter direction sign (theory §4.3), which needs the incoming unit vector that `event_processing` doesn't receive; or (c) a coherence feature requiring a *single* subset to be jointly good in ΔE+angle+arm (the current independent per-feature `min` aggregation is itself an FP source — V1 iter0 insight — and lives in the downstream aggregation, not here). **Redirect needed if the user wants to pursue these.**
+
+---
+
+## Resumed iterations (loop re-invoked past the soft halt)
+
+User re-issued `Execute RL_V2.md`, so the loop resumed with new in-scope hypotheses (anti-repeat respected). Best at resume: iter 9, MCC=0.8773.
+
+| Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | MCC | Δ vs best | F1 | Precision | Recall | FPR | TP / FP / FN / TN | Notes / next idea |
+|--------|-----------------|--------|------------|--------------|-----|-----------|----|-----------|--------|-----|--------------------|-------------------|
+| 13 | 2026-06-09T15:50:00Z | kept | SSD size-2 ordering restriction: feed arm only the E_1≥E_2 ordering of each 2-hit subset (deny the reverse, spurious-low-arm ordering) | `_orderings` r==2 branch returns only the higher-energy-first ordering | 0.8785 | +0.0012 | 0.8880 | 0.8309 | 0.9536 | 0.0195 | 575 / 117 / 28 / 5875 | **NEW BEST — the soft-halt was premature; the 2-site lever had headroom.** vs iter9: FP −3 (120→117) for only TP −1. SSD §3: 2-site events are the weakest background-rejection case; a real 2-site photon scatters with E_1≥E_2, so restricting arm to that ordering denies background subsets the reverse ordering that coincidentally gives low arm. Asymmetric 3:1 FP:TP trade → MCC up. FPR 0.0200→0.0195. Total V2 gain now +0.0122. Distinct from iter11 (physical-E2 band, no-op): this forces the ENERGY order, not the kinematic band. Next (iter14): the 2-site lever responded — push it. Try requiring BOTH SSD energy order AND physical theta_kin (E_2∈[170.33,511]) for the 2-hit ordering; if neither, the subset still feeds delta_E/angle via its single emitted ordering but arm sees the least-spurious one. |
