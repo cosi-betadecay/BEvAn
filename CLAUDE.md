@@ -11,6 +11,25 @@ Maximize `eval/f1_score` on the held-out split, subject to the constraints
 below. Each iteration: form one hypothesis, edit, evaluate, log result,
 keep or revert.
 
+### What the job actually is
+
+The current reconstruction in `event_processing.py` is **correct**: it
+enumerates **all non-empty hit subsets** of each event. That part stays.
+The problem is that this catches everything — true β⁺ annihilations *and*
+a flood of false positives from background partitions that happen to look
+annihilation-like.
+
+**Your one job is to add smart filters that discard bad subsets so
+fewer false positives survive into the classifier.** Higher precision
+without crushing recall = higher F1.
+
+You ARE expected to **invent and implement new filtering algorithms**
+inside `event_processing.py` when the obvious knobs are exhausted —
+new geometric cuts, kinematic-consistency tests, energy-window logic,
+topology heuristics, multi-stage filters, etc. The Idea Backlog is a
+seed, not a ceiling. Write whatever helper functions you need *inside
+this one file*.
+
 ## Reward
 
 **Primary:** `eval/f1_score` from a full pipeline run.
@@ -126,12 +145,18 @@ Mark each in the scoreboard as `tried` when used, even if reverted.
 
 ## Anti-patterns (do not do)
 
+- **NEVER TOUCH ANY FILE OTHER THAN `src/betadecay-analysis/physics/event_processing.py`.**
+  Not `physics_factors.py`. Not `compton_cone_reconstruction.py`. Not
+  configs, not tests, not `run.py`, not `pyproject.toml`, not docs, not
+  CLAUDE.md, not the scoreboard's structure. **Zero exceptions.** If you
+  genuinely believe a change outside this file is required, STOP the loop
+  and report to the user — do not edit. Violating this rule invalidates
+  the entire run.
+- Removing or weakening the subset enumeration itself. The enumeration is
+  correct; your job is to **filter** its output, not replace it.
 - Tweaking the same constant repeatedly in tiny steps. Sweep, then move on.
 - Bundling multiple changes in one iteration ("I'll change lever-arm AND
   hit cap"). One change per iter — you can't attribute the reward otherwise.
-- Editing `physics_factors.py`, `compton_cone_reconstruction.py`, or
-  any config to "help" event_processing. If you genuinely need this,
-  STOP and tell the user.
 - Reporting F1 from training split. Only `eval/f1_score` counts.
 - Caching old results — every iteration runs the full pipeline fresh.
 
