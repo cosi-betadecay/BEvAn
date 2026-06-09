@@ -1,0 +1,7 @@
+# Scoreboard V2
+
+Best so far: iter 0, MCC=0.8663
+
+| Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | MCC | Δ vs best | F1 | Precision | Recall | FPR | TP / FP / FN / TN | Notes / next idea |
+|--------|-----------------|--------|------------|--------------|-----|-----------|----|-----------|--------|-----|--------------------|-------------------|
+| 0 | 2026-06-09T14:48:00Z | baseline | — | post-Phase-0 clean pipeline (NaN-mask in confusion matrix + full-population class prior) | 0.8663 | — | 0.8773 | 0.8248 | 0.9370 | 0.0200 | 565 / 120 / 38 / 5872 | **V2 baseline. baseline_recall=0.9370, guardrail floor=0.8870.** PHASE-0 FINDING: both metric fixes are *no-ops on this data*. `eval - NaN excluded: 0` because `lookup_density_values` (matrix_calculations.py:138-155, OUTSIDE the writable set) already maps NaN/inf features→0.0 density, so NaN never reaches `ratio`/predictions. Prior fix also no-op: `delta_E` is finite for every n_hits≥1 event, so `isfinite(bdecay_train_delta_E).sum() == .numel()`. **Numbers are identical to the V1 baseline → RL_V2's "metric noise" premise does NOT manifest; V1's reverts were real, not NaN/prior artifacts.** The true non-monotonicity driver (per V1 iter6) is train-time density re-fitting reshaping the decision boundary, not NaN tallying. Phase 1 must rely on *augmentation* (lowering a feature's min) since removal is confirmed near-zero-sum. NaN-mask + true-population-prior fixes are kept as defensive correctness (protect other datasets). Third-bug logged (lookup swallows NaN), NOT fixed per policy. |

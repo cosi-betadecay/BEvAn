@@ -158,6 +158,20 @@ def predict(
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
 
+    # Exclude events whose evidence is undefined before tallying. Empty/invalid
+    # subsets propagate NaN into the feature tensors and hence into the
+    # likelihood ratio; such events have no real prediction. Counting them as
+    # TN/FN turns NaN-reclassification into phantom confusion-matrix entries
+    # that contaminate the metric. Mask out NaN ratios (and any NaN ground-truth
+    # label) so TP/FP/FN/TN reflect genuine predictions only. Note: a non-NaN
+    # but infinite ratio is overwhelmingly strong evidence, not undefined, so it
+    # is intentionally kept.
+    valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
+    n_excluded = int((~valid).sum().item())
+    ground_truths = ground_truths[valid]
+    predictions = predictions[valid]
+    print(f"{split_name} - NaN excluded: {n_excluded}")
+
     tp = torch.sum(ground_truths & predictions).item()
     fp = torch.sum(~ground_truths & predictions).item()
     fn = torch.sum(ground_truths & ~predictions).item()

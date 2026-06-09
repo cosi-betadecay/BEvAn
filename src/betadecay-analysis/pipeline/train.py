@@ -87,8 +87,13 @@ class Trainer:
         self.bg_cond_angle = conditional_from_joint(self.bg_joint_deltaE_angle, axis=0)
         self.bg_cond_arm = conditional_from_joint(self.bg_joint_deltaE_arm, axis=0)
 
-        self.n_beta_decay = int(torch.isfinite(bdecay_train_delta_E).sum().item())
-        self.n_bg = int(torch.isfinite(bg_train_delta_E).sum().item())
+        # Class prior P(β)/P(bg) must reflect the true population balance, not
+        # the subset of events that happened to yield finite features. Counting
+        # over isfinite(...) biased the prior toward whichever class less often
+        # produced NaN features and made the denominator inconsistent with the
+        # eval population the prior is applied to. Use the full class counts.
+        self.n_beta_decay = int(bdecay_train_delta_E.numel())
+        self.n_bg = int(bg_train_delta_E.numel())
 
         Evaluator(self).evaluate(train, split_name="train")
 
