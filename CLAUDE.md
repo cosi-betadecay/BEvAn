@@ -78,9 +78,10 @@ is running `run.py` and parsing its stdout for the eval metrics line.
 Every iteration follows these steps in order:
 
 1. **Read state**
-   - Read `RL_SCOREBOARD.md` (full file).
+   - Read `SCOREBOARD.md` (full file). The table is your memory across
+     iterations — scan the "What changed" and "Notes / next idea"
+     columns to avoid repeats and pick up promising threads.
    - Read the current `event_processing.py`.
-   - Read the last 5 scoreboard entries to avoid repeating ideas.
 
 2. **Form one hypothesis**
    - State it in ≤2 sentences: what you'll change and why F1 should go up.
@@ -100,27 +101,42 @@ Every iteration follows these steps in order:
    - **Keep** if F1 > best-so-far AND guardrails pass: `git add -A && git commit -m "iter N: <hypothesis>, F1=<x>"`.
    - **Revert** otherwise: `git checkout -- src/betadecay-analysis/physics/event_processing.py`.
 
-6. **Log to `RL_SCOREBOARD.md`** (append, never rewrite):
-   ```
-   ## Iter N — <kept|reverted|failed-tests>
-   - Hypothesis: <one line>
-   - Diff summary: <one line — what changed, e.g. "lever-arm cut 0.5→0.3">
-   - F1: 0.xxxx (Δ vs best: +/-0.xxxx)
-   - Recall: 0.xxxx | Survival: xx%
-   - Notes: <one line, e.g. "recall dropped — too aggressive">
-   ```
+6. **Log to `SCOREBOARD.md`** — append one row to the table (never
+   rewrite or reorder existing rows).
 
 ## Scoreboard schema
 
-`RL_SCOREBOARD.md` lives at repo root. Header (write once, on iter 0):
+`SCOREBOARD.md` lives at repo root. It is a single markdown table plus
+a one-line "Best so far" pointer above it. Write the header once on
+iter 0; append one row per iteration thereafter.
 
 ```
-# RL Scoreboard
-Baseline: F1=<x>, Recall=<y>, Survival=<z>%
+# Scoreboard
+
 Best so far: iter <n>, F1=<x>
+
+| Run ID | Timestamp (UTC) | Status | Hypothesis | What changed | F1 | Δ vs best | Precision | Recall | FPR | Survival % | Notes / next idea |
+|--------|-----------------|--------|------------|--------------|----|-----------|-----------|--------|-----|------------|-------------------|
+| 0 | 2026-06-09T12:34:56Z | baseline | — | unmodified repo | 0.7544 | — | 0.8123 | 0.7044 | 0.0512 | 100% | starting point |
+| 1 | … | kept | lever-arm too lax, tighten to 0.3 cm | `min_lever_arm: 0.5→0.3` | 0.7611 | +0.0067 | 0.83 | 0.70 | 0.04 | 92% | recall held — try 0.2 next |
+| 2 | … | reverted | … | … | … | … | … | … | … | … | … |
+| 3 | … | errored | … | new geometric filter | — | — | — | — | — | — | NaN in cos_theta; retry with clamp |
 ```
 
-Update "Best so far" line whenever a new best is kept.
+Rules:
+- **Run ID** = iteration number, monotonically increasing. Iter 0 is the
+  untouched baseline.
+- **Status** ∈ {`baseline`, `kept`, `reverted`, `errored`}.
+- **What changed** is the actual diff in one line (constant change,
+  filter added, function introduced). Be specific enough that a future
+  iteration can tell whether an idea was already tried.
+- **Δ vs best** is signed F1 delta vs the best-so-far row at the time
+  of this iteration (not vs the previous row).
+- **Notes / next idea** is where you record what you learned and, if
+  useful, the next thing to try. This column is the planning log —
+  future iterations read it to avoid repeats and find threads to pull.
+- Update the **"Best so far"** line whenever a kept row beats it.
+- Never edit prior rows. If a number was wrong, add a new row noting it.
 
 ## Stop conditions
 
@@ -172,8 +188,14 @@ Mark each in the scoreboard as `tried` when used, even if reverted.
 - Reporting F1 from training split. Only `eval/f1_score` counts.
 - Caching old results — every iteration runs the full pipeline fresh.
 
-## On the first iteration
+## On the first iteration (iter 0 = baseline)
 
-1. Run the unmodified pipeline once to establish baseline F1, recall, survival.
-2. Write the scoreboard header with baseline values.
-3. Then begin iter 1 normally.
+**Do not touch any code on the first run.** Iter 0 is a pure baseline:
+
+1. Run `run.py` on the unmodified repo.
+2. Parse F1, precision, recall, FPR, and survival count from stdout.
+3. Append iter 0 to `SCOREBOARD.md` as the baseline row (no diff, no
+   hypothesis — just "baseline, no changes").
+4. Use these numbers as `baseline_f1`, `baseline_recall`,
+   `baseline_survival` for all guardrail checks going forward.
+5. Only then begin iter 1 with your first hypothesis.
