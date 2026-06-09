@@ -113,9 +113,10 @@ Every iteration follows these steps in order:
    - Read the current `event_processing.py`.
 
 2. **Form one hypothesis**
-   - State it in ≤2 sentences: what you'll change and why F1 should go up.
+   - State it in ≤2 sentences: what you'll change and why MCC should go up.
    - Reject the idea if it appears (even rephrased) in the last 10 entries.
-   - Pull from `Idea Backlog` below if you have no new idea.
+   - Pull from `EVENT_RECONSTRUCTION_THEORY.md` (the idea backlog)
+     if you have no new idea.
 
 3. **Edit** `event_processing.py`. One coherent change per iteration.
 
@@ -178,28 +179,23 @@ Halt the loop and report to the user when ANY:
   structural is wrong — log it in the scoreboard and halt, do not ask).
 - MCC ≥ 0.95.
 
-## Idea backlog (seed — extend, don't exhaust blindly)
+## Idea backlog
 
-Reconstruction levers actually inside `event_processing.py`:
+The idea backlog lives in **`EVENT_RECONSTRUCTION_THEORY.md`** at the
+repo root. It is a compressed summary of Boggs & Jean (2000) — the
+canonical event-reconstruction reference for this project — covering
+CKD, SSD, lever-arm cuts, backscatter/TOF rejection, characteristic-
+energy vetoes, and positron signatures. It also includes a ranked list
+of filters to try, in order of expected impact.
 
-- **Lever-arm cut**: sweep 0.1, 0.3, 0.5 (current), 0.75, 1.0 cm.
-- **Hit cap**: try 5, 6, 7 (current), 8.
-- **Subset enumeration strategy**: instead of *all* non-empty subsets,
-  enumerate only subsets that partition hits into two groups (two-photon
-  prior) and score each partition.
-- **Per-subset ordering**: within a subset, sort hits by distance from
-  origin / by energy / by a Compton-kinematic χ², instead of leaving
-  order arbitrary.
-- **Energy-window pre-filter**: drop subsets whose ΣE is > N keV from
-  511 or 1022 keV.
-- **Escape rejection**: drop subsets where the last hit's energy
-  exceeds Compton-edge for the running residual.
-- **Minimum hit count**: require ≥3 hits (current `annihilation_angle`
-  silently NaNs sub-3).
-- **Two-photon back-to-back pre-filter**: pre-cut subset pairs whose
-  best back-to-back cos > -0.9.
+**At the start of every iteration, read `EVENT_RECONSTRUCTION_THEORY.md`
+in full and pick the highest-impact filter you haven't tried yet.** The
+scoreboard's "What changed" / "Notes" columns are your record of what's
+already been attempted.
 
-Mark each in the scoreboard as `tried` when used, even if reverted.
+If the theory doc runs dry, you may invent new filters consistent with
+its physics — but document the reasoning in the scoreboard Notes column
+so future iterations understand the new direction.
 
 ## Anti-patterns (do not do)
 
