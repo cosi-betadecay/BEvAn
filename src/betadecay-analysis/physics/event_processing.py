@@ -60,36 +60,91 @@ def event_data_processing(
     # coincides with the ascending order) to avoid the combinatorial blow-up a
     # full (first, second) permutation would cause on high-multiplicity events.
     energies_cpu = energies.tolist()
+    positions_cpu = positions.tolist()
+
+    # CKD-consistency ORDERING filter (Boggs & Jean §2). Removing whole subsets
+    # is near-zero-sum (V1 + V2 iters 5-6): it also raises the order-invariant
+    # delta_E/angle mins, so every FP removed costs a TP. Instead, keep every
+    # subset and filter only the ORDERINGS fed to `arm` (the sole order-sensitive
+    # feature). For size 3-4 subsets we emit only kinematically-consistent
+    # orderings — those whose geometric scatter angles match the Compton-formula
+    # angles. A genuine Compton track has such an ordering (kept -> arm low,
+    # signal preserved); a background coincidence's spuriously-low-arm ordering
+    # is usually inconsistent (dropped -> arm rises -> fewer FP). delta_E/angle
+    # are untouched because every subset still emits at least one ordering.
+    CKD_ORDER_MAX = 0.2  # keep an ordering if mean sq (cosφ_geo − cosφ_kin) <= this
+
+    def _unit(a, b):
+        v = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+        n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
+        if n < 1e-9:
+            return None
+        return (v[0] / n, v[1] / n, v[2] / n)
+
+    def _ckd_residual(seq):
+        """Mean squared (cosφ_geo − cosφ_kin) over `seq`'s internal scatters."""
+        N = len(seq)
+        Es = [energies_cpu[h] for h in seq]
+        P = [positions_cpu[h] for h in seq]
+        W = [0.0] * N  # residual photon energy after hit i, units of 511 keV
+        suffix = 0.0
+        for i in range(N - 1, -1, -1):
+            W[i] = suffix / 511.0
+            suffix += Es[i]
+        dirs = [_unit(P[i], P[i + 1]) for i in range(N - 1)]
+        resids = []
+        for i in range(1, N - 1):
+            if dirs[i - 1] is None or dirs[i] is None:
+                continue
+            w_in, w_out = W[i - 1], W[i]
+            if w_in < 1e-9 or w_out < 1e-9:
+                continue
+            cos_geo = sum(dirs[i - 1][k] * dirs[i][k] for k in range(3))
+            cos_kin = 1.0 + 1.0 / w_in - 1.0 / w_out
+            cos_kin = max(-1.0, min(1.0, cos_kin))
+            resids.append((cos_geo - cos_kin) ** 2)
+        if not resids:
+            return None
+        return sum(resids) / len(resids)
 
     def _orderings(c):
         """Candidate orderings of subset `c` that expose distinct `arm` values.
 
         `arm` depends only on which hit is FIRST (it sets E_2 = total - E_first
         and the geometric scatter origin) and which is SECOND (the geometric
-        direction); the remaining hits affect nothing order-wise. So for short
-        Compton-track subsets (size <= 4) we emit the full (first, second)
-        enumeration — every ordered pair, remaining hits ascending — giving
-        arm's argmin the true CKD-best ordering. r(r-1) <= 12 candidates here,
-        and these small subsets are few, so no blow-up. For size >= 5 subsets,
-        whose COUNT (C(n_hits, r)) explodes on high-multiplicity events, we fall
-        back to iter-1's bounded pair (ascending + SSD descending-energy) to
-        stay at <= 2x combos. delta_E/angle are order-invariant, so all of this
-        is cleanly attributable to arm.
+        direction). For short subsets we enumerate the (first, second) orderings;
+        for size 3-4 we then keep only the CKD-consistent ones so `arm`'s argmin
+        cannot exploit a spurious low-arm ordering of a background subset. Size 2
+        has no internal scatter (no CKD redundancy) so both orderings are kept.
+        Size >= 5 keeps iter-1's bounded ascending+SSD pair (orderings there
+        never change arm's per-event min anyway — V2 iter3). delta_E/angle are
+        order-invariant and every subset still emits >=1 ordering, so they are
+        untouched and the reward is cleanly attributable to arm.
         """
         r = len(c)
         if r < 2:
             return [c]
         if r <= 4:
             cset = set(c)
-            seen = []
+            cand = []
+            seen = set()
             for first in c:
                 for second in c:
                     if first == second:
                         continue
                     o = (first, second) + tuple(sorted(cset - {first, second}))
                     if o not in seen:
-                        seen.append(o)
-            return seen
+                        seen.add(o)
+                        cand.append(o)
+            if r == 2:
+                return cand  # no CKD redundancy for 2-hit subsets
+            scored = [(o, _ckd_residual(o)) for o in cand]
+            consistent = [o for o, res in scored if res is None or res <= CKD_ORDER_MAX]
+            if consistent:
+                return consistent
+            # No consistent ordering: emit only the most-consistent one, so the
+            # subset still feeds delta_E/angle without giving arm a spurious pick.
+            return [min(scored, key=lambda x: (x[1] if x[1] is not None else 0.0))[0]]
         ordered = tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))
         return [c] if ordered == c else [c, ordered]
 
