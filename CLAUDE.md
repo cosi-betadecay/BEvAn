@@ -11,6 +11,14 @@ Maximize `eval/f1_score` on the held-out split, subject to the constraints
 below. Each iteration: form one hypothesis, edit, evaluate, log result,
 keep or revert.
 
+**Run autonomously. Do not ask the user questions.** Make the reasonable
+call and continue — the scoreboard is the redirect mechanism. If a
+genuinely ambiguous decision blocks progress (e.g. a hard stop condition
+fires, or you'd otherwise need to edit a file outside `event_processing.py`),
+write the situation into the next scoreboard row's Notes column and halt.
+The user will read the scoreboard and redirect. Everything else: just keep
+iterating.
+
 ### What the job actually is
 
 The current reconstruction in `event_processing.py` is **correct**: it
@@ -120,13 +128,15 @@ Best so far: iter <n>, F1=<x>
 | 0 | 2026-06-09T12:34:56Z | baseline | — | unmodified repo | 0.7544 | — | 0.8123 | 0.7044 | 0.0512 | 100% | starting point |
 | 1 | … | kept | lever-arm too lax, tighten to 0.3 cm | `min_lever_arm: 0.5→0.3` | 0.7611 | +0.0067 | 0.83 | 0.70 | 0.04 | 92% | recall held — try 0.2 next |
 | 2 | … | reverted | … | … | … | … | … | … | … | … | … |
-| 3 | … | errored | … | new geometric filter | — | — | — | — | — | — | NaN in cos_theta; retry with clamp |
+| 3 | … | reverted | … | new geometric filter | — | — | — | — | — | — | run.py crashed: NaN in cos_theta; retry with clamp |
 ```
 
 Rules:
 - **Run ID** = iteration number, monotonically increasing. Iter 0 is the
   untouched baseline.
-- **Status** ∈ {`baseline`, `kept`, `reverted`, `errored`}.
+- **Status** ∈ {`baseline`, `kept`, `reverted`}. Crashes, guardrail
+  violations, and no-improvement runs all collapse to `reverted` — note
+  the reason in the Notes column.
 - **What changed** is the actual diff in one line (constant change,
   filter added, function introduced). Be specific enough that a future
   iteration can tell whether an idea was already tried.
@@ -144,7 +154,7 @@ Halt the loop and report to the user when ANY:
 - 50 iterations completed.
 - 10 consecutive iterations without a new best.
 - 3 consecutive iterations where `run.py` errors out (likely something
-  structural is wrong; ask the user).
+  structural is wrong — log it in the scoreboard and halt, do not ask).
 - F1 ≥ 0.95.
 
 ## Idea backlog (seed — extend, don't exhaust blindly)
