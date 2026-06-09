@@ -61,15 +61,43 @@ def event_data_processing(
     # full (first, second) permutation would cause on high-multiplicity events.
     energies_cpu = energies.tolist()
 
+    def _orderings(c):
+        """Candidate orderings of subset `c` that expose distinct `arm` values.
+
+        `arm` depends only on which hit is FIRST (it sets E_2 = total - E_first
+        and the geometric scatter origin) and which is SECOND (the geometric
+        direction); the remaining hits affect nothing order-wise. So for short
+        Compton-track subsets (size <= 4) we emit the full (first, second)
+        enumeration — every ordered pair, remaining hits ascending — giving
+        arm's argmin the true CKD-best ordering. r(r-1) <= 12 candidates here,
+        and these small subsets are few, so no blow-up. For size >= 5 subsets,
+        whose COUNT (C(n_hits, r)) explodes on high-multiplicity events, we fall
+        back to iter-1's bounded pair (ascending + SSD descending-energy) to
+        stay at <= 2x combos. delta_E/angle are order-invariant, so all of this
+        is cleanly attributable to arm.
+        """
+        r = len(c)
+        if r < 2:
+            return [c]
+        if r <= 4:
+            cset = set(c)
+            seen = []
+            for first in c:
+                for second in c:
+                    if first == second:
+                        continue
+                    o = (first, second) + tuple(sorted(cset - {first, second}))
+                    if o not in seen:
+                        seen.append(o)
+            return seen
+        ordered = tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))
+        return [c] if ordered == c else [c, ordered]
+
     for r in range(1, min(n_hits + 1, 8)):  # Boggs & Jean (2000)
         for c in itertools.combinations(range(n_hits), r):
-            combos.append(c)
-            sizes.append(r)
-            if r >= 2:
-                ordered = tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))
-                if ordered != c:
-                    combos.append(ordered)
-                    sizes.append(r)
+            for o in _orderings(c):
+                combos.append(o)
+                sizes.append(r)
 
     max_r = max(sizes)
     n_combo = len(combos)
