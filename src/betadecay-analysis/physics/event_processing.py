@@ -72,7 +72,7 @@ def event_data_processing(
     # signal preserved); a background coincidence's spuriously-low-arm ordering
     # is usually inconsistent (dropped -> arm rises -> fewer FP). delta_E/angle
     # are untouched because every subset still emits at least one ordering.
-    CKD_ORDER_MAX = 0.2  # keep an ordering if mean sq (cosφ_geo − cosφ_kin) <= this
+    CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo − cosφ_kin) <= this
 
     def _unit(a, b):
         v = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
