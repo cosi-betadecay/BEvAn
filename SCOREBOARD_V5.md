@@ -45,3 +45,70 @@ stays inside the bottom log bin (~6:1 bg-ward evidence).
 | 10 | 2026-06-10T08:00:00Z | reverted (tie) | smoothing sweep point 2: α 0.5→1.0 | `train.py` lor joints: `smoothing=1.0` | 0.387 (carried) | 8.8 (carried) | 0.8841 | ±0.0000 | 0.8932 | 0.8374 | 0.9569 | 0.0187 | 577 / 112 / 26 / 5880 | **Eval confusion matrix IDENTICAL to iter 9 — the smoothing plateau is flat between 0.5 and 1.0** (train MCC keeps drifting down, .8808→.8801: more shrinkage, same eval). The thin rows are already neutralized at 0.5; larger α only erodes fit. Axis closed; committed 0.5 stands. Next (iter 11): the one untested Phase-0 binning constant — lor pair's `log_x_floor` 0.1→1e-3 (align ΔE rows with the arm block's convention): under the CONDITIONAL term the ΔE row partition directly shapes P(lor\|ΔE); finer near-zero-ΔE rows separate the 511-clean population from the tails. |
 | 11 | 2026-06-10T08:25:00Z | **NEW BEST — committed** | lor pair `log_x_floor` 0.1→1e-3: finer near-zero-ΔE rows for the conditional (align with the arm block's ΔE convention) | `train.py` ΔE×lor bins: `log_x_floor=1e-3` (one constant) | 0.387 (carried) | 8.8 (carried) | **0.8842** | **+0.0002** | 0.8936 | 0.8406 | 0.9536 | 0.0182 | 575 / 109 / 28 / 5883 | **Marginal but strict new best (0.884243 vs 0.884055): TP −2, FP −3.** Finer 511-clean rows sharpen the conditional exactly where the dangerous bg lives (V3: residual FP are 511-like in ΔE) — 3 more of them priced out at the cost of 2 borderline TP; recall lands exactly on the 0.9536 baseline (guardrail comfortable). Committed + pushed. Next (iter 12): same direction, lor pair `n_bins_x` 25→40 — more ΔE rows overall; smoothing (α=0.5) carries the added sparsity. |
 | 12 | 2026-06-10T08:50:00Z | **NEW BEST — committed** | lor pair `n_bins_x` 25→40: finer ΔE conditioning rows across the range | `train.py` ΔE×lor bins: `n_bins_x=40` (one constant) | 0.387 (carried) | 8.8 (carried) | **0.8857** | **+0.0015** | 0.8949 | 0.8431 | 0.9536 | 0.0179 | 575 / 107 / 28 / 5885 | **FP −2 at constant TP vs iter 11 — FP now 107 vs the champion's 116 at identical TP/FN.** Train MCC keeps falling (.8801→.8794) while eval rises: the smoothed fine-row conditional is a regularized localizer, not a memorizer. The iter-8/9/11/12 stack (+0.0069 total) is one coherent mechanism: give the lor feature ONLY its conditional information, localized as tightly in ΔE as the data supports, with thin rows shrunk to neutrality. Committed + pushed. Next (iter 13): one more point on the axis — `n_bins_x` 40→60 (find the elbow). |
+| 13 | 2026-06-10T09:15:00Z | reverted | lor pair `n_bins_x` 40→60 (elbow probe) | `train.py` ΔE×lor bins: `n_bins_x=60` | 0.387 (carried) | 8.8 (carried) | 0.8848 | -0.0009 | 0.8939 | 0.8387 | 0.9569 | 0.0185 | 577 / 111 / 26 / 5881 | **WORSE than 40 (TP +2 but FP +4): past the elbow — rows too thin, smoothing starts flattening real structure. x-axis optimum = 40, closed.** Reverted. Next (iter 14): the y-sibling under the NEW term — `n_bins_y` 25→40 (finer lor resolution; the old 25→12 probe was under the joint, a different landscape). |
+| 14 | 2026-06-10T09:40:00Z | reverted | lor pair `n_bins_y` 25→40 under the conditional term (finer lor resolution) | `train.py` ΔE×lor bins: `n_bins_y=40` | 0.387 (carried) | 8.8 (carried) | 0.8828 | -0.0029 | 0.8922 | 0.8382 | 0.9536 | 0.0185 | 575 / 111 / 28 / 5881 | **WORSE (FP +4 at constant TP): the lor axis wants coarse cells even under the conditional — 25 stands on both probes (joint-12 and cond-40). Binning optimum locked at 40×25.** Reverted. Next (iter 15): coordinate-descent re-probe of α at the new binning — rows are 1.6× thinner than when α=0.5 won, so relative shrinkage grew; α 0.5→0.25. |
+| 15 | 2026-06-10T10:05:00Z | reverted | smoothing re-probe at 40×25: α 0.5→0.25 | `train.py` lor joints: `smoothing=0.25` | 0.387 (carried) | 8.8 (carried) | 0.8850 | -0.0007 | 0.8942 | 0.8419 | 0.9536 | 0.0180 | 575 / 108 / 28 / 5884 | **WORSE (FP +1): α=0.5 confirmed from both sides (0.25 loses, 1.0 tied at the old binning). Model-side surface fully optimized: conditional term + α=0.5 + 40×25 + 1e-3/1e-3 floors.** Reverted. Next (iter 16): feature-side, motivated by V4 iter-7's own note that greedy mis-orderings inflate signal internals — exhaustive internal-chain ordering for small chains (min summed ladder residual over permutations of the post-second hits, ≤24 perms; greedy retained for larger). Greedy's sequence is in the permutation set → scores only decrease, and real chains (which HAVE a consistent ordering) decrease most. Module change → full pre-flight. |
+| 16 | 2026-06-10T10:45:00Z | reverted | exhaustive internal-chain ordering for small chains: min summed ladder residual over permutations of the post-second hits (≤24 perms; greedy kept for longer chains) | `annihilation_lor._internal_chain_residual`: permutation enumeration for ≤4 post-second hits | 0.407 | **6.8** | 0.8818 | -0.0039 | 0.8913 | 0.8380 | 0.9519 | 0.0185 | 574 / 111 / 29 / 5881 | **WORSE (TP −1, FP +4) — the SIXTH harness/MCC inversion, and the starkest: the truth-graded axis hit its best-ever 6.8° (census unchanged, 3/3) yet the classifier lost.** Min-over-orderings is a one-sided gift to background too: coincidences gain ~n! chances to fit noise, and they have no energy-deficit anchor to stop them. Better partitions ≠ better class separation. Module reverted. Next (iter 17, FINAL per user): the one constant never re-probed in the new landscape — `log_y_floor` 1e-3→1e-2 at 40×25 + α=0.5. |
+| 17 | 2026-06-10T11:10:00Z | reverted | y-floor re-probe under the final config: `log_y_floor` 1e-3→1e-2 | `train.py` ΔE×lor bins: `log_y_floor=1e-2` | 0.387 (carried) | 8.8 (carried) | 0.8840 | -0.0017 | 0.8934 | 0.8416 | 0.9519 | 0.0180 | 574 / 108 / 29 / 5884 | **WORSE (TP −1, FP +1): 1e-3 confirmed optimal in the new landscape too — the zero-mass bin boundary is genuinely pinned at the diagnostic's measured value.** Reverted. **LOOP HALTED by user request after 17 Phase-1 iterations; SUCCESS — bar beaten 4 times, final best iter 12: MCC 0.8857.** See halt summary. |
+
+---
+
+## V5 halt summary (2026-06-10, after iter 17 — halted by user, SUCCESS)
+
+**Bar (0.8792) beaten. V5 best: iter 12, MCC = 0.8857** — eval
+**575 / 107 / 28 / 5885** vs the V1–V3 champion's 575 / 116 / 28 / 5876:
+**FP −9 at identical TP/FN**, recall at the 0.9536 baseline, precision
+0.8431 (best ever), FPR 0.0179 (best ever). Committed as `937ca43`
+(iters 8/9/11/12 each committed + pushed on their bests: `316c787`,
+`68f8f93`, `0b79d94`, `937ca43`). Working tree = the champion state.
+
+### The winning stack (+0.0069 over Phase 0, +0.0065 over the old champion)
+
+One coherent mechanism, found in four steps: **give the LOR feature only its
+conditional information, localized as tightly in ΔE as the data supports,
+with thin rows shrunk to neutrality.**
+
+1. **Iter 8 (+0.0035, the bar-crosser): conditional P(lor|ΔE) term.** The
+   ΔE×lor joint had handed ΔE a THIRD vote, and V3 proved the residual FP
+   class is 511-like in ΔE — the third vote subsidized exactly them. ΔE
+   stays at the champion's two votes; lor adds only new information.
+2. **Iter 9 (+0.0018): Laplace α=0.5 on the lor joint pair.** Thin
+   conditional rows shrink toward ratio-1 instead of noisy hard evidence;
+   train MCC fell while eval rose — pure generalization.
+3. **Iter 11 (+0.0002): lor-pair ΔE floor 0.1→1e-3.** Finer 511-clean rows.
+4. **Iter 12 (+0.0015): lor-pair ΔE rows 25→40.** Elbow at 40 (60 over-thins).
+
+### What the loop established
+
+- **Term form >> feature form.** All five policy-ranked actions (binning
+  floors, marginal form, joint (i,k) selection, degenerate split, lever-arm
+  penalty) and both feature-side extensions (iters 4, 16) LOST; every gain
+  came from how the model consumes the unchanged iter-9 feature.
+- **The marginal/joint/conditional triad is now fully mapped** (iters 0, 3,
+  8): marginal −0.0160 (globalizes the non-monotone tail), joint −0.0035
+  (third ΔE vote feeds the 511-like FP), conditional wins.
+- **Two more harness/MCC inversions** (iters 4, 16 — six total across
+  V4+V5). Iter 16 is the canonical example: best-ever truth axis (6.8°),
+  worse MCC. Truth-grade quality and class separability are different
+  objectives; min-over-hypotheses scores gift background degrees of freedom.
+- **Every "purify the zero bin" attempt lost** (iters 1, 6, and 7's side
+  effect): the exact-zero + near-zero mixture is load-bearing; the density
+  model owns that population (consistent with V4 iter 4).
+- **The renormalization trap generalizes:** any feature-side mass shift out
+  of low-score bins (sentinel iter 6, lever penalty iter 7) reprices the
+  REMAINING low-score bg signal-ward. Score-distribution surgery must go
+  through the density layer, which is exactly what iters 8–12 did.
+- The n>12 tail is EMPTY in this file (NaN census = the n<2 census), so
+  V4 seed #8 is unfalsifiable here — drop it from future seed lists.
+
+### V6 candidates (in order, inherited + updated)
+
+(a) per-event FP characterization tooling (dump eval-split FP IDs +
+per-feature likelihood terms — V5 still ran blind on WHICH 107 FP remain);
+(b) conditional-on-ΔE separability metric in the harness pre-flight (the
+marginal-TV gate inverted six times; cond-TV is what the classifier sees);
+(c) smoothing/conditional treatment for the ANGLE and ARM terms (V5 proved
+the recipe on lor but the legacy terms were frozen — the same third-vote
+and thin-row arguments apply to them);
+(d) source-volume prior on the LOR (still last: the dangerous bg is no-ANNI
+coincidences, which a source prior does not address).
