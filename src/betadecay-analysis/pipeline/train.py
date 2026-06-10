@@ -58,7 +58,7 @@ class Trainer:
             spacing_y="log",
             log_x_floor=1e-3,
             log_y_floor=1e-3,
-            n_bins_x=25,
+            n_bins_x=40,
             n_bins_y=25,
         )
 
