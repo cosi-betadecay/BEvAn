@@ -56,7 +56,7 @@ class Trainer:
             combined_train_lor,
             spacing_x="log",
             spacing_y="log",
-            log_x_floor=0.1,
+            log_x_floor=1e-3,
             log_y_floor=1e-3,
             n_bins_x=25,
             n_bins_y=25,
