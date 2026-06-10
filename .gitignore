@@ -31,11 +31,6 @@ outputs/
 # UV
 uv.lock
 
-# Claude
-/.claude
-/.agents
-skills-lock.json
-
 # Logs
 *.log
 runs/

@@ -3,7 +3,6 @@ import os
 import pytest
 import torch
 import wandb
-from dataset.datasets import Datasets
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
 from modeling.calculate_probablities import R
 from modeling.matrix_calculations import (
@@ -14,8 +13,12 @@ from modeling.matrix_calculations import (
     lookup_density_values_1d,
 )
 from omegaconf import OmegaConf
-from physics.compton_cone_reconstruction import FarFieldImager
-from utils.reader_extraction import get_reader
+
+# Datasets, FarFieldImager, and get_reader transitively import ROOT/MEGAlib,
+# which is not available on every dev machine. They are imported lazily
+# inside real_tensors so that tests that don't touch the legacy feature
+# pipeline (e.g. the ROOT-free LOR harness) can be collected and run
+# without a MEGAlib build.
 
 # Resolutions swept by real_posterior_scores. 20×20 is coarse enough that
 # every bin is well-populated, 1000×1000 is the production default. 300×300
@@ -28,6 +31,10 @@ def real_tensors():
     """Iterate Activation.sim once and return per-event feature tensors plus
     ground truths. Session-scoped so MEGAlib opens the file exactly once per
     test run, even though several parametrized fixtures depend on it."""
+    from dataset.datasets import Datasets
+    from physics.compton_cone_reconstruction import FarFieldImager
+    from utils.reader_extraction import get_reader
+
     megalib_root = os.environ["MEGALIB"]
     geo_file = f"{megalib_root}/resource/examples/geomega/special/Max.geo.setup"
     sim_file = "data/Activation.sim"

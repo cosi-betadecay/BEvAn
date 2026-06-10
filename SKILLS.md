@@ -1,7 +1,18 @@
 # SKILLS.md
 
-Skills pinned for this project, as recorded in `skills-lock.json`. All come
-from the `wentorai/research-plugins` GitHub source.
+Skills available to agents working in this repo: project-local skills live in
+`.claude/skills/`, pinned third-party skills in `.agents/skills/` as recorded
+in `skills-lock.json` (all from the `wentorai/research-plugins` GitHub source).
+
+## Project-local skills (not in the lockfile)
+
+- **megalib** (`.claude/skills/megalib/SKILL.md`) — reference for MEGAlib,
+  extracted from the local source tree (`~/Documents/COSI/megalib`) and
+  verified against it: .sim/.tra formats, IA/ANNI/HTsim field maps,
+  particle IDs, the PyROOT bindings, cosima/revan/geomega, and how this
+  repo's pipeline consumes them. Deep material lives in
+  `.claude/skills/megalib/references/`. Maintained by hand; update when
+  the data format or pipeline changes.
 
 ## Domain skills
 
@@ -38,7 +49,8 @@ from the `wentorai/research-plugins` GitHub source.
 
 ## Updating
 
-Skills are version-pinned by `computedHash` in `skills-lock.json`. To change a
-skill, update that file (typically via the tooling that produced it) rather
-than editing this document by hand. Keep this file in sync with the lockfile
-when entries are added or removed.
+Pinned skills are version-locked by `computedHash` in `skills-lock.json`. To
+change one, update that file (typically via the tooling that produced it)
+rather than editing this document by hand. Keep this file in sync with the
+lockfile when entries are added or removed. Project-local skills are edited
+directly in `.claude/skills/`.
