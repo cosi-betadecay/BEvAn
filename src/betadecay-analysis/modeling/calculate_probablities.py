@@ -77,6 +77,8 @@ def R(
     p_bg_arm_given_deltaE: torch.Tensor | None = None,
     eps: float = 1e-8,
     double_count: bool = False,
+    p_beta_lor: torch.Tensor | None = None,
+    p_bg_lor: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Compute the per-event likelihood ratio R = P(D|β) / P(D|bg).
 
@@ -99,6 +101,11 @@ def R(
 
     giving R = [P(ΔE,angle|β)/P(ΔE,angle|bg)] · [P(ΔE,ARM|β)/P(ΔE,ARM|bg)],
     which double-counts ΔE.
+
+    ``p_beta_lor`` / ``p_bg_lor`` carry the fourth feature, the blind LOR
+    score: the joint P(ΔE, lor | ·) in double-count mode, the conditional
+    P(lor | ΔE, ·) otherwise. When None, the term is omitted (three-feature
+    legacy behaviour).
     """
     if double_count:
         log_r = (
@@ -107,6 +114,8 @@ def R(
             + torch.log(p_beta_angle_given_deltaE + eps)
             - torch.log(p_bg_angle_given_deltaE + eps)
         )
+        if p_beta_lor is not None and p_bg_lor is not None:
+            log_r = log_r + torch.log(p_beta_lor + eps) - torch.log(p_bg_lor + eps)
         return torch.exp(log_r)
 
     log_r = (
@@ -117,6 +126,8 @@ def R(
         + torch.log(p_beta_arm_given_deltaE + eps)
         - torch.log(p_bg_arm_given_deltaE + eps)
     )
+    if p_beta_lor is not None and p_bg_lor is not None:
+        log_r = log_r + torch.log(p_beta_lor + eps) - torch.log(p_bg_lor + eps)
     return torch.exp(log_r)
 
 
@@ -132,6 +143,8 @@ def predict(
     n_bg: int,
     split_name: str = "eval",
     double_count: bool = False,
+    p_beta_lor: torch.Tensor | None = None,
+    p_bg_lor: torch.Tensor | None = None,
 ):
     """Classify events, apply the class prior, log diagnostics.
 
@@ -154,6 +167,8 @@ def predict(
         p_beta_arm_given_deltaE,
         p_bg_arm_given_deltaE,
         double_count=double_count,
+        p_beta_lor=p_beta_lor,
+        p_bg_lor=p_bg_lor,
     )
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)

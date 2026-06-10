@@ -15,12 +15,15 @@ class Evaluator:
             bdecay_delta_E,
             bdecay_annihilation_angle,
             bdecay_arm,
+            bdecay_lor,
             bg_delta_E,
             bg_annihilation_angle,
             bg_arm,
+            bg_lor,
             combined_delta_E,
             combined_annihilation_angle,
             combined_arm,
+            combined_lor,
         ) = data
         t = self.trainer
         double_count = bool(t.cfg.modeling.double_count_deltaE)
@@ -57,6 +60,23 @@ class Evaluator:
                 t.deltaE_arm_bins,
                 t.arm_bins,
             )
+            # The lor term uses the CONDITIONAL P(lor | ΔE), not the joint:
+            # the angle and arm joints already give ΔE two votes, and the
+            # residual FP class is 511-like in ΔE — a third ΔE vote feeds it.
+            p_beta_deltaE_lor = lookup_density_values(
+                combined_delta_E,
+                combined_lor,
+                t.bdecay_cond_lor,
+                t.deltaE_lor_bins,
+                t.lor_bins,
+            )
+            p_bg_deltaE_lor = lookup_density_values(
+                combined_delta_E,
+                combined_lor,
+                t.bg_cond_lor,
+                t.deltaE_lor_bins,
+                t.lor_bins,
+            )
 
             predict(
                 ground_truths,
@@ -70,6 +90,8 @@ class Evaluator:
                 t.n_bg,
                 split_name=split_name,
                 double_count=True,
+                p_beta_lor=p_beta_deltaE_lor,
+                p_bg_lor=p_bg_deltaE_lor,
             )
             return
 
@@ -105,6 +127,20 @@ class Evaluator:
             t.deltaE_arm_bins,
             t.arm_bins,
         )
+        p_beta_lor = lookup_density_values(
+            combined_delta_E,
+            combined_lor,
+            t.bdecay_cond_lor,
+            t.deltaE_lor_bins,
+            t.lor_bins,
+        )
+        p_bg_lor = lookup_density_values(
+            combined_delta_E,
+            combined_lor,
+            t.bg_cond_lor,
+            t.deltaE_lor_bins,
+            t.lor_bins,
+        )
 
         predict(
             ground_truths,
@@ -117,4 +153,6 @@ class Evaluator:
             t.n_beta_decay,
             t.n_bg,
             split_name=split_name,
+            p_beta_lor=p_beta_lor,
+            p_bg_lor=p_bg_lor,
         )
