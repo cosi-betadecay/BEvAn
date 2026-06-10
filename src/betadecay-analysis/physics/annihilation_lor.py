@@ -58,7 +58,7 @@ SIGMA_E_KEV = 30.0
 SIGMA_E_DEFICIT_KEV = 250.0
 # Soft scale for the (cos_geo - cos_kin) first-scatter residual. Absorbs
 # Doppler acollinearity/broadening and finite position resolution.
-SIGMA_COS = 0.05
+SIGMA_COS = 0.02
 
 
 @dataclass
@@ -189,6 +189,73 @@ def _chain_first_scatter_residuals(geo_table: np.ndarray, chain: np.ndarray, oth
     return big
 
 
+def _internal_chain_residual(
+    positions: np.ndarray,
+    energies: np.ndarray,
+    chain: np.ndarray,
+    first: int,
+    second_table: np.ndarray,
+) -> float:
+    """Compton-consistency residual of a chain's INTERNAL scatters (2nd
+    onward), summed chi^2-style on the SIGMA_COS scale.
+
+    The first scatter is already graded against the LOR-supplied incoming
+    direction; this walks the rest of the chain greedily (at each step the
+    next hit is the remaining chain hit with the smallest squared
+    cos_geo - cos_kin residual), tracking the photon energy ladder anchored
+    at 511 keV. Chains with < 3 hits have no internal scatter -> 0.0.
+
+    ``second_table`` is the (k-resolved) geo residual row used to recover
+    which hit the first scatter handed off to, so the walk starts from the
+    same (first, second) pair the reported first-scatter residual used.
+    """
+    chain_idx = list(np.flatnonzero(chain))
+    if len(chain_idx) < 3:
+        return 0.0
+
+    # Recover the second hit: argmin over the same row the first-scatter
+    # residual minimized.
+    candidates = [j for j in chain_idx if j != first]
+    second = min(candidates, key=lambda j: second_table[j])
+
+    e_in = PHOTON_KEV - energies[first]  # photon energy after the first scatter
+    prev, cur = first, second
+    remaining = [j for j in chain_idx if j not in (first, second)]
+    total = 0.0
+
+    while remaining:
+        e_out = e_in - energies[cur]
+        if e_in <= 1e-6 or e_out <= 1e-6:
+            # Energy ladder exhausted mid-chain: the ordering is unphysical
+            # under the 511 hypothesis; charge a maximal-residual step
+            # (clamped, same spirit as the kinematic clamp) and stop.
+            total += (2.0) ** 2 / (2.0 * SIGMA_COS**2)
+            break
+        cos_kin = 1.0 - ELECTRON_MASS_KEV * (1.0 / e_out - 1.0 / e_in)
+        cos_kin = min(1.0, max(-1.0, cos_kin))
+        d_in = positions[cur] - positions[prev]
+        n_in = np.linalg.norm(d_in)
+
+        best_resid, best_j = None, None
+        for j in remaining:
+            d_out = positions[j] - positions[cur]
+            n_out = np.linalg.norm(d_out)
+            if n_in < 1e-9 or n_out < 1e-9:
+                resid = 0.0
+            else:
+                cos_geo = float(np.dot(d_in, d_out) / (n_in * n_out))
+                resid = (cos_geo - cos_kin) ** 2 / (2.0 * SIGMA_COS**2)
+            if best_resid is None or resid < best_resid:
+                best_resid, best_j = resid, j
+
+        total += best_resid
+        remaining.remove(best_j)
+        e_in = e_out
+        prev, cur = cur, best_j
+
+    return total
+
+
 def annihilation_lor(positions, energies) -> LORResult:
     """Blind two-photon reconstruction of one event.
 
@@ -239,11 +306,30 @@ def annihilation_lor(positions, energies) -> LORResult:
         combined = r_a.T + r_b  # indexed [i, k]
 
         i_best, k_best = np.unravel_index(np.argmin(combined), combined.shape)
-        sel = energy_resid + combined[i_best, k_best]
+        if not np.isfinite(combined[i_best, k_best]):
+            continue
+
+        # Selection-side internal grading (V4 iter 9): internal scatters vote
+        # on which bipartition wins, evaluated at this bipartition's
+        # first-scatter argmin (i, k). Only adds to the residual, so the
+        # energy-based prune above stays a valid lower bound.
+        internal = 0.0
+        if chain_a.sum() >= 3:
+            internal += _internal_chain_residual(positions, energies, chain_a, int(i_best), geo_table[k_best, i_best, :])
+        if chain_b.sum() >= 3:
+            internal += _internal_chain_residual(positions, energies, chain_b, int(k_best), geo_table[i_best, k_best, :])
+        sel = energy_resid + combined[i_best, k_best] + internal
 
         if sel < best_sel:
             best_sel = float(sel)
-            best = (float(combined[i_best, k_best]), int(i_best), int(k_best), chain_a.copy(), float(e_a), float(e_b))
+            best = (
+                float(combined[i_best, k_best] + internal),
+                int(i_best),
+                int(k_best),
+                chain_a.copy(),
+                float(e_a),
+                float(e_b),
+            )
 
     if best is None or not np.isfinite(best_sel):
         return LORResult(float("nan"), None, None, None, None, float("nan"), float("nan"))
@@ -252,7 +338,19 @@ def annihilation_lor(positions, energies) -> LORResult:
     delta = positions[i_best] - positions[k_best]
     norm = np.linalg.norm(delta)
     axis = delta / norm if norm > 1e-9 else None
-    score = geo_resid + _symmetric_energy_residual(e_a, e_b)
+    # Geometry-only reported score (V4 iter 3): the energy terms still drive
+    # SELECTION, but the returned score is the first-scatter geometry residual
+    # alone, making the feature maximally orthogonal to delta_E. The Bayesian
+    # model conditions on delta_E, so the conditional may carry more new
+    # information even though the marginal TV falls.
+    #
+    # Internal-chain grading (V4 iters 7-9): every >=3-hit chain's internal
+    # scatters are walked greedily and their Compton-consistency residuals
+    # included — since iter 9 they are accumulated inside the selection loop
+    # (``geo_resid`` already carries them), so they also vote on which
+    # bipartition wins. (A chi^2/dof normalization of the report was tried
+    # and reverted — V4 iter 10, MCC -0.0024.)
+    score = geo_resid
     return LORResult(float(score), axis, i_best, k_best, chain_a, e_a, e_b, selection_score=best_sel)
 
 
