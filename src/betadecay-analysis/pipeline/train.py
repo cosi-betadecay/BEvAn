@@ -95,14 +95,14 @@ class Trainer:
             bdecay_train_lor,
             x_bins=self.deltaE_lor_bins,
             y_bins=self.lor_bins,
-            smoothing=0,
+            smoothing=0.5,
         )
         self.bg_joint_deltaE_lor, _, _ = build_density_matrix(
             bg_train_delta_E,
             bg_train_lor,
             x_bins=self.deltaE_lor_bins,
             y_bins=self.lor_bins,
-            smoothing=0,
+            smoothing=0.5,
         )
 
         self.bdecay_marginal_deltaE, _ = build_density_matrix_1d(
