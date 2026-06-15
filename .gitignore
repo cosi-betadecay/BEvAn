@@ -31,8 +31,6 @@ outputs/
 # UV
 uv.lock
 
-# Claude
-/.claude
-
 # Logs
 *.log
+runs/

@@ -81,12 +81,24 @@ def _plot_overlap(name, beta_values, bg_values, edges, log_x):
 
 
 def test_arm_class_overlap(real_tensors, wandb_run):
-    """ARM should land closer to 0 for true β than for bg events. If the
-    distributions overlap heavily, the Compton reconstruction is too noisy to
-    add discriminative signal beyond ΔE."""
+    """ARM = ``abs(MComptonEvent::GetARMGamma(far_test_dir))`` in radians,
+    where ``far_test_dir`` is the imager's peak direction scaled to the far
+    field. For true β events the reconstructed Compton cone should pass
+    through the source, so ARM concentrates near zero. For background events
+    the cone comes from unrelated kinematics and the residual spreads out.
+
+    Events for which Revan produced no Compton reconstruction (rejected,
+    photo, or pair) carry NaN and are filtered out by ``_finite_pair`` here
+    — they are not ARM samples at all.
+
+    A small total-variation distance now points to a wiring issue, not a
+    feature-noise ceiling: check the ``.sim``↔``.tra`` event-ID join, the
+    test direction handed to ``GetARMGamma``, and the
+    ``MCoordinateSystem`` argument matching the imager's frame.
+    """
     beta, bg = _finite_pair(real_tensors["bdecay_arm"], real_tensors["bg_arm"])
     edges = _common_edges(beta, bg, n_bins=80, spacing="log")
-    fig, bc, tv = _plot_overlap("ARM", beta, bg, edges, log_x=True)
+    fig, bc, tv = _plot_overlap("ARM (rad)", beta, bg, edges, log_x=True)
 
     wandb_run.log(
         {
@@ -101,8 +113,10 @@ def test_arm_class_overlap(real_tensors, wandb_run):
 
     assert tv > 0.05, (
         f"ARM total-variation distance between β and bg is only {tv:.3f} — "
-        "the two class-conditional distributions are nearly identical, so the "
-        "ARM reconstruction caps achievable F1 regardless of binning or smoothing."
+        "GetARMGamma residuals are nearly identical for the two classes. "
+        "Likely causes: broken .sim/.tra event-ID join, wrong test direction "
+        "(unit vector not scaled to the far field, or in the wrong frame), "
+        "or MCoordinateSystem mismatch with the imager."
     )
 
 

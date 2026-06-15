@@ -36,28 +36,30 @@ def theta_geo(
 def theta_kin(
     energies: torch.Tensor, cfg: omegaconf.dictconfig.DictConfig
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    # β⁺ hypothesis: the incoming photon is a 511 keV annihilation photon, so
+    # E_1 is fixed at the electron rest mass rather than reconstructed from the
+    # measured total deposit. This turns ARM into a 511-keV consistency test:
+    # background photons at other energies should produce kinematic angles
+    # inconsistent with the geometric reconstruction.
     def sigma_theta_kin(
-        E_1: float, E_2: float, electron_mass_energy: float, theta_kin: float, frac_sigma: float = 0.0035
+        E_2: float, electron_mass_energy: float, theta_kin: float, frac_sigma: float = 0.0035
     ) -> torch.Tensor:
-        sigma_cos_theta_kin = (
-            electron_mass_energy * frac_sigma * torch.sqrt((1.0 / E_1) ** 2 + (1.0 / E_2) ** 2)
-        )
+        sigma_cos_theta_kin = electron_mass_energy * frac_sigma / E_2
         sin_theta_kin = torch.clamp(torch.abs(torch.sin(theta_kin)), min=1e-3)
         n_sigma_cos_theta_kin = cfg.likelihoods.arm.n_sigma_cos_theta_kin
 
         return n_sigma_cos_theta_kin * sigma_cos_theta_kin / sin_theta_kin
 
     electron_mass_energy = 511.0  # keV
+    E_1 = electron_mass_energy
     if energies.ndim == 1:
-        E_1 = energies.sum()
         E_2 = energies[1:].sum()
     else:
-        E_1 = energies[:, 0:].sum(dim=1)
         E_2 = energies[:, 1:].sum(dim=1)
 
     cos_theta_kin = 1 - electron_mass_energy * (1 / E_2 - 1 / E_1)
     cos_theta_kin = torch.clamp(cos_theta_kin, -1.0, 1.0)
     theta_kin = torch.arccos(cos_theta_kin)
-    _sigma_theta_kin = sigma_theta_kin(E_1, E_2, electron_mass_energy, theta_kin)
+    _sigma_theta_kin = sigma_theta_kin(E_2, electron_mass_energy, theta_kin)
 
     return theta_kin, _sigma_theta_kin

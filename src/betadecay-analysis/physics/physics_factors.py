@@ -7,6 +7,48 @@ from tqdm import tqdm
 # Annihilation Angle
 ############################################
 
+# Two-photon joint constraint (theory §7): a real β⁺ annihilation emits two
+# ~511 keV photons that together deposit ~1022 keV. ANNI_SIGMA_E sets the
+# energy scale (keV) over which a subset's total deposited energy is judged
+# consistent with a full annihilation. ANNI_LAMBDA is the strength of a soft
+# Gaussian penalty (in cosine units) added to each subset's back-to-back
+# cosine: subsets whose ΣE is far from 1022 keV are nudged UP (less
+# back-to-back / more background-like) while on-energy subsets are essentially
+# untouched. Unlike a hard gate (which collapses recall by dropping subsets),
+# every subset stays eligible — only its ranking shifts.
+ANNI_TOTAL_KEV = 1022.0
+ANNI_SIGMA_E = 80.0
+ANNI_LAMBDA = 0.3
+
+
+def _per_subset_min_cosines(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+    """Per-subset most-back-to-back cosine.
+
+    Mirrors ``all_vector_cosines_matrix_calculation`` but returns one value per
+    subset (shape ``(B,)``) instead of collapsing the whole batch with a global
+    ``amin``. Taking ``amin`` over the returned vector reproduces the global
+    minimum exactly, so this is a behavior-preserving refactor at zero penalty;
+    keeping the values per-subset is what lets the energy penalty be applied to
+    each candidate before the minimum is taken.
+    """
+    if positions.ndim == 2:
+        positions = positions.unsqueeze(0)
+    b, n = positions.shape[0], positions.shape[1]
+    if n < 3:
+        return positions.new_full((b,), float("nan"))
+
+    deltas = positions[:, :, None, :] - positions[:, None, :, :]  # (B, N, N, 3)
+    i, j = torch.triu_indices(n, n, offset=1, device=positions.device)
+    vectors = deltas[:, i, j, :]  # (B, M, 3), M = N choose 2
+    vectors = vectors / torch.linalg.norm(vectors, dim=-1, keepdim=True).clamp_min(eps)
+
+    cosine_matrix = vectors @ vectors.transpose(-1, -2)  # (B, M, M)
+    m = vectors.shape[1]
+    a, c = torch.triu_indices(m, m, offset=1, device=positions.device)
+    cosines = cosine_matrix[:, a, c]  # (B, K)
+
+    return cosines.amin(dim=1)  # (B,)
+
 
 def all_vector_cosines_matrix_calculation(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     if positions.ndim == 2:
@@ -90,8 +132,15 @@ def all_vector_cosines_blockwise(
 
 
 def annihilation_angle(
-    positions: torch.Tensor, n_hits: int | None = None, sizes: torch.Tensor | None = None
+    positions: torch.Tensor,
+    n_hits: int | None = None,
+    sizes: torch.Tensor | None = None,
+    energies: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    # ``energies`` (per-hit deposited energy, shape matching ``positions``:
+    # (B, N) for the sized path) is threaded through so the two-photon joint
+    # angle/energy constraint can gate candidate pairs. It is currently a
+    # no-op pass-through (Phase 0); the returned cosine is unchanged.
     if sizes is not None:
         if positions.ndim != 3 or sizes.ndim != 1:
             raise ValueError(
@@ -111,7 +160,32 @@ def annihilation_angle(
             if size_int < 3:
                 outputs.append(positions.new_tensor(float("nan")).reshape(1))
                 continue
-            outputs.append(annihilation_angle(positions[group, :size_int, :], n_hits=size_int))
+            group_positions = positions[group, :size_int, :]
+            if energies is not None:
+                # Soft Gaussian energy penalty (seed #2): keep EVERY subset
+                # eligible (no recall cliff like the hard gate of iter 1) but
+                # add a per-subset penalty to its back-to-back cosine. A subset
+                # whose total deposited energy ΣE is consistent with a full
+                # ~1022 keV annihilation pays ~0; one far off-energy pays up to
+                # ANNI_LAMBDA, nudging it UP (less back-to-back / more
+                # background-like) so a random Compton coincidence that merely
+                # looks back-to-back is less likely to win the per-event min.
+                group_energies = energies[group, :size_int]
+                total_E = group_energies.sum(dim=1)  # (Bg,)
+                cosines = _per_subset_min_cosines(group_positions)  # (Bg,)
+                penalty = ANNI_LAMBDA * (
+                    1.0 - torch.exp(-((total_E - ANNI_TOTAL_KEV) ** 2) / (2.0 * ANNI_SIGMA_E ** 2))
+                )
+                # Penalised cosine stays in the calibrated [-1, 1] range
+                # (clamp guards the rare off-energy subset already near +1).
+                penalised = (cosines + penalty).clamp(max=1.0)
+                finite_group = penalised[torch.isfinite(penalised)]
+                if finite_group.numel() == 0:
+                    outputs.append(positions.new_tensor(float("nan")).reshape(1))
+                    continue
+                outputs.append(finite_group.amin().reshape(1))
+                continue
+            outputs.append(annihilation_angle(group_positions, n_hits=size_int))
 
         stacked = torch.stack(outputs).flatten()
         finite = stacked[torch.isfinite(stacked)]
