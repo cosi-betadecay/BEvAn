@@ -14,3 +14,10 @@ modeling:
   # When true, it multiplies the joints P(ΔE, angle) · P(ΔE, ARM) directly,
   # which double-counts ΔE. Kept as a flag for A/B comparison.
   double_count_deltaE: true
+
+  # When true, replace the fixed prior-odds decision rule (R >= n_bg/n_beta)
+  # with a cut tuned on the train split to maximize threshold_metric ('mcc' or
+  # 'f1'), then applied to eval. The prior-odds rule sacrifices the minority
+  # class; most missed signal sits at 1 < R < prior-odds.
+  tune_threshold: false
+  threshold_metric: mcc

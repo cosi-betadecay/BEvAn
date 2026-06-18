@@ -28,6 +28,13 @@ class Evaluator:
         t = self.trainer
         double_count = bool(t.cfg.modeling.double_count_deltaE)
 
+        # Decision-cut tuning: on train, pick the R cut maximizing threshold_metric
+        # and store it; on eval, apply the stored cut. Off => prior-odds rule.
+        tune = bool(getattr(t.cfg.modeling, "tune_threshold", False))
+        metric = str(getattr(t.cfg.modeling, "threshold_metric", "mcc"))
+        tune_metric = metric if (tune and split_name == "train") else None
+        threshold = getattr(t, "decision_threshold", None) if tune else None
+
         if double_count:
             # Double-counting mode: look up the two 2D joints directly.
             # P(ΔE, angle) and P(ΔE, ARM) — ΔE evidence will appear in both
@@ -78,7 +85,7 @@ class Evaluator:
                 t.lor_bins,
             )
 
-            predict(
+            thr = predict(
                 ground_truths,
                 p_beta_deltaE_angle,
                 p_bg_deltaE_angle,
@@ -92,7 +99,11 @@ class Evaluator:
                 double_count=True,
                 p_beta_lor=p_beta_deltaE_lor,
                 p_bg_lor=p_bg_deltaE_lor,
+                threshold=threshold,
+                tune_metric=tune_metric,
             )
+            if tune and split_name == "train":
+                t.decision_threshold = thr
             return
 
         p_beta_deltaE = lookup_density_values_1d(
@@ -142,7 +153,7 @@ class Evaluator:
             t.lor_bins,
         )
 
-        predict(
+        thr = predict(
             ground_truths,
             p_beta_deltaE,
             p_bg_deltaE,
@@ -155,4 +166,8 @@ class Evaluator:
             split_name=split_name,
             p_beta_lor=p_beta_lor,
             p_bg_lor=p_bg_lor,
+            threshold=threshold,
+            tune_metric=tune_metric,
         )
+        if tune and split_name == "train":
+            t.decision_threshold = thr

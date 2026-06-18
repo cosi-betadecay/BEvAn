@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 import torch
 import wandb
@@ -5,6 +7,41 @@ from utils.plots import plot_confusion_matrix
 
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
+
+
+def best_threshold(ratio: torch.Tensor, ground_truths, metric: str = "mcc") -> tuple[float, float]:
+    """Pick the R cut maximizing ``metric`` ('mcc' or 'f1') over all events.
+
+    The default decision rule (R >= n_bg/n_beta) is the MAP/prior-odds cut,
+    which minimizes raw error count and so sacrifices the minority class. This
+    sweeps every candidate cut in one vectorized pass (sort by R, prefix-sum the
+    confusion counts) and returns the cut maximizing the chosen metric, plus its
+    value. Call on TRAIN, apply the returned cut to EVAL.
+    """
+    gt = torch.as_tensor(ground_truths, dtype=torch.bool)
+    valid = ~torch.isnan(ratio) & ~torch.isnan(gt.to(ratio.dtype))
+    r = ratio[valid].float()
+    g = gt[valid].float()
+    if r.numel() == 0:
+        return 1.0, 0.0
+
+    order = torch.argsort(r, descending=True)
+    r_s, g_s = r[order], g[order]
+    n_pos, n_neg = g_s.sum(), g_s.numel() - g_s.sum()
+    tp = torch.cumsum(g_s, 0)  # predict top-k positive
+    fp = torch.cumsum(1.0 - g_s, 0)
+    fn, tn = n_pos - tp, n_neg - fp
+
+    if metric == "mcc":
+        denom = torch.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)).clamp_min(1e-12)
+        score = (tp * tn - fp * fn) / denom
+    else:  # f1
+        prec = tp / (tp + fp).clamp_min(1.0)
+        rec = tp / n_pos.clamp_min(1.0)
+        score = 2.0 * prec * rec / (prec + rec).clamp_min(1e-12)
+
+    k = int(torch.argmax(score))
+    return float(r_s[k]), float(score[k])
 
 
 def get_probabilities(
@@ -145,6 +182,8 @@ def predict(
     double_count: bool = False,
     p_beta_lor: torch.Tensor | None = None,
     p_bg_lor: torch.Tensor | None = None,
+    threshold: float | None = None,
+    tune_metric: str | None = None,
 ):
     """Classify events, apply the class prior, log diagnostics.
 
@@ -170,7 +209,13 @@ def predict(
         p_beta_lor=p_beta_lor,
         p_bg_lor=p_bg_lor,
     )
-    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
+    if tune_metric is not None:
+        threshold, tuned_score = best_threshold(ratio, ground_truths, tune_metric)
+        print(f"{split_name} - tuned threshold ({tune_metric}): R>={threshold:.4f} -> {tune_metric}={tuned_score:.4f}")
+    if threshold is not None:
+        predictions = ratio >= threshold
+    else:
+        predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
 
     # Exclude events whose evidence is undefined before tallying. Empty/invalid
@@ -196,10 +241,13 @@ def predict(
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    mcc_denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    mcc = (tp * tn - fp * fn) / mcc_denom if mcc_denom > 0 else 0.0
 
     print(f"{split_name} - TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
     print(
-        f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, F1 Score: {f1_score:.4f}"
+        f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, "
+        f"F1 Score: {f1_score:.4f}, MCC: {mcc:.4f}"
     )
 
     fig = plot_confusion_matrix(tp, fp, fn, tn)
@@ -213,7 +261,9 @@ def predict(
             f"{split_name}/recall": recall,
             f"{split_name}/false_positive_rate": fpr,
             f"{split_name}/f1_score": f1_score,
+            f"{split_name}/mcc": mcc,
             f"{split_name}/confusion_matrix": wandb.Image(fig),
         }
     )
     plt.close(fig)
+    return threshold
