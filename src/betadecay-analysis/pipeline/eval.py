@@ -80,18 +80,14 @@ class Evaluator:
 
             predict(
                 ground_truths,
-                p_beta_deltaE_angle,
-                p_bg_deltaE_angle,
-                p_beta_deltaE_arm,
-                p_bg_deltaE_arm,
-                None,
-                None,
+                [
+                    (p_beta_deltaE_angle, p_bg_deltaE_angle),  # P(ΔE, angle)
+                    (p_beta_deltaE_arm, p_bg_deltaE_arm),  # P(ΔE, ARM)
+                    (p_beta_deltaE_lor, p_bg_deltaE_lor),  # P(lor | ΔE)
+                ],
                 t.n_beta_decay,
                 t.n_bg,
                 split_name=split_name,
-                double_count=True,
-                p_beta_lor=p_beta_deltaE_lor,
-                p_bg_lor=p_bg_deltaE_lor,
             )
             return
 
@@ -144,15 +140,13 @@ class Evaluator:
 
         predict(
             ground_truths,
-            p_beta_deltaE,
-            p_bg_deltaE,
-            p_beta_angle,
-            p_bg_angle,
-            p_beta_arm,
-            p_bg_arm,
+            [
+                (p_beta_deltaE, p_bg_deltaE),  # P(ΔE)
+                (p_beta_angle, p_bg_angle),  # P(angle | ΔE)
+                (p_beta_arm, p_bg_arm),  # P(ARM | ΔE)
+                (p_beta_lor, p_bg_lor),  # P(lor | ΔE)
+            ],
             t.n_beta_decay,
             t.n_bg,
             split_name=split_name,
-            p_beta_lor=p_beta_lor,
-            p_bg_lor=p_bg_lor,
         )

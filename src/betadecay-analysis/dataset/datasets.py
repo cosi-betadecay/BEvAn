@@ -3,7 +3,7 @@ from typing import Any
 import omegaconf
 import ROOT as M
 import torch
-from physics.annihilation_lor import annihilation_lor_score
+from physics.annihilation_lor import pooled_lor_score
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.physics_factors import annihilation_angle, arm, delta_E
@@ -81,19 +81,8 @@ class Datasets:
             _delta_E = delta_E(energies, sizes=sizes)
             _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies)
             _arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
-
-            # Blind LOR score on the RAW hits (not the subset-pool combos):
-            # the reconstruction enumerates its own bipartitions internally.
-            raw_energies = [event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)]
-            raw_positions = [
-                (
-                    event_sim.GetHTAt(i).GetPosition().X(),
-                    event_sim.GetHTAt(i).GetPosition().Y(),
-                    event_sim.GetHTAt(i).GetPosition().Z(),
-                )
-                for i in range(n_hits)
-            ]
-            _lor = annihilation_lor_score(raw_positions, raw_energies)
+            # LOR over the same reconstructed subset pool as delta_E and arm.
+            _lor = pooled_lor_score(energies, positions, sizes)
 
             gen_list_delta_E.append(_delta_E)
             gen_list_annihilation_angle.append(_annihilation_angle)

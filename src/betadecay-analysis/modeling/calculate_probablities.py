@@ -1,186 +1,43 @@
 import matplotlib.pyplot as plt
 import torch
-import wandb
 from utils.plots import plot_confusion_matrix
 
+import wandb
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
-from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
 
 
-def get_probabilities(
-    bdecay_marginal_deltaE_angle_grid,
-    bg_marginal_deltaE_angle_grid,
-    bdecay_cond_angle,
-    bdecay_cond_arm,
-    bg_cond_angle,
-    bg_cond_arm,
-    gen_tensor_delta_E,
-    gen_tensor_annihilation_angle,
-    gen_tensor_arm,
-    deltaE_angle_bins,
-    angle_bins,
-    deltaE_arm_bins,
-    arm_bins,
-):
-    p_beta_deltaE = lookup_density_values_1d(
-        gen_tensor_delta_E, bdecay_marginal_deltaE_angle_grid, deltaE_angle_bins
-    )
-    p_bg_deltaE = lookup_density_values_1d(
-        gen_tensor_delta_E, bg_marginal_deltaE_angle_grid, deltaE_angle_bins
-    )
+def R(terms, eps: float = 1e-8) -> torch.Tensor:
+    """Per-event likelihood ratio R = P(D|β) / P(D|bg).
 
-    p_beta_angle_given_deltaE = lookup_density_values(
-        gen_tensor_delta_E,
-        gen_tensor_annihilation_angle,
-        bdecay_cond_angle,
-        deltaE_angle_bins,
-        angle_bins,
-    )
-    p_bg_angle_given_deltaE = lookup_density_values(
-        gen_tensor_delta_E,
-        gen_tensor_annihilation_angle,
-        bg_cond_angle,
-        deltaE_angle_bins,
-        angle_bins,
-    )
-    p_beta_arm_given_deltaE = lookup_density_values(
-        gen_tensor_delta_E,
-        gen_tensor_arm,
-        bdecay_cond_arm,
-        deltaE_arm_bins,
-        arm_bins,
-    )
-    p_bg_arm_given_deltaE = lookup_density_values(
-        gen_tensor_delta_E,
-        gen_tensor_arm,
-        bg_cond_arm,
-        deltaE_arm_bins,
-        arm_bins,
-    )
+    ``terms`` is a list of ``(p_beta, p_bg)`` density lookups, one per feature
+    factor of the likelihood ratio. R is their product, computed in log space:
 
-    return (
-        p_beta_deltaE,
-        p_bg_deltaE,
-        p_beta_angle_given_deltaE,
-        p_bg_angle_given_deltaE,
-        p_beta_arm_given_deltaE,
-        p_bg_arm_given_deltaE,
-    )
+        R = prod_i  p_beta_i / p_bg_i
 
-
-def R(
-    p_beta_deltaE: torch.Tensor,
-    p_bg_deltaE: torch.Tensor,
-    p_beta_angle_given_deltaE: torch.Tensor,
-    p_bg_angle_given_deltaE: torch.Tensor,
-    p_beta_arm_given_deltaE: torch.Tensor | None = None,
-    p_bg_arm_given_deltaE: torch.Tensor | None = None,
-    eps: float = 1e-8,
-    double_count: bool = False,
-    p_beta_lor: torch.Tensor | None = None,
-    p_bg_lor: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Compute the per-event likelihood ratio R = P(D|β) / P(D|bg).
-
-    When ``double_count`` is False (default), this uses the conditional
-    factorization that avoids double-counting ΔE:
-
-        R = [P(ΔE|β)/P(ΔE|bg)]
-            · [P(angle|ΔE,β)/P(angle|ΔE,bg)]
-            · [P(ARM|ΔE,β)/P(ARM|ΔE,bg)]
-
-    and expects the six conditional/marginal lookups in the standard order.
-
-    When ``double_count`` is True, the first four arguments are reinterpreted
-    as the two 2D joints and the last two arguments are ignored:
-
-        p_beta_deltaE          → P(ΔE, angle | β)
-        p_bg_deltaE            → P(ΔE, angle | bg)
-        p_beta_angle_given_dE  → P(ΔE, ARM   | β)
-        p_bg_angle_given_dE    → P(ΔE, ARM   | bg)
-
-    giving R = [P(ΔE,angle|β)/P(ΔE,angle|bg)] · [P(ΔE,ARM|β)/P(ΔE,ARM|bg)],
-    which double-counts ΔE.
-
-    ``p_beta_lor`` / ``p_bg_lor`` carry the fourth feature, the blind LOR
-    score: the joint P(ΔE, lor | ·) in double-count mode, the conditional
-    P(lor | ΔE, ·) otherwise. When None, the term is omitted (three-feature
-    legacy behaviour).
+    The caller decides which factors to include (see :class:`Evaluator`), so this
+    stays agnostic to the feature set — ΔE, angle, ARM and the LOR score all
+    enter as just another ``(p_beta, p_bg)`` pair.
     """
-    if double_count:
-        log_r = (
-            torch.log(p_beta_deltaE + eps)
-            - torch.log(p_bg_deltaE + eps)
-            + torch.log(p_beta_angle_given_deltaE + eps)
-            - torch.log(p_bg_angle_given_deltaE + eps)
-        )
-        if p_beta_lor is not None and p_bg_lor is not None:
-            log_r = log_r + torch.log(p_beta_lor + eps) - torch.log(p_bg_lor + eps)
-        return torch.exp(log_r)
-
-    log_r = (
-        torch.log(p_beta_deltaE + eps)
-        - torch.log(p_bg_deltaE + eps)
-        + torch.log(p_beta_angle_given_deltaE + eps)
-        - torch.log(p_bg_angle_given_deltaE + eps)
-        + torch.log(p_beta_arm_given_deltaE + eps)
-        - torch.log(p_bg_arm_given_deltaE + eps)
-    )
-    if p_beta_lor is not None and p_bg_lor is not None:
-        log_r = log_r + torch.log(p_beta_lor + eps) - torch.log(p_bg_lor + eps)
+    log_r = torch.zeros_like(terms[0][0])
+    for p_beta, p_bg in terms:
+        log_r = log_r + torch.log(p_beta + eps) - torch.log(p_bg + eps)
     return torch.exp(log_r)
 
 
-def predict(
-    ground_truths,
-    p_beta_deltaE,
-    p_bg_deltaE,
-    p_beta_angle_given_deltaE,
-    p_bg_angle_given_deltaE,
-    p_beta_arm_given_deltaE,
-    p_bg_arm_given_deltaE,
-    n_beta_decay: int,
-    n_bg: int,
-    split_name: str = "eval",
-    double_count: bool = False,
-    p_beta_lor: torch.Tensor | None = None,
-    p_bg_lor: torch.Tensor | None = None,
-):
-    """Classify events, apply the class prior, log diagnostics.
+def predict(ground_truths, terms, n_beta_decay: int, n_bg: int, split_name: str = "eval"):
+    """Classify events from the likelihood-ratio ``terms``, apply the class
+    prior, and log the confusion matrix.
 
-    ``n_beta_decay`` and ``n_bg`` are the *training* class counts — used as
-    the ``p(β) / p(bg)`` prior in Bayes' theorem. They must be derived from
-    the tensors passed to :func:`build_density_matrices`, not hard-coded.
-
-    ``split_name`` prefixes every W&B metric key (e.g. ``"train/f1_score"``
-    vs ``"eval/f1_score"``) so calls on different splits in the same run do
-    not overwrite each other.
-
-    ``double_count`` selects the likelihood-ratio formula; see :func:`R`.
-    In double-counting mode the last two arguments may be ``None``.
+    ``n_beta_decay`` / ``n_bg`` are the training class counts used as the
+    P(β)/P(bg) prior. ``split_name`` prefixes the W&B metric keys.
     """
-    ratio = R(
-        p_beta_deltaE,
-        p_bg_deltaE,
-        p_beta_angle_given_deltaE,
-        p_bg_angle_given_deltaE,
-        p_beta_arm_given_deltaE,
-        p_bg_arm_given_deltaE,
-        double_count=double_count,
-        p_beta_lor=p_beta_lor,
-        p_bg_lor=p_bg_lor,
-    )
+    ratio = R(terms)
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
 
-    # Exclude events whose evidence is undefined before tallying. Empty/invalid
-    # subsets propagate NaN into the feature tensors and hence into the
-    # likelihood ratio; such events have no real prediction. Counting them as
-    # TN/FN turns NaN-reclassification into phantom confusion-matrix entries
-    # that contaminate the metric. Mask out NaN ratios (and any NaN ground-truth
-    # label) so TP/FP/FN/TN reflect genuine predictions only. Note: a non-NaN
-    # but infinite ratio is overwhelmingly strong evidence, not undefined, so it
-    # is intentionally kept.
+    # Events with undefined evidence (NaN ratio, from empty/invalid subsets) have
+    # no real prediction — exclude them so they don't show up as phantom TN/FN.
+    # An infinite (non-NaN) ratio is overwhelmingly strong evidence, so it stays.
     valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
     n_excluded = int((~valid).sum().item())
     ground_truths = ground_truths[valid]

@@ -358,3 +358,43 @@ def annihilation_lor_score(positions, energies) -> float:
     """Feature-shaped wrapper: just the scalar score (lower = more
     annihilation-like; NaN when untestable)."""
     return annihilation_lor(positions, energies).score
+
+
+def _to_array(x) -> np.ndarray:
+    return x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
+
+
+def pooled_lor_score(energy_combo, pos_combo, sizes) -> float:
+    """Lowest LOR score over the reconstructed subset pool.
+
+    ``delta_E`` and ``arm`` both reduce over the subset combos that
+    ``event_data_processing`` builds; this does the same for LOR, so all four
+    features come from those reconstructed hits instead of LOR alone scanning the
+    raw hit list. Each distinct subset (>= 2 hits) is run through the two-photon
+    reconstruction and the best (lowest) score is kept. NaN if no subset is
+    testable. ``energy_combo`` (n_combo, max_r) and ``pos_combo`` (n_combo,
+    max_r, 3) are the padded combos; ``sizes`` (n_combo,) gives each row's length.
+    """
+    energy_combo = _to_array(energy_combo)
+    pos_combo = _to_array(pos_combo)
+    sizes = _to_array(sizes).reshape(-1)
+
+    best = float("nan")
+    seen = set()
+    for row in range(sizes.shape[0]):
+        n = int(sizes[row])
+        if n < 2:
+            continue  # need two hits to form two chains
+        positions = pos_combo[row, :n]
+        energies = energy_combo[row, :n]
+        if not (np.all(np.isfinite(positions)) and np.all(np.isfinite(energies))):
+            continue
+        # LOR is order-invariant, so collapse the pool's repeated orderings.
+        key = tuple(sorted(tuple(np.round(p, 4)) for p in positions))
+        if key in seen:
+            continue
+        seen.add(key)
+        score = annihilation_lor(positions, energies).score
+        if np.isfinite(score) and (np.isnan(best) or score < best):
+            best = score
+    return best
