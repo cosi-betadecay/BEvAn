@@ -256,6 +256,58 @@ def _internal_chain_residual(
     return total
 
 
+def _best_bipartition(positions, energies, geo_table, best_sel=np.inf, best=None):
+    """Search the bipartitions of one hit set (hit 0 pinned to chain A) for the
+    one with the lowest energy+geometry selection score.
+
+    Returns ``(best, best_sel)`` where ``best`` is
+    ``(geo_resid, first_a, first_b, chain_a, e_a, e_b)`` or None. A caller can
+    pass a running ``best_sel``/``best`` so the energy prune bounds the search
+    across many subsets — that is what keeps the pooled scan cheap.
+    """
+    n = positions.shape[0]
+    total_e = energies.sum()
+    for bits in range(2 ** (n - 1) - 1, -1, -1):
+        chain_a = np.zeros(n, dtype=bool)
+        chain_a[0] = True
+        for b in range(n - 1):
+            if bits >> b & 1:
+                chain_a[b + 1] = True
+        if chain_a.all():
+            continue  # chain B empty
+        chain_b = ~chain_a
+        if max(int(chain_a.sum()), int(chain_b.sum())) < 2:
+            continue  # both chains single hits: no first scatter to grade
+
+        e_a = energies[chain_a].sum()
+        e_b = total_e - e_a
+        energy_resid = _selection_energy_residual(e_a, e_b)
+        if energy_resid >= best_sel:
+            continue  # energy alone is already worse than the incumbent
+
+        # First-scatter geometry of each chain, given the other chain's start.
+        r_a = _chain_first_scatter_residuals(geo_table, chain_a, chain_b)
+        r_b = _chain_first_scatter_residuals(geo_table, chain_b, chain_a)
+        combined = r_a.T + r_b  # indexed [first_a, first_b]
+
+        i_best, k_best = np.unravel_index(np.argmin(combined), combined.shape)
+        if not np.isfinite(combined[i_best, k_best]):
+            continue
+
+        # Internal scatters of each >=3-hit chain also vote on the winner.
+        internal = 0.0
+        if chain_a.sum() >= 3:
+            internal += _internal_chain_residual(positions, energies, chain_a, int(i_best), geo_table[k_best, i_best, :])
+        if chain_b.sum() >= 3:
+            internal += _internal_chain_residual(positions, energies, chain_b, int(k_best), geo_table[i_best, k_best, :])
+        sel = energy_resid + combined[i_best, k_best] + internal
+
+        if sel < best_sel:
+            best_sel = float(sel)
+            best = (float(combined[i_best, k_best] + internal), int(i_best), int(k_best), chain_a.copy(), float(e_a), float(e_b))
+    return best, best_sel
+
+
 def annihilation_lor(positions, energies) -> LORResult:
     """Blind two-photon reconstruction of one event.
 
@@ -275,61 +327,8 @@ def annihilation_lor(positions, energies) -> LORResult:
     if n < 2 or n > MAX_LOR_HITS:
         return LORResult(float("nan"), None, None, None, None, float("nan"), float("nan"))
 
-    total_e = energies.sum()
     geo_table = _geo_residual_table(positions, energies)
-
-    best_sel = np.inf
-    best = None  # (geo_resid, i, k, chain_a, e_a, e_b)
-
-    # Enumerate bipartitions with hit 0 pinned to chain A (A/B labels are
-    # symmetric). mask bit b set -> hit b+1 belongs to A.
-    for bits in range(2 ** (n - 1) - 1, -1, -1):
-        chain_a = np.zeros(n, dtype=bool)
-        chain_a[0] = True
-        for b in range(n - 1):
-            if bits >> b & 1:
-                chain_a[b + 1] = True
-        if chain_a.all():
-            continue  # chain B empty
-        chain_b = ~chain_a
-
-        e_a = energies[chain_a].sum()
-        e_b = total_e - e_a
-        energy_resid = _selection_energy_residual(e_a, e_b)
-        if energy_resid >= best_sel:
-            continue  # geometry can only add; prune
-
-        # R_a[k, i]: chain A's residual when A starts at i and B starts at k.
-        r_a = _chain_first_scatter_residuals(geo_table, chain_a, chain_b)
-        # R_b[i, k]: chain B's residual when B starts at k and A starts at i.
-        r_b = _chain_first_scatter_residuals(geo_table, chain_b, chain_a)
-        combined = r_a.T + r_b  # indexed [i, k]
-
-        i_best, k_best = np.unravel_index(np.argmin(combined), combined.shape)
-        if not np.isfinite(combined[i_best, k_best]):
-            continue
-
-        # Selection-side internal grading (V4 iter 9): internal scatters vote
-        # on which bipartition wins, evaluated at this bipartition's
-        # first-scatter argmin (i, k). Only adds to the residual, so the
-        # energy-based prune above stays a valid lower bound.
-        internal = 0.0
-        if chain_a.sum() >= 3:
-            internal += _internal_chain_residual(positions, energies, chain_a, int(i_best), geo_table[k_best, i_best, :])
-        if chain_b.sum() >= 3:
-            internal += _internal_chain_residual(positions, energies, chain_b, int(k_best), geo_table[i_best, k_best, :])
-        sel = energy_resid + combined[i_best, k_best] + internal
-
-        if sel < best_sel:
-            best_sel = float(sel)
-            best = (
-                float(combined[i_best, k_best] + internal),
-                int(i_best),
-                int(k_best),
-                chain_a.copy(),
-                float(e_a),
-                float(e_b),
-            )
+    best, best_sel = _best_bipartition(positions, energies, geo_table)
 
     if best is None or not np.isfinite(best_sel):
         return LORResult(float("nan"), None, None, None, None, float("nan"), float("nan"))
@@ -365,36 +364,63 @@ def _to_array(x) -> np.ndarray:
 
 
 def pooled_lor_score(energy_combo, pos_combo, sizes) -> float:
-    """Lowest LOR score over the reconstructed subset pool.
+    """LOR score over the reconstructed subset pool.
 
     ``delta_E`` and ``arm`` both reduce over the subset combos that
     ``event_data_processing`` builds; this does the same for LOR, so all four
     features come from those reconstructed hits instead of LOR alone scanning the
-    raw hit list. Each distinct subset (>= 2 hits) is run through the two-photon
-    reconstruction and the best (lowest) score is kept. NaN if no subset is
-    testable. ``energy_combo`` (n_combo, max_r) and ``pos_combo`` (n_combo,
-    max_r, 3) are the padded combos; ``sizes`` (n_combo,) gives each row's length.
+    raw hit list. It is the whole-event reconstruction extended to let some hits
+    be ignored: the best two-photon hypothesis over every subset is found and its
+    geometry residual reported.
+
+    Cheap by construction: the geometry table is built ONCE over the event's
+    hits and sliced per subset, and the energy prune is threaded across subsets
+    (so a clean 511/511 subset found early prunes the rest). NaN when no subset
+    is testable or the event has more than ``MAX_LOR_HITS`` hits.
     """
     energy_combo = _to_array(energy_combo)
     pos_combo = _to_array(pos_combo)
     sizes = _to_array(sizes).reshape(-1)
 
-    best = float("nan")
-    seen = set()
+    # Recover the event's unique hits and the set of candidate subsets.
+    hit_id: dict = {}
+    g_e, g_p = [], []
+    subsets = set()
     for row in range(sizes.shape[0]):
         n = int(sizes[row])
         if n < 2:
             continue  # need two hits to form two chains
-        positions = pos_combo[row, :n]
-        energies = energy_combo[row, :n]
-        if not (np.all(np.isfinite(positions)) and np.all(np.isfinite(energies))):
+        pos = pos_combo[row, :n]
+        en = energy_combo[row, :n]
+        if not (np.all(np.isfinite(pos)) and np.all(np.isfinite(en))):
             continue
-        # LOR is order-invariant, so collapse the pool's repeated orderings.
-        key = tuple(sorted(tuple(np.round(p, 4)) for p in positions))
-        if key in seen:
-            continue
-        seen.add(key)
-        score = annihilation_lor(positions, energies).score
-        if np.isfinite(score) and (np.isnan(best) or score < best):
-            best = score
-    return best
+        idx = []
+        for h in range(n):
+            key = (round(float(en[h]), 4), round(float(pos[h, 0]), 4), round(float(pos[h, 1]), 4), round(float(pos[h, 2]), 4))
+            if key not in hit_id:
+                hit_id[key] = len(g_e)
+                g_e.append(float(en[h]))
+                g_p.append([float(pos[h, 0]), float(pos[h, 1]), float(pos[h, 2])])
+            idx.append(hit_id[key])
+        subsets.add(tuple(sorted(set(idx))))
+
+    if not subsets or len(g_e) > MAX_LOR_HITS:
+        return float("nan")
+
+    g_e = np.asarray(g_e, dtype=np.float64)
+    g_p = np.asarray(g_p, dtype=np.float64)
+    geo_table = _geo_residual_table(g_p, g_e)
+
+    # Most annihilation-like subsets first (ΣE near one or two 511 keV photons)
+    # so the energy prune tightens after the first few.
+    promising = sorted(subsets, key=lambda s: min(abs(g_e[list(s)].sum() - 511.0), abs(g_e[list(s)].sum() - 1022.0)))
+
+    best, best_sel = None, np.inf
+    for sub in promising:
+        idx = np.array(sub)
+        sub_table = geo_table[np.ix_(idx, idx, idx)]
+        best, best_sel = _best_bipartition(g_p[idx], g_e[idx], sub_table, best_sel, best)
+
+    if best is None or not np.isfinite(best_sel):
+        return float("nan")
+    return float(best[0])
