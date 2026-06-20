@@ -37,8 +37,6 @@ two-photon hypothesis at all (fewer than 2 hits) or is too large to
 enumerate (> MAX_LOR_HITS, bounded by the 2^(N-1) bipartition count).
 """
 
-from dataclasses import dataclass
-
 import numpy as np
 
 ELECTRON_MASS_KEV = 511.0
@@ -59,30 +57,6 @@ SIGMA_E_DEFICIT_KEV = 250.0
 # Soft scale for the (cos_geo - cos_kin) first-scatter residual. Absorbs
 # Doppler acollinearity/broadening and finite position resolution.
 SIGMA_COS = 0.02
-
-
-@dataclass
-class LORResult:
-    """Best two-photon hypothesis found for one event.
-
-    Selection and scoring are deliberately decoupled (both measured on the
-    full Activation.sim truth harness): the hypothesis is CHOSEN with the
-    asymmetric energy model (deficits lenient — 90% of real signal fully
-    absorbs only one photon, so the true partition usually has a partial
-    second chain; axis median error 12.5 -> 9.8 deg), but the reported
-    ``score`` re-grades that hypothesis with the strict symmetric 511/511
-    residual, which separates classes best (TV 0.271 vs 0.188 for the
-    asymmetric score itself).
-    """
-
-    score: float  # symmetric-rescored residual; lower = more annihilation-like
-    axis: np.ndarray | None  # unit vector of the reconstructed LOR, or None
-    first_a: int | None  # hit index of chain A's first interaction
-    first_b: int | None  # hit index of chain B's first interaction
-    chain_a: np.ndarray | None  # bool mask of hits assigned to chain A
-    energy_a: float  # deposited energy of chain A at the best hypothesis
-    energy_b: float  # deposited energy of chain B at the best hypothesis
-    selection_score: float = float("nan")  # asymmetric residual used to pick the hypothesis
 
 
 def _first_scatter_cos_kin(first_energies: np.ndarray) -> np.ndarray:
@@ -126,11 +100,6 @@ def _selection_energy_residual(e_a: float, e_b: float) -> float:
         return (e - PHOTON_KEV) ** 2 / (2.0 * sigma**2)
 
     return min(primary(e_a) + secondary(e_b), primary(e_b) + secondary(e_a))
-
-
-def _symmetric_energy_residual(e_a: float, e_b: float) -> float:
-    """Strict 511/511 residual, used to SCORE the selected hypothesis."""
-    return ((e_a - PHOTON_KEV) ** 2 + (e_b - PHOTON_KEV) ** 2) / (2.0 * SIGMA_E_KEV**2)
 
 
 def _pairwise_units(positions: np.ndarray, eps: float = 1e-9) -> np.ndarray:
@@ -306,57 +275,6 @@ def _best_bipartition(positions, energies, geo_table, best_sel=np.inf, best=None
             best_sel = float(sel)
             best = (float(combined[i_best, k_best] + internal), int(i_best), int(k_best), chain_a.copy(), float(e_a), float(e_b))
     return best, best_sel
-
-
-def annihilation_lor(positions, energies) -> LORResult:
-    """Blind two-photon reconstruction of one event.
-
-    Args:
-        positions: (n, 3) hit positions [cm] (array-like; torch tensors ok).
-        energies: (n,) deposited energies [keV].
-
-    Returns:
-        LORResult with the minimal hypothesis score (NaN if the event cannot
-        be tested), the reconstructed annihilation axis, and the chain
-        assignment behind it.
-    """
-    positions = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
-    energies = np.asarray(energies, dtype=np.float64).reshape(-1)
-    n = positions.shape[0]
-
-    if n < 2 or n > MAX_LOR_HITS:
-        return LORResult(float("nan"), None, None, None, None, float("nan"), float("nan"))
-
-    geo_table = _geo_residual_table(positions, energies)
-    best, best_sel = _best_bipartition(positions, energies, geo_table)
-
-    if best is None or not np.isfinite(best_sel):
-        return LORResult(float("nan"), None, None, None, None, float("nan"), float("nan"))
-
-    geo_resid, i_best, k_best, chain_a, e_a, e_b = best
-    delta = positions[i_best] - positions[k_best]
-    norm = np.linalg.norm(delta)
-    axis = delta / norm if norm > 1e-9 else None
-    # Geometry-only reported score (V4 iter 3): the energy terms still drive
-    # SELECTION, but the returned score is the first-scatter geometry residual
-    # alone, making the feature maximally orthogonal to delta_E. The Bayesian
-    # model conditions on delta_E, so the conditional may carry more new
-    # information even though the marginal TV falls.
-    #
-    # Internal-chain grading (V4 iters 7-9): every >=3-hit chain's internal
-    # scatters are walked greedily and their Compton-consistency residuals
-    # included — since iter 9 they are accumulated inside the selection loop
-    # (``geo_resid`` already carries them), so they also vote on which
-    # bipartition wins. (A chi^2/dof normalization of the report was tried
-    # and reverted — V4 iter 10, MCC -0.0024.)
-    score = geo_resid
-    return LORResult(float(score), axis, i_best, k_best, chain_a, e_a, e_b, selection_score=best_sel)
-
-
-def annihilation_lor_score(positions, energies) -> float:
-    """Feature-shaped wrapper: just the scalar score (lower = more
-    annihilation-like; NaN when untestable)."""
-    return annihilation_lor(positions, energies).score
 
 
 def _to_array(x) -> np.ndarray:
