@@ -9,25 +9,23 @@ from physics.ground_truths import ground_truth_bdecay
 from physics.physics_factors import annihilation_angle, arm, compton_phi, delta_E
 from tqdm import tqdm
 
-# Buckets keyed by which physics features are available for the event, so each
-# lands in a model that uses only features it actually possesses:
-#   1 -> delta_E only                 (1-hit: no Compton/geometry handle)
-#   2 -> delta_E + phi                (2-hit: Compton scatter angle from energies)
-#   3 -> delta_E + ARM                (>=3-hit Compton consistency, no back-to-back)
-#   4 -> delta_E + ARM + anni         (>=3-hit with a back-to-back hypothesis)
-BUCKETS = (1, 2, 3, 4)
+# Buckets keyed by hit-multiplicity / feature availability:
+#   1 -> delta_E only            (1-hit: no Compton/geometry handle)
+#   2 -> delta_E + phi           (2-hit: Compton scatter angle from energies)
+#   3 -> delta_E + ARM AND delta_E + anni   (>=3-hit: ONE stratum, both matrices
+#                                            multiply into R; anni is a per-event
+#                                            factor — dropped when it's NaN, not a
+#                                            separate bucket)
+BUCKETS = (1, 2, 3)
 _FEATURES = ("delta_E", "arm", "anni", "phi")
 _CLASSES = ("bdecay", "bg")
 
 
-def _feature_bucket(d_arm: float, d_anni: float, d_phi: float) -> int:
-    """Route an event by which features came out finite (checked most- to
-    least-informative): back-to-back => 4, >=3-hit Compton => 3, 2-hit Compton
-    scatter angle => 2, else delta_E only => 1. delta_E is finite for any valid
-    event, so it anchors bucket 1.
+def _feature_bucket(d_arm: float, d_phi: float) -> int:
+    """Route by the most-informative available geometry: >=3-hit (ARM finite)
+    => 3 (both ARM and anni matrices apply there; anni handled per-event as an
+    optional factor); 2-hit Compton angle => 2; else delta_E only => 1.
     """
-    if math.isfinite(d_anni):
-        return 4
     if math.isfinite(d_arm):
         return 3
     if math.isfinite(d_phi):
@@ -85,7 +83,7 @@ class Datasets:
             _arm = float(arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes))
             _phi = float(compton_phi(energies, sizes=sizes))
 
-            b = _feature_bucket(_arm, _anni, _phi)
+            b = _feature_bucket(_arm, _phi)
             data[cls][b]["delta_E"].append(_delta_E)
             data[cls][b]["arm"].append(_arm)
             data[cls][b]["anni"].append(_anni)
