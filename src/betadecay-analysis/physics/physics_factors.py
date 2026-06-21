@@ -8,18 +8,24 @@ from tqdm import tqdm
 # Annihilation Angle
 ############################################
 
-# The back-to-back statistic is the global minimum pairwise cosine over all
-# inter-hit displacement vectors of an event's hits (most anti-parallel pair).
-# It is PURE GEOMETRY: order-invariant (canonical i<j vectors) and independent
-# of deposited energy — energy lives only in delta_E, so the two features no
-# longer double-count it. The raw minimum saturates toward -1 as hit count n
-# grows (more vectors -> more near-anti-parallel pairs by chance), so on its
-# own it confounds "back-to-back" with "busy". `normalize_min_cos` converts it
-# to an anomaly score relative to a matched-n null (see scripts/build_angle_null.py
-# and data/angle_null_table.npz): the left-tail percentile of the observed
-# min-cos under random n-hit configurations. Low score = more anti-parallel
-# than chance at that multiplicity = signal-like; ~0.5 = at chance (no info,
-# the correct verdict for busy high-n events).
+# PRODUCTION statistic (when per-hit energies are supplied): the vertex-anchored
+# back-to-back annihilation score, ``_back_to_back_score``. A real e+ annihilation
+# emits two 511 keV photons in opposite directions from a common vertex; the sim
+# truth (data/Activation.sim) shows that vertex sits within ~2 mm of a hit 95% of
+# the time, so each hit is tried as the vertex and the two most anti-parallel arm
+# directions from it give a back-to-back cosine (≈ -1 for a real pair). A single
+# Compton photon can deposit at most ~511 keV total, so a candidate whose two-arm
+# energy does not exceed that ceiling is a single-photon collinear fake and is
+# rejected; survivors pay a deficit-only penalty rewarding a two-arm total toward
+# 1022 keV (partial deposits are common — per-arm energy is NOT gated at 511).
+# Lower score = more annihilation-like. NaN where no subset has the structure
+# (only ~29% of annihilations deposit both photons — this is a high-purity
+# minority signal; delta_E carries the single-photon 511 keV events).
+#
+# FALLBACK (no energies): the pure-geometry global minimum pairwise inter-hit
+# cosine, optionally converted by ``normalize_min_cos`` to its left-tail
+# percentile under a matched-n null (scripts/build_angle_null.py,
+# data/angle_null_table.npz) so the raw min does not merely track hit count.
 
 
 def load_null_table(path: str) -> dict:
@@ -165,6 +171,109 @@ def all_vector_cosines_blockwise(
     return global_best.amin().reshape(-1)
 
 
+# --- Back-to-back annihilation score (vertex-anchored, energy-gated) ----------
+# Thresholds are derived from data/Activation.sim truth (see project memory):
+B2B_E_FLOOR = 511.0 - 3.0 * (2.25 / 2.355)  # ~508 keV: a single Compton photon
+#                                             cannot deposit more than this total
+B2B_E_TARGET = 1022.0  # two fully-absorbed 511 keV photons
+B2B_SIGMA_E = 250.0  # deficit-tolerant energy scale (partial deposits dominate)
+B2B_LAMBDA = 0.3  # energy-penalty strength, in cosine units
+
+
+def _per_subset_back_to_back(
+    positions: torch.Tensor, energies: torch.Tensor, eps: float = 1e-12
+) -> torch.Tensor:
+    """Vertex-anchored back-to-back annihilation score, one value per subset.
+
+    For each hit taken as the annihilation vertex, the two most anti-parallel
+    arm directions from that vertex give a back-to-back cosine (≈ -1 for a real
+    pair). The two-arm energy (all non-vertex hits — the split itself does not
+    change their sum) must exceed ``B2B_E_FLOOR`` or the candidate is a
+    single-photon collinear fake and is rejected; survivors add a deficit-only
+    Gaussian penalty toward ``B2B_E_TARGET``. The subset's score is the best
+    (lowest) vertex. Lower = more annihilation-like.
+
+    Args:
+        positions: ``(B, n, 3)`` hit positions for B subsets of size n.
+        energies: ``(B, n)`` per-hit deposited energy.
+
+    Returns:
+        ``(B,)`` scores; ``+inf`` for a subset with no gate-passing vertex
+        (also where ``n < 3``, or for NaN-padded subsets).
+    """
+    B, n, _ = positions.shape
+    if n < 3:
+        return positions.new_full((B,), float("inf"))
+    inf = positions.new_tensor(float("inf"))
+    total_E = energies.sum(dim=1)  # (B,)
+    best = positions.new_full((B,), float("inf"))
+    for v in range(n):
+        others = [k for k in range(n) if k != v]
+        D = positions[:, others, :] - positions[:, v : v + 1, :]  # (B, m, 3)
+        D = D / torch.linalg.norm(D, dim=-1, keepdim=True).clamp_min(eps)
+        C = D @ D.transpose(-1, -2)  # (B, m, m)
+        m = len(others)
+        eye = torch.eye(m, dtype=torch.bool, device=positions.device).unsqueeze(0)
+        cos_bb = C.masked_fill(eye, float("inf")).amin(dim=(1, 2))  # most anti-parallel
+        e_arms = total_E - energies[:, v]  # two-arm energy (vertex excluded)
+        deficit = (B2B_E_TARGET - e_arms).clamp_min(0.0)
+        e_term = B2B_LAMBDA * (1.0 - torch.exp(-(deficit**2) / (2.0 * B2B_SIGMA_E**2)))
+        score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + e_term, inf)
+        best = torch.minimum(best, score)
+    return best
+
+
+def _back_to_back_score(
+    positions: torch.Tensor,
+    energies: torch.Tensor,
+    sizes: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Per-event back-to-back score over the reconstructed subset pool.
+
+    Mirrors the sized reduction of ``delta_E``/``arm``: group combos by subset
+    size, score each, and return the per-event best (lowest = most
+    annihilation-like), or NaN when no subset has >=3 hits with a gate-passing
+    vertex.
+    """
+    if sizes is None:
+        P = positions if positions.ndim == 3 else positions.unsqueeze(0)
+        E = energies if energies.ndim == 2 else energies.unsqueeze(0)
+        score = _per_subset_back_to_back(P, E)
+        finite = score[torch.isfinite(score)]
+        return (finite.amin() if finite.numel() else positions.new_tensor(float("nan"))).reshape(1)
+
+    if positions.ndim != 3 or energies.ndim != 2 or sizes.ndim != 1:
+        raise ValueError(
+            "Sized back-to-back expects positions (B, N, 3), energies (B, N), sizes (B,), "
+            f"got {tuple(positions.shape)}, {tuple(energies.shape)}, {tuple(sizes.shape)}"
+        )
+    if positions.shape[0] != sizes.shape[0] or energies.shape[0] != sizes.shape[0]:
+        raise ValueError(
+            "Batch dimension and sizes length must match, "
+            f"got {tuple(positions.shape)}, {tuple(energies.shape)}, {tuple(sizes.shape)}"
+        )
+
+    outputs = []
+    for size in torch.unique(sizes, sorted=True):
+        size_int = int(size.item())
+        if size_int < 3:
+            outputs.append(positions.new_tensor(float("nan")).reshape(1))
+            continue
+        group = sizes == size
+        score = _per_subset_back_to_back(positions[group, :size_int, :], energies[group, :size_int])
+        finite = score[torch.isfinite(score)]
+        if finite.numel() == 0:
+            outputs.append(positions.new_tensor(float("nan")).reshape(1))
+            continue
+        outputs.append(finite.amin().reshape(1))
+
+    stacked = torch.stack(outputs).flatten()
+    finite = stacked[torch.isfinite(stacked)]
+    if finite.numel() == 0:
+        return positions.new_tensor(float("nan")).reshape(1)
+    return finite.amin().reshape(1)
+
+
 def annihilation_angle(
     positions: torch.Tensor,
     n_hits: int | None = None,
@@ -172,17 +281,14 @@ def annihilation_angle(
     energies: torch.Tensor | None = None,
     null_table: dict | None = None,
 ) -> torch.Tensor:
-    # Pure-geometry back-to-back statistic: the global minimum pairwise cosine
-    # over all inter-hit displacement vectors. ``energies`` is accepted for call
-    # compatibility but UNUSED — energy belongs to delta_E, and the old soft
-    # 1022 keV penalty (now removed) double-counted it AND, via the arm-ordering
-    # pool, leaked energy into a feature that should be geometry only.
-    #
-    # When ``null_table`` is provided the raw min-cos is converted to its
-    # left-tail percentile under the matched-``n_hits`` null (see
-    # ``normalize_min_cos``); otherwise the raw cosine is returned (back-compat).
-    raw = _annihilation_min_cos(positions, n_hits=n_hits, sizes=sizes)
+    # PRODUCTION path: with per-hit energies, return the vertex-anchored
+    # back-to-back annihilation score (geometry + single-photon energy gate).
+    if energies is not None:
+        return _back_to_back_score(positions, energies, sizes=sizes)
 
+    # FALLBACK (no energies): pure-geometry min-cos, optionally null-normalized
+    # to its left-tail percentile under the matched-``n_hits`` null.
+    raw = _annihilation_min_cos(positions, n_hits=n_hits, sizes=sizes)
     if null_table is None:
         return raw
     if n_hits is None:
