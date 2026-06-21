@@ -7,13 +7,6 @@ from pipeline.eval import Evaluator
 #   bucket 1: P(delta_E)                                   [1D]
 #   bucket 2: P(delta_E, ARM)                              [2D]
 #   bucket 3: P(delta_E, ARM) and P(delta_E, anni)         [2D x2]
-#
-# Bucket 3 multiplies two joints that both carry delta_E, so the delta_E
-# likelihood ratio is effectively counted twice. This is intentional / KEPT: the
-# "correct" factorization P(delta_E)*P(ARM|delta_E)*P(anni|delta_E) was measured
-# 2026-06-22 and cost F1 (eval 0.8935 -> 0.8735: it cut 14 n3 FP but added 34 FN,
-# because n3's delta_E~511 events are mostly real signal — up-weighting delta_E
-# helps here). Do not "fix" the double-count without re-measuring.
 _JOINT_SMOOTHING = 0.5  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
 _MARGINAL_SMOOTHING = 0.0  # for the 1D delta_E marginal
 _N_BINS = {1: 25, 2: 8, 3: 35}

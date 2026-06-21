@@ -52,56 +52,6 @@ def confusion_counts(ground_truths, terms, n_beta_decay: int, n_bg: int) -> dict
     }
 
 
-def threshold_sweep(
-    ground_truths,
-    terms,
-    n_beta_decay: int,
-    n_bg: int,
-    taus=(1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0),
-) -> list[dict]:
-    """Read-only FP/precision/recall/F1 tradeoff vs the decision threshold.
-
-    The shipped decision is the MAP rule ``R >= n_bg/n_beta`` (``tau=1``). Here we
-    multiply that threshold by ``tau``: ``predict beta iff R >= tau*(n_bg/n_beta)``.
-    ``tau>1`` raises the bar, trading recall for precision (fewer FP). This does NOT
-    change any logged metric — it only reports what each operating point would give,
-    so a good n>=3 threshold can be chosen empirically before touching the model.
-    """
-    gt = torch.as_tensor(ground_truths, dtype=torch.bool)
-    ratio = R(terms) if terms else torch.ones(gt.shape[0])
-    valid = ~torch.isnan(ratio) & ~torch.isnan(gt.to(ratio.dtype))
-    gt = gt[valid]
-    ratio = ratio[valid]
-    base = n_bg / max(n_beta_decay, 1)  # MAP threshold on R
-
-    rows = []
-    for tau in taus:
-        pred = ratio >= tau * base
-        tp = int((gt & pred).sum().item())
-        fp = int((~gt & pred).sum().item())
-        fn = int((gt & ~pred).sum().item())
-        tn = int((~gt & ~pred).sum().item())
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-        rows.append(
-            {"tau": tau, "tp": tp, "fp": fp, "fn": fn, "tn": tn,
-             "precision": precision, "recall": recall, "f1": f1}
-        )
-    return rows
-
-
-def log_threshold_sweep(rows: list[dict], split_name: str = "eval"):
-    """Pretty-print a :func:`threshold_sweep` table (diagnostic only, no W&B)."""
-    print(f"{split_name} - threshold sweep (tau=1.0 is the shipped MAP rule):")
-    print(f"{split_name} -   tau    TP    FP    FN     TN   Prec   Rec    F1")
-    for r in rows:
-        print(
-            f"{split_name} - {r['tau']:5.2f} {r['tp']:5d} {r['fp']:5d} {r['fn']:5d} "
-            f"{r['tn']:6d} {r['precision']:.4f} {r['recall']:.4f} {r['f1']:.4f}"
-        )
-
-
 def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True):
     """Print + log a confusion-matrix summary from raw counts (the sum across
     buckets, or one bucket's counts for diagnostics)."""

@@ -1,19 +1,7 @@
-import os
-
 import torch
 from dataset.datasets import BUCKETS, _FEATURES
-from modeling.calculate_probablities import (
-    confusion_counts,
-    log_confusion,
-    log_threshold_sweep,
-    threshold_sweep,
-)
+from modeling.calculate_probablities import confusion_counts, log_confusion
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
-
-# Opt-in diagnostic: set BETADECAY_THRESHOLD_SWEEP=1 to print, per bucket, the
-# FP/precision/recall/F1 tradeoff as the decision threshold is raised. Read-only;
-# changes no logged metric. Empty -> only the highest bucket(s); "all" -> every bucket.
-_SWEEP_ENV = os.environ.get("BETADECAY_THRESHOLD_SWEEP", "")
 
 
 class Evaluator:
@@ -25,7 +13,7 @@ class Evaluator:
         total = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
 
         for b in BUCKETS:
-            counts = self._evaluate_bucket(data, b, t.models[b], split_name=f"{split_name}/n{b}")
+            counts = self._evaluate_bucket(data, b, t.models[b])
             if counts is None:
                 continue
             for k in total:
@@ -35,7 +23,7 @@ class Evaluator:
 
         log_confusion(total, split_name=split_name)
 
-    def _evaluate_bucket(self, data, bucket, model, split_name: str = "eval"):
+    def _evaluate_bucket(self, data, bucket, model):
         bd, bg = data["bdecay"][bucket], data["bg"][bucket]
         n_bd, n_bg = bd["delta_E"].numel(), bg["delta_E"].numel()
         if n_bd + n_bg == 0:
@@ -72,11 +60,4 @@ class Evaluator:
         counts = confusion_counts(ground_truths, terms, model["n_beta"], model["n_bg"])
         # Count the features-not-finite events as excluded for transparency.
         counts["excluded"] += int((~valid).sum().item())
-
-        # Opt-in, read-only: show the FP-vs-F1 tradeoff for this bucket. Default
-        # targets only the top bucket (where ~all the FP live); "all" does every one.
-        if _SWEEP_ENV and (_SWEEP_ENV.lower() == "all" or bucket == max(BUCKETS)):
-            rows = threshold_sweep(ground_truths, terms, model["n_beta"], model["n_bg"])
-            log_threshold_sweep(rows, split_name=split_name)
-
         return counts
