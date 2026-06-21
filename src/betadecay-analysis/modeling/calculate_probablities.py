@@ -15,8 +15,8 @@ def R(terms, eps: float = 1e-8) -> torch.Tensor:
         R = prod_i  p_beta_i / p_bg_i
 
     The caller decides which factors to include (see :class:`Evaluator`), so this
-    stays agnostic to the feature set — ΔE, angle, ARM and the LOR score all
-    enter as just another ``(p_beta, p_bg)`` pair.
+    stays agnostic to the feature set — ΔE, angle and ARM all enter as just
+    another ``(p_beta, p_bg)`` pair.
     """
     log_r = torch.zeros_like(terms[0][0])
     for p_beta, p_bg in terms:
