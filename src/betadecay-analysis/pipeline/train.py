@@ -4,13 +4,12 @@ from modeling.matrix_calculations import build_density_matrix, build_density_mat
 
 from pipeline.eval import Evaluator
 
-#   bucket 1: P(delta_E)                              1-hit            [1D]
-#   bucket 2: P(delta_E, phi)         2-hit Compton scatter angle      [2D]
-#   bucket 3: P(delta_E, ARM) and P(delta_E, anni)    >=3-hit          [2D x2]
-#             (both factors multiply into R; anni dropped per-event when NaN)
+#   bucket 1: P(delta_E)                                   [1D]
+#   bucket 2: P(delta_E, ARM)                              [2D]
+#   bucket 3: P(delta_E, ARM) and P(delta_E, anni)         [2D x2]
 _JOINT_SMOOTHING = 0.5  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
 _MARGINAL_SMOOTHING = 0.0  # for the 1D delta_E marginal
-_N_BINS = {1: 25, 2: 10, 3: 35}  # coarse for signal-sparse buckets; tunable
+_N_BINS = {1: 25, 2: 8, 3: 35}
 
 
 def _finite(*cols):
@@ -48,8 +47,8 @@ class Trainer:
         if bucket == 1:
             self._add_1d(model, bd, bg, "delta_E", n_bins)
         elif bucket == 2:
-            self._add_2d(model, bd, bg, "delta_E", "phi", "linear", None, n_bins)
-        else:  # bucket 3: >=3-hit -> both matrices feed R; anni is per-event optional
+            self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+        else:  # bucket 3
             self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
             self._add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
         return model

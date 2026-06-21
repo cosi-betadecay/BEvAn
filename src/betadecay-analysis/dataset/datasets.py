@@ -6,29 +6,30 @@ import ROOT as M
 import torch
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
-from physics.physics_factors import annihilation_angle, arm, compton_phi, delta_E
+from physics.physics_factors import annihilation_angle, arm, delta_E
 from tqdm import tqdm
 
-# Buckets keyed by hit-multiplicity / feature availability:
-#   1 -> delta_E only            (1-hit: no Compton/geometry handle)
-#   2 -> delta_E + phi           (2-hit: Compton scatter angle from energies)
-#   3 -> delta_E + ARM AND delta_E + anni   (>=3-hit: ONE stratum, both matrices
-#                                            multiply into R; anni is a per-event
-#                                            factor — dropped when it's NaN, not a
-#                                            separate bucket)
+# Hit-multiplicity buckets, keyed by which features are physically available.
+# An event is routed by what event processing actually produced (feature
+# availability), NOT raw GetNHTs(), so it always lands in a bucket whose model
+# uses only features the event possesses:
+#   1 -> delta_E only            (no >=2-hit subset)
+#   2 -> delta_E + ARM           (>=2-hit subset, no usable back-to-back)
+#   3 -> delta_E + ARM + anni    (usable back-to-back hypothesis)
 BUCKETS = (1, 2, 3)
-_FEATURES = ("delta_E", "arm", "anni", "phi")
+_FEATURES = ("delta_E", "arm", "anni")
 _CLASSES = ("bdecay", "bg")
 
 
-def _feature_bucket(d_arm: float, d_phi: float) -> int:
-    """Route by the most-informative available geometry: >=3-hit (ARM finite)
-    => 3 (both ARM and anni matrices apply there; anni handled per-event as an
-    optional factor); 2-hit Compton angle => 2; else delta_E only => 1.
+def _feature_bucket(d_arm: float, d_anni: float) -> int:
+    """Route an event by which geometry features came out finite.
+
+    anni finite => 3 (it implies arm/delta_E finite too); else arm finite => 2;
+    else 1. delta_E is finite for any valid event, so it anchors bucket 1.
     """
-    if math.isfinite(d_arm):
+    if math.isfinite(d_anni):
         return 3
-    if math.isfinite(d_phi):
+    if math.isfinite(d_arm):
         return 2
     return 1
 
@@ -81,13 +82,11 @@ class Datasets:
             _delta_E = float(delta_E(energies, sizes=sizes))
             _anni = float(annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies))
             _arm = float(arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes))
-            _phi = float(compton_phi(energies, sizes=sizes))
 
-            b = _feature_bucket(_arm, _phi)
+            b = _feature_bucket(_arm, _anni)
             data[cls][b]["delta_E"].append(_delta_E)
             data[cls][b]["arm"].append(_arm)
             data[cls][b]["anni"].append(_anni)
-            data[cls][b]["phi"].append(_phi)
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

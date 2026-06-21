@@ -34,34 +34,30 @@ class Evaluator:
             [torch.ones(n_bd, dtype=torch.bool), torch.zeros(n_bg, dtype=torch.bool)]
         )
 
-        # Global validity: delta_E must be finite (drops invalid-processing events).
-        # Optional factors (e.g. anni in the >=3 bucket) are NOT used to exclude
-        # events — a missing factor is dropped per-event below, so every event in a
-        # bucket shares one prior/stratum.
-        valid = torch.isfinite(feats["delta_E"])
+        # Keep only events whose bucket-relevant features are finite (bucket 1 may
+        # hold invalid-processing events with NaN delta_E).
+        used = ["delta_E"] + (["arm"] if bucket >= 2 else []) + (["anni"] if bucket >= 3 else [])
+        valid = torch.ones(ground_truths.shape[0], dtype=torch.bool)
+        for f in used:
+            valid = valid & torch.isfinite(feats[f])
         feats = {f: v[valid] for f, v in feats.items()}
         ground_truths = ground_truths[valid]
 
         terms = []
         for spec in model["terms"]:
             if spec["kind"] == "1d":
-                x = feats[spec["xfeat"]]
-                xs = torch.nan_to_num(x)
-                pb = lookup_density_values_1d(xs, spec["beta"], spec["x_bins"])
-                pg = lookup_density_values_1d(xs, spec["bg"], spec["x_bins"])
-                present = torch.isfinite(x)
+                pb = lookup_density_values_1d(feats[spec["xfeat"]], spec["beta"], spec["x_bins"])
+                pg = lookup_density_values_1d(feats[spec["xfeat"]], spec["bg"], spec["x_bins"])
             else:
-                x, y = feats[spec["xfeat"]], feats[spec["yfeat"]]
-                xs, ys = torch.nan_to_num(x), torch.nan_to_num(y)
-                pb = lookup_density_values(xs, ys, spec["beta"], spec["x_bins"], spec["y_bins"])
-                pg = lookup_density_values(xs, ys, spec["bg"], spec["x_bins"], spec["y_bins"])
-                present = torch.isfinite(x) & torch.isfinite(y)
-            # Drop this factor for events missing its feature(s): ratio -> 1.
-            one = pb.new_ones(())
-            pb = torch.where(present, pb, one)
-            pg = torch.where(present, pg, one)
+                pb = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["beta"], spec["x_bins"], spec["y_bins"]
+                )
+                pg = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["bg"], spec["x_bins"], spec["y_bins"]
+                )
             terms.append((pb, pg))
 
         counts = confusion_counts(ground_truths, terms, model["n_beta"], model["n_bg"])
+        # Count the features-not-finite events as excluded for transparency.
         counts["excluded"] += int((~valid).sum().item())
         return counts
