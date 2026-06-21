@@ -1,3 +1,4 @@
+import numpy as _np
 import omegaconf
 import torch
 from mathematics.geometry import theta_geo, theta_kin
@@ -7,18 +8,51 @@ from tqdm import tqdm
 # Annihilation Angle
 ############################################
 
-# Two-photon joint constraint (theory §7): a real β⁺ annihilation emits two
-# ~511 keV photons that together deposit ~1022 keV. ANNI_SIGMA_E sets the
-# energy scale (keV) over which a subset's total deposited energy is judged
-# consistent with a full annihilation. ANNI_LAMBDA is the strength of a soft
-# Gaussian penalty (in cosine units) added to each subset's back-to-back
-# cosine: subsets whose ΣE is far from 1022 keV are nudged UP (less
-# back-to-back / more background-like) while on-energy subsets are essentially
-# untouched. Unlike a hard gate (which collapses recall by dropping subsets),
-# every subset stays eligible — only its ranking shifts.
-ANNI_TOTAL_KEV = 1022.0
-ANNI_SIGMA_E = 80.0
-ANNI_LAMBDA = 0.3
+# The back-to-back statistic is the global minimum pairwise cosine over all
+# inter-hit displacement vectors of an event's hits (most anti-parallel pair).
+# It is PURE GEOMETRY: order-invariant (canonical i<j vectors) and independent
+# of deposited energy — energy lives only in delta_E, so the two features no
+# longer double-count it. The raw minimum saturates toward -1 as hit count n
+# grows (more vectors -> more near-anti-parallel pairs by chance), so on its
+# own it confounds "back-to-back" with "busy". `normalize_min_cos` converts it
+# to an anomaly score relative to a matched-n null (see scripts/build_angle_null.py
+# and data/angle_null_table.npz): the left-tail percentile of the observed
+# min-cos under random n-hit configurations. Low score = more anti-parallel
+# than chance at that multiplicity = signal-like; ~0.5 = at chance (no info,
+# the correct verdict for busy high-n events).
+
+
+def load_null_table(path: str) -> dict:
+    """Load the per-multiplicity null built by scripts/build_angle_null.py."""
+    data = _np.load(path)
+    ns = data["ns"]
+    return {
+        "n_min": int(ns[0]),
+        "n_max": int(ns[-1]),
+        "q_levels": data["q_levels"],
+        "q_values": data["q_values"],
+    }
+
+
+def normalize_min_cos(raw: torch.Tensor, n_hits: int, null_table: dict) -> torch.Tensor:
+    """Left-tail percentile of an observed min-cos under the matched-n null.
+
+    ``null_table`` carries the per-multiplicity quantile grid produced by
+    ``scripts/build_angle_null.py``: keys ``n_min``/``n_max`` (ints), ``q_levels``
+    (Q,) ascending in [0, 1], and ``q_values`` (K, Q) the null min-cos at each
+    (n, level), ascending along Q. ``n_hits`` is clamped to [n_min, n_max]
+    (high-n nulls are already pinned at -1, so clamping loses nothing). Returns
+    a 1-element tensor in [0, 1]; NaN in -> NaN out.
+    """
+    raw_f = float(raw.reshape(-1)[0])
+    if raw_f != raw_f:  # NaN
+        return raw.new_tensor(float("nan")).reshape(1)
+    n_min, n_max = null_table["n_min"], null_table["n_max"]
+    idx = min(max(n_hits, n_min), n_max) - n_min
+    q_values = null_table["q_values"][idx]
+    q_levels = null_table["q_levels"]
+    pct = float(_np.interp(raw_f, q_values, q_levels))
+    return raw.new_tensor(pct).reshape(1)
 
 
 def _per_subset_min_cosines(positions: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
@@ -136,11 +170,32 @@ def annihilation_angle(
     n_hits: int | None = None,
     sizes: torch.Tensor | None = None,
     energies: torch.Tensor | None = None,
+    null_table: dict | None = None,
 ) -> torch.Tensor:
-    # ``energies`` (per-hit deposited energy, shape matching ``positions``:
-    # (B, N) for the sized path) is threaded through so the two-photon joint
-    # angle/energy constraint can gate candidate pairs. It is currently a
-    # no-op pass-through (Phase 0); the returned cosine is unchanged.
+    # Pure-geometry back-to-back statistic: the global minimum pairwise cosine
+    # over all inter-hit displacement vectors. ``energies`` is accepted for call
+    # compatibility but UNUSED — energy belongs to delta_E, and the old soft
+    # 1022 keV penalty (now removed) double-counted it AND, via the arm-ordering
+    # pool, leaked energy into a feature that should be geometry only.
+    #
+    # When ``null_table`` is provided the raw min-cos is converted to its
+    # left-tail percentile under the matched-``n_hits`` null (see
+    # ``normalize_min_cos``); otherwise the raw cosine is returned (back-compat).
+    raw = _annihilation_min_cos(positions, n_hits=n_hits, sizes=sizes)
+
+    if null_table is None:
+        return raw
+    if n_hits is None:
+        n_hits = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
+    return normalize_min_cos(raw, n_hits, null_table)
+
+
+def _annihilation_min_cos(
+    positions: torch.Tensor,
+    n_hits: int | None = None,
+    sizes: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Raw global minimum pairwise inter-hit cosine (no energy, no normalization)."""
     if sizes is not None:
         if positions.ndim != 3 or sizes.ndim != 1:
             raise ValueError(
@@ -161,31 +216,7 @@ def annihilation_angle(
                 outputs.append(positions.new_tensor(float("nan")).reshape(1))
                 continue
             group_positions = positions[group, :size_int, :]
-            if energies is not None:
-                # Soft Gaussian energy penalty (seed #2): keep EVERY subset
-                # eligible (no recall cliff like the hard gate of iter 1) but
-                # add a per-subset penalty to its back-to-back cosine. A subset
-                # whose total deposited energy ΣE is consistent with a full
-                # ~1022 keV annihilation pays ~0; one far off-energy pays up to
-                # ANNI_LAMBDA, nudging it UP (less back-to-back / more
-                # background-like) so a random Compton coincidence that merely
-                # looks back-to-back is less likely to win the per-event min.
-                group_energies = energies[group, :size_int]
-                total_E = group_energies.sum(dim=1)  # (Bg,)
-                cosines = _per_subset_min_cosines(group_positions)  # (Bg,)
-                penalty = ANNI_LAMBDA * (
-                    1.0 - torch.exp(-((total_E - ANNI_TOTAL_KEV) ** 2) / (2.0 * ANNI_SIGMA_E ** 2))
-                )
-                # Penalised cosine stays in the calibrated [-1, 1] range
-                # (clamp guards the rare off-energy subset already near +1).
-                penalised = (cosines + penalty).clamp(max=1.0)
-                finite_group = penalised[torch.isfinite(penalised)]
-                if finite_group.numel() == 0:
-                    outputs.append(positions.new_tensor(float("nan")).reshape(1))
-                    continue
-                outputs.append(finite_group.amin().reshape(1))
-                continue
-            outputs.append(annihilation_angle(group_positions, n_hits=size_int))
+            outputs.append(_annihilation_min_cos(group_positions, n_hits=size_int))
 
         stacked = torch.stack(outputs).flatten()
         finite = stacked[torch.isfinite(stacked)]
