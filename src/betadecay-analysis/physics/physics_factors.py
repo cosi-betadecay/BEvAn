@@ -1,7 +1,6 @@
 import numpy as _np
 import omegaconf
 import torch
-from mathematics.geometry import theta_geo, theta_kin
 from tqdm import tqdm
 
 ############################################
@@ -352,6 +351,58 @@ def _annihilation_min_cos(
 ############################################
 
 
+# m_e c^2 (keV): the β⁺ hypothesis incoming-photon energy for the kinematic angle.
+ARM_ELECTRON_MASS_KEV = 511.0
+
+
+def _per_subset_arm(positions: torch.Tensor, energies: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
+    """Vertex-anchored, source-independent Compton-consistency (ARM), per subset.
+
+    The far-field source direction does not exist for volume-distributed
+    activation, so the incoming direction is reconstructed PER EVENT: for every
+    (vertex v, first-scatter i, second-scatter j) triple of hits, the geometric
+    scatter angle at i is ``θ_geo = ∠(P_i − P_v, P_j − P_i)`` and the kinematic
+    angle is the Compton angle for a 511 keV photon depositing ``E_i`` at the
+    first scatter (E_out = ΣE − E_i). ARM is the smallest ``|θ_geo − θ_kin|`` over
+    all triples — the most Compton-consistent emission→scatter→scatter reading the
+    hits admit. Fully blind: only hit positions/energies, the 511 keV hypothesis,
+    and a min over observable triples — no truth, no source direction.
+
+    Args:
+        positions: ``(B, n, 3)`` hit positions for B subsets of size n.
+        energies: ``(B, n)`` per-hit deposited energy.
+
+    Returns:
+        ``(B,)`` ARM (radians); ``+inf`` where n < 3 or no valid triple exists.
+    """
+    B, n, _ = positions.shape
+    if n < 3:
+        return positions.new_full((B,), float("inf"))
+
+    tot = energies.sum(dim=1)  # (B,)
+    deltas = positions[:, None, :, :] - positions[:, :, None, :]  # (B, a, b, 3) = P_b − P_a
+    D = deltas / torch.linalg.norm(deltas, dim=-1, keepdim=True).clamp_min(eps)
+    cos_geo = torch.einsum("bvid,bijd->bvij", D, D).clamp(-1.0, 1.0)  # ∠(v→i, i→j)
+    theta_geo = torch.arccos(cos_geo)  # (B, v, i, j)
+
+    e_out = tot[:, None] - energies  # (B, i): outgoing energy after first scatter
+    valid_i = e_out > eps
+    cos_kin = 1.0 - ARM_ELECTRON_MASS_KEV * (1.0 / e_out.clamp_min(eps) - 1.0 / ARM_ELECTRON_MASS_KEV)
+    theta_kin = torch.arccos(cos_kin.clamp(-1.0, 1.0))  # (B, i)
+
+    arm_vals = (theta_geo - theta_kin[:, None, :, None]).abs()  # (B, v, i, j)
+
+    idx = torch.arange(n, device=positions.device)
+    distinct = (
+        (idx[:, None, None] != idx[None, :, None])
+        & (idx[None, :, None] != idx[None, None, :])
+        & (idx[:, None, None] != idx[None, None, :])
+    )  # (v, i, j) all distinct
+    bad = ~distinct[None] | ~valid_i[:, None, :, None] | ~torch.isfinite(arm_vals)
+    arm_vals = arm_vals.masked_fill(bad, float("inf"))
+    return arm_vals.amin(dim=(1, 2, 3))  # (B,)
+
+
 def arm(
     energies: torch.Tensor,
     positions: torch.Tensor,
@@ -359,7 +410,15 @@ def arm(
     reconstructed_unit_vector,
     sizes: torch.Tensor | None = None,
 ) -> torch.Tensor:
+    """Per-event vertex-anchored Compton-consistency score over the subset pool.
 
+    Replaces the far-field ARM (which assumed a single source direction — invalid
+    for volume-distributed activation, where it discriminates at chance). ``cfg``
+    and ``reconstructed_unit_vector`` are accepted for call compatibility but
+    UNUSED. Returns the per-event best (lowest) ARM, or NaN when no subset has a
+    valid >=3-hit triple. Note: needs >=3 hits, so 2-hit events get NaN here and
+    fall to the ΔE-only bucket.
+    """
     if sizes is not None:
         if energies.ndim != 2 or positions.ndim != 3 or sizes.ndim != 1:
             raise ValueError(
@@ -375,18 +434,16 @@ def arm(
         outputs = []
         for size in torch.unique(sizes, sorted=True):
             size_int = int(size.item())
-            group = sizes == size
-            if size_int < 2:
+            if size_int < 3:
                 outputs.append(positions.new_tensor(float("nan")).reshape(1))
                 continue
-            outputs.append(
-                arm(
-                    energies[group, :size_int],
-                    positions[group, :size_int, :],
-                    cfg,
-                    reconstructed_unit_vector,
-                )
-            )
+            group = sizes == size
+            score = _per_subset_arm(positions[group, :size_int, :], energies[group, :size_int])
+            finite = score[torch.isfinite(score)]
+            if finite.numel() == 0:
+                outputs.append(positions.new_tensor(float("nan")).reshape(1))
+                continue
+            outputs.append(finite.amin().reshape(1))
 
         stacked = torch.stack(outputs).flatten()
         finite = stacked[torch.isfinite(stacked)]
@@ -394,15 +451,11 @@ def arm(
             return positions.new_tensor(float("nan")).reshape(1)
         return finite.amin().reshape(1)
 
-    n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
-    if n_pos < 2:
-        return positions.new_tensor(float("nan")).reshape(1)
-
-    arm_value = torch.min(
-        torch.abs(theta_geo(positions, cfg, reconstructed_unit_vector)[0] - theta_kin(energies, cfg)[0])
-    )
-
-    return arm_value.reshape(1)
+    P = positions if positions.ndim == 3 else positions.unsqueeze(0)
+    E = energies if energies.ndim == 2 else energies.unsqueeze(0)
+    score = _per_subset_arm(P, E)
+    finite = score[torch.isfinite(score)]
+    return finite.amin().reshape(1) if finite.numel() else positions.new_tensor(float("nan")).reshape(1)
 
 
 ############################################
