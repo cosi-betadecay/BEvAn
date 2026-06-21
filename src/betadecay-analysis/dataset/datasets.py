@@ -1,3 +1,4 @@
+import math
 from typing import Any
 
 import omegaconf
@@ -7,6 +8,30 @@ from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.physics_factors import annihilation_angle, arm, delta_E
 from tqdm import tqdm
+
+# Hit-multiplicity buckets, keyed by which features are physically available.
+# An event is routed by what event processing actually produced (feature
+# availability), NOT raw GetNHTs(), so it always lands in a bucket whose model
+# uses only features the event possesses:
+#   1 -> delta_E only            (no >=2-hit subset)
+#   2 -> delta_E + ARM           (>=2-hit subset, no usable back-to-back)
+#   3 -> delta_E + ARM + anni    (usable back-to-back hypothesis)
+BUCKETS = (1, 2, 3)
+_FEATURES = ("delta_E", "arm", "anni")
+_CLASSES = ("bdecay", "bg")
+
+
+def _feature_bucket(d_arm: float, d_anni: float) -> int:
+    """Route an event by which geometry features came out finite.
+
+    anni finite => 3 (it implies arm/delta_E finite too); else arm finite => 2;
+    else 1. delta_E is finite for any valid event, so it anchors bucket 1.
+    """
+    if math.isfinite(d_anni):
+        return 3
+    if math.isfinite(d_arm):
+        return 2
+    return 1
 
 
 class Datasets:
@@ -27,20 +52,10 @@ class Datasets:
         self.eval_percentage = 0.2
 
     def compute_event_features(self, cfg, ref_energy, reader_sim, reader_tra, reconstructed_unit_vector):
-        ground_truths = []
-
-        # Lists beta decay
-        bdecay_list_delta_E = []
-        bdecay_list_annihilation_angle = []
-        bdecay_list_arm = []
-        # Lists bg
-        bg_list_delta_E = []
-        bg_list_annihilation_angle = []
-        bg_list_arm = []
-        # Lists general
-        gen_list_delta_E = []
-        gen_list_annihilation_angle = []
-        gen_list_arm = []
+        # data[class][bucket][feature] -> list of per-event floats. The class and
+        # bucket are decided together, per event, so the label and the bucket
+        # routing can never desync (they are co-located by construction).
+        data = {cls: {b: {f: [] for f in _FEATURES} for b in BUCKETS} for cls in _CLASSES}
 
         for event_sim in tqdm(
             iter(lambda: reader_sim.GetNextEvent(), None),
@@ -53,165 +68,53 @@ class Datasets:
             if n_hits == 0:
                 continue
 
-            gt = ground_truth_bdecay(event_sim, ref_energy)
-            ground_truths.append(gt)
+            cls = "bdecay" if ground_truth_bdecay(event_sim, ref_energy) else "bg"
 
             energies, positions, sizes = event_data_processing(event_sim)
             if energies is None or positions is None or sizes is None:
-                gen_list_delta_E.append(float("nan"))
-                gen_list_annihilation_angle.append(float("nan"))
-                gen_list_arm.append(float("nan"))
-                if gt:
-                    bdecay_list_delta_E.append(float("nan"))
-                    bdecay_list_annihilation_angle.append(float("nan"))
-                    bdecay_list_arm.append(float("nan"))
-                else:
-                    bg_list_delta_E.append(float("nan"))
-                    bg_list_annihilation_angle.append(float("nan"))
-                    bg_list_arm.append(float("nan"))
+                # Invalid processing -> no usable feature; park in bucket 1 with
+                # NaN so it counts toward the class prior but is excluded from the
+                # confusion matrix (NaN ratio) downstream.
+                for f in _FEATURES:
+                    data[cls][1][f].append(float("nan"))
                 continue
 
-            _delta_E = delta_E(energies, sizes=sizes)
-            _annihilation_angle = annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies)
-            _arm = arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes)
+            _delta_E = float(delta_E(energies, sizes=sizes))
+            _anni = float(annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies))
+            _arm = float(arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes))
 
-            gen_list_delta_E.append(_delta_E)
-            gen_list_annihilation_angle.append(_annihilation_angle)
-            gen_list_arm.append(_arm)
-
-            if gt:
-                bdecay_list_delta_E.append(_delta_E)
-                bdecay_list_annihilation_angle.append(_annihilation_angle)
-                bdecay_list_arm.append(_arm)
-            else:
-                bg_list_delta_E.append(_delta_E)
-                bg_list_annihilation_angle.append(_annihilation_angle)
-                bg_list_arm.append(_arm)
+            b = _feature_bucket(_arm, _anni)
+            data[cls][b]["delta_E"].append(_delta_E)
+            data[cls][b]["arm"].append(_arm)
+            data[cls][b]["anni"].append(_anni)
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        # Ground truth
-        ground_truths = torch.tensor(ground_truths, dtype=torch.bool)
-        # Converting beta decay lists to tensors
-        bdecay_tensor_delta_E = torch.tensor(bdecay_list_delta_E, dtype=torch.float32)
-        bdecay_tensor_annihilation_angle = torch.tensor(bdecay_list_annihilation_angle, dtype=torch.float32)
-        bdecay_tensor_arm = torch.tensor(bdecay_list_arm, dtype=torch.float32)
-        # Converting bg lists to tensors
-        bg_tensor_delta_E = torch.tensor(bg_list_delta_E, dtype=torch.float32)
-        bg_tensor_annihilation_angle = torch.tensor(bg_list_annihilation_angle, dtype=torch.float32)
-        bg_tensor_arm = torch.tensor(bg_list_arm, dtype=torch.float32)
-        # Converting general lists to tensors
-        gen_tensor_delta_E = torch.tensor(gen_list_delta_E, dtype=torch.float32)
-        gen_tensor_annihilation_angle = torch.tensor(gen_list_annihilation_angle, dtype=torch.float32)
-        gen_tensor_arm = torch.tensor(gen_list_arm, dtype=torch.float32)
+        # Lists -> float32 tensors, same nested shape.
+        return {
+            cls: {
+                b: {f: torch.tensor(data[cls][b][f], dtype=torch.float32) for f in _FEATURES}
+                for b in BUCKETS
+            }
+            for cls in _CLASSES
+        }
 
-        combined_tensor_delta_E = torch.cat([bdecay_tensor_delta_E, bg_tensor_delta_E])
-        combined_tensor_annihilation_angle = torch.cat(
-            [bdecay_tensor_annihilation_angle, bg_tensor_annihilation_angle]
-        )
-        combined_tensor_arm = torch.cat([bdecay_tensor_arm, bg_tensor_arm])
-        return (
-            ground_truths,
-            bdecay_tensor_delta_E,
-            bdecay_tensor_annihilation_angle,
-            bdecay_tensor_arm,
-            bg_tensor_delta_E,
-            bg_tensor_annihilation_angle,
-            bg_tensor_arm,
-            gen_tensor_delta_E,
-            gen_tensor_annihilation_angle,
-            gen_tensor_arm,
-            combined_tensor_delta_E,
-            combined_tensor_annihilation_angle,
-            combined_tensor_arm,
-        )
-
-    def split_dataset(
-        self,
-        bdecay_tensor_delta_E,
-        bdecay_tensor_annihilation_angle,
-        bdecay_tensor_arm,
-        bg_tensor_delta_E,
-        bg_tensor_annihilation_angle,
-        bg_tensor_arm,
-    ):
+    def split_dataset(self, data):
+        """Split 80/20 within every (class, bucket) group independently, so each
+        bucket's model trains and evaluates on its own population."""
         generator = torch.Generator().manual_seed(42)
+        train = {cls: {b: {} for b in BUCKETS} for cls in _CLASSES}
+        evaluate = {cls: {b: {} for b in BUCKETS} for cls in _CLASSES}
 
-        n_bdecay = bdecay_tensor_delta_E.shape[0]
-        n_bg = bg_tensor_delta_E.shape[0]
+        for cls in _CLASSES:
+            for b in BUCKETS:
+                n = data[cls][b]["delta_E"].shape[0]
+                perm = torch.randperm(n, generator=generator)
+                n_train = int(n * self.train_percentage)
+                train_idx, eval_idx = perm[:n_train], perm[n_train:]
+                for f in _FEATURES:
+                    train[cls][b][f] = data[cls][b][f][train_idx]
+                    evaluate[cls][b][f] = data[cls][b][f][eval_idx]
 
-        bdecay_perm = torch.randperm(n_bdecay, generator=generator)
-        bg_perm = torch.randperm(n_bg, generator=generator)
-
-        n_bdecay_train = int(n_bdecay * self.train_percentage)
-        n_bg_train = int(n_bg * self.train_percentage)
-
-        bdecay_train_idx = bdecay_perm[:n_bdecay_train]
-        bdecay_eval_idx = bdecay_perm[n_bdecay_train:]
-        bg_train_idx = bg_perm[:n_bg_train]
-        bg_eval_idx = bg_perm[n_bg_train:]
-
-        bdecay_train_delta_E = bdecay_tensor_delta_E[bdecay_train_idx]
-        bdecay_train_annihilation_angle = bdecay_tensor_annihilation_angle[bdecay_train_idx]
-        bdecay_train_arm = bdecay_tensor_arm[bdecay_train_idx]
-        bdecay_eval_delta_E = bdecay_tensor_delta_E[bdecay_eval_idx]
-        bdecay_eval_annihilation_angle = bdecay_tensor_annihilation_angle[bdecay_eval_idx]
-        bdecay_eval_arm = bdecay_tensor_arm[bdecay_eval_idx]
-
-        bg_train_delta_E = bg_tensor_delta_E[bg_train_idx]
-        bg_train_annihilation_angle = bg_tensor_annihilation_angle[bg_train_idx]
-        bg_train_arm = bg_tensor_arm[bg_train_idx]
-        bg_eval_delta_E = bg_tensor_delta_E[bg_eval_idx]
-        bg_eval_annihilation_angle = bg_tensor_annihilation_angle[bg_eval_idx]
-        bg_eval_arm = bg_tensor_arm[bg_eval_idx]
-
-        combined_train_delta_E = torch.cat([bdecay_train_delta_E, bg_train_delta_E])
-        combined_train_annihilation_angle = torch.cat(
-            [bdecay_train_annihilation_angle, bg_train_annihilation_angle]
-        )
-        combined_train_arm = torch.cat([bdecay_train_arm, bg_train_arm])
-        combined_eval_delta_E = torch.cat([bdecay_eval_delta_E, bg_eval_delta_E])
-        combined_eval_annihilation_angle = torch.cat(
-            [bdecay_eval_annihilation_angle, bg_eval_annihilation_angle]
-        )
-        combined_eval_arm = torch.cat([bdecay_eval_arm, bg_eval_arm])
-
-        ground_truths_train = torch.cat(
-            [
-                torch.ones(bdecay_train_delta_E.shape[0], dtype=torch.bool),
-                torch.zeros(bg_train_delta_E.shape[0], dtype=torch.bool),
-            ]
-        )
-        ground_truths_eval = torch.cat(
-            [
-                torch.ones(bdecay_eval_delta_E.shape[0], dtype=torch.bool),
-                torch.zeros(bg_eval_delta_E.shape[0], dtype=torch.bool),
-            ]
-        )
-
-        trainer = (
-            ground_truths_train,
-            bdecay_train_delta_E,
-            bdecay_train_annihilation_angle,
-            bdecay_train_arm,
-            bg_train_delta_E,
-            bg_train_annihilation_angle,
-            bg_train_arm,
-            combined_train_delta_E,
-            combined_train_annihilation_angle,
-            combined_train_arm,
-        )
-        evaluator = (
-            ground_truths_eval,
-            bdecay_eval_delta_E,
-            bdecay_eval_annihilation_angle,
-            bdecay_eval_arm,
-            bg_eval_delta_E,
-            bg_eval_annihilation_angle,
-            bg_eval_arm,
-            combined_eval_delta_E,
-            combined_eval_annihilation_angle,
-            combined_eval_arm,
-        )
-        return trainer, evaluator
+        return train, evaluate

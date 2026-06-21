@@ -1,8 +1,7 @@
-from modeling.calculate_probablities import predict
-from modeling.matrix_calculations import (
-    lookup_density_values,
-    lookup_density_values_1d,
-)
+import torch
+from dataset.datasets import BUCKETS, _FEATURES
+from modeling.calculate_probablities import confusion_counts, log_confusion
+from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
 
 
 class Evaluator:
@@ -10,105 +9,55 @@ class Evaluator:
         self.trainer = trainer
 
     def evaluate(self, data, split_name: str = "eval"):
-        (
-            ground_truths,
-            bdecay_delta_E,
-            bdecay_annihilation_angle,
-            bdecay_arm,
-            bg_delta_E,
-            bg_annihilation_angle,
-            bg_arm,
-            combined_delta_E,
-            combined_annihilation_angle,
-            combined_arm,
-        ) = data
         t = self.trainer
-        double_count = bool(t.cfg.modeling.double_count_deltaE)
+        total = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
 
-        if double_count:
-            # Double-counting mode: look up the two 2D joints directly.
-            # P(ΔE, angle) and P(ΔE, ARM) — ΔE evidence will appear in both
-            # factors of the likelihood ratio.
-            p_beta_deltaE_angle = lookup_density_values(
-                combined_delta_E,
-                combined_annihilation_angle,
-                t.bdecay_joint_deltaE_angle,
-                t.deltaE_angle_bins,
-                t.angle_bins,
-            )
-            p_bg_deltaE_angle = lookup_density_values(
-                combined_delta_E,
-                combined_annihilation_angle,
-                t.bg_joint_deltaE_angle,
-                t.deltaE_angle_bins,
-                t.angle_bins,
-            )
-            p_beta_deltaE_arm = lookup_density_values(
-                combined_delta_E,
-                combined_arm,
-                t.bdecay_joint_deltaE_arm,
-                t.deltaE_arm_bins,
-                t.arm_bins,
-            )
-            p_bg_deltaE_arm = lookup_density_values(
-                combined_delta_E,
-                combined_arm,
-                t.bg_joint_deltaE_arm,
-                t.deltaE_arm_bins,
-                t.arm_bins,
-            )
-            predict(
-                ground_truths,
-                [
-                    (p_beta_deltaE_angle, p_bg_deltaE_angle),  # P(ΔE, angle)
-                    (p_beta_deltaE_arm, p_bg_deltaE_arm),  # P(ΔE, ARM)
-                ],
-                t.n_beta_decay,
-                t.n_bg,
-                split_name=split_name,
-            )
-            return
+        for b in BUCKETS:
+            counts = self._evaluate_bucket(data, b, t.models[b])
+            if counts is None:
+                continue
+            for k in total:
+                total[k] += counts[k]
+            # Per-bucket diagnostics (no confusion image to avoid clutter).
+            log_confusion(counts, split_name=f"{split_name}/n{b}", log_image=False)
 
-        p_beta_deltaE = lookup_density_values_1d(
-            combined_delta_E, t.bdecay_marginal_deltaE, t.deltaE_angle_bins
+        log_confusion(total, split_name=split_name)
+
+    def _evaluate_bucket(self, data, bucket, model):
+        bd, bg = data["bdecay"][bucket], data["bg"][bucket]
+        n_bd, n_bg = bd["delta_E"].numel(), bg["delta_E"].numel()
+        if n_bd + n_bg == 0:
+            return None
+
+        feats = {f: torch.cat([bd[f], bg[f]]) for f in _FEATURES}
+        ground_truths = torch.cat(
+            [torch.ones(n_bd, dtype=torch.bool), torch.zeros(n_bg, dtype=torch.bool)]
         )
-        p_bg_deltaE = lookup_density_values_1d(combined_delta_E, t.bg_marginal_deltaE, t.deltaE_angle_bins)
-        p_beta_angle = lookup_density_values(
-            combined_delta_E,
-            combined_annihilation_angle,
-            t.bdecay_cond_angle,
-            t.deltaE_angle_bins,
-            t.angle_bins,
-        )
-        p_bg_angle = lookup_density_values(
-            combined_delta_E,
-            combined_annihilation_angle,
-            t.bg_cond_angle,
-            t.deltaE_angle_bins,
-            t.angle_bins,
-        )
-        p_beta_arm = lookup_density_values(
-            combined_delta_E,
-            combined_arm,
-            t.bdecay_cond_arm,
-            t.deltaE_arm_bins,
-            t.arm_bins,
-        )
-        p_bg_arm = lookup_density_values(
-            combined_delta_E,
-            combined_arm,
-            t.bg_cond_arm,
-            t.deltaE_arm_bins,
-            t.arm_bins,
-        )
-        predict(
-            ground_truths,
-            [
-                (p_beta_deltaE, p_bg_deltaE),  # P(ΔE)
-                (p_beta_angle, p_bg_angle),  # P(angle | ΔE)
-                (p_beta_arm, p_bg_arm),  # P(ARM | ΔE)
-            ],
-            t.n_beta_decay,
-            t.n_bg,
-            split_name=split_name,
-        )
+
+        # Keep only events whose bucket-relevant features are finite (bucket 1 may
+        # hold invalid-processing events with NaN delta_E).
+        used = ["delta_E"] + (["arm"] if bucket >= 2 else []) + (["anni"] if bucket >= 3 else [])
+        valid = torch.ones(ground_truths.shape[0], dtype=torch.bool)
+        for f in used:
+            valid = valid & torch.isfinite(feats[f])
+        feats = {f: v[valid] for f, v in feats.items()}
+        ground_truths = ground_truths[valid]
+
+        terms = []
+        for spec in model["terms"]:
+            if spec["kind"] == "1d":
+                pb = lookup_density_values_1d(feats[spec["xfeat"]], spec["beta"], spec["x_bins"])
+                pg = lookup_density_values_1d(feats[spec["xfeat"]], spec["bg"], spec["x_bins"])
+            else:
+                pb = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["beta"], spec["x_bins"], spec["y_bins"]
+                )
+                pg = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["bg"], spec["x_bins"], spec["y_bins"]
+                )
+            terms.append((pb, pg))
+
+        counts = confusion_counts(ground_truths, terms, model["n_beta"], model["n_bg"])
+        # Count the features-not-finite events as excluded for transparency.
+        counts["excluded"] += int((~valid).sum().item())
+        return counts
