@@ -361,9 +361,9 @@ def _per_subset_arm(positions: torch.Tensor, energies: torch.Tensor, eps: float 
     The far-field source direction does not exist for volume-distributed
     activation, so the incoming direction is reconstructed PER EVENT: for every
     (vertex v, first-scatter i, second-scatter j) triple of hits, the geometric
-    scatter angle at i is ``θ_geo = ∠(P_i − P_v, P_j − P_i)`` and the kinematic
+    scatter angle at i is ``θ_geo = ∠(P_i - P_v, P_j - P_i)`` and the kinematic
     angle is the Compton angle for a 511 keV photon depositing ``E_i`` at the
-    first scatter (E_out = ΣE − E_i). ARM is the smallest ``|θ_geo − θ_kin|`` over
+    first scatter (E_out = ΣE - E_i). ARM is the smallest ``|θ_geo - θ_kin|`` over
     all triples — the most Compton-consistent emission→scatter→scatter reading the
     hits admit. Fully blind: only hit positions/energies, the 511 keV hypothesis,
     and a min over observable triples — no truth, no source direction.
@@ -380,7 +380,7 @@ def _per_subset_arm(positions: torch.Tensor, energies: torch.Tensor, eps: float 
         return positions.new_full((B,), float("inf"))
 
     tot = energies.sum(dim=1)  # (B,)
-    deltas = positions[:, None, :, :] - positions[:, :, None, :]  # (B, a, b, 3) = P_b − P_a
+    deltas = positions[:, None, :, :] - positions[:, :, None, :]  # (B, a, b, 3) = P_b - P_a
     D = deltas / torch.linalg.norm(deltas, dim=-1, keepdim=True).clamp_min(eps)
     cos_geo = torch.einsum("bvid,bijd->bvij", D, D).clamp(-1.0, 1.0)  # ∠(v→i, i→j)
     theta_geo = torch.arccos(cos_geo)  # (B, v, i, j)
@@ -456,6 +456,68 @@ def arm(
     score = _per_subset_arm(P, E)
     finite = score[torch.isfinite(score)]
     return finite.amin().reshape(1) if finite.numel() else positions.new_tensor(float("nan")).reshape(1)
+
+
+############################################
+# Compton scatter angle (2-hit)
+############################################
+
+
+def _pair_phi_kn(e2: torch.Tensor, eps: float = 1e-6):
+    """For (B, 2) hit energies, the Compton scatter angle φ and Klein-Nishina
+    weight of the kinematically-better ordering (MEGAlib's rule: of the valid
+    orderings, take the higher KN). ``φ = arccos(1 - m_e c² (1/E_out - 1/E_in))``
+    with E_in = ΣE, E_out = the absorbed (scattered-photon) hit. Returns
+    ``(phi, kn, valid)``; phi/kn are NaN where no ordering is kinematically valid.
+    Energy-only — no positions, fully blind.
+    """
+    Ea, Eb = e2[:, 0], e2[:, 1]
+    tot = (Ea + Eb).clamp_min(eps)
+
+    def one(absorb):  # absorb = E_out (scattered photon energy)
+        cos = 1.0 - ARM_ELECTRON_MASS_KEV * (1.0 / absorb.clamp_min(eps) - 1.0 / tot)
+        valid = (cos >= -1.0) & (cos <= 1.0) & (absorb > eps)
+        phi = torch.arccos(cos.clamp(-1.0, 1.0))
+        r = absorb / tot
+        kn = 0.5 * r * r * (r + 1.0 / r.clamp_min(eps) - torch.sin(phi) ** 2)
+        return phi, kn, valid
+
+    phi1, kn1, v1 = one(Eb)  # scatter Ea, absorb Eb
+    phi2, kn2, v2 = one(Ea)  # scatter Eb, absorb Ea
+    use1 = v1 & (~v2 | (kn1 >= kn2))
+    use2 = v2 & ~use1
+    nan = torch.full_like(phi1, float("nan"))
+    phi = torch.where(use1, phi1, torch.where(use2, phi2, nan))
+    kn = torch.where(use1, kn1, torch.where(use2, kn2, nan))
+    return phi, kn, (v1 | v2)
+
+
+def compton_phi(energies: torch.Tensor, sizes: torch.Tensor | None = None) -> torch.Tensor:
+    """Per-event 2-hit Compton scatter angle (radians) — the source-independent
+    Compton-physics handle for 2-hit events that ΔE (total energy) misses.
+
+    Computed from 2-hit subsets only; the event's value is the φ of the most
+    Compton-plausible (highest-KN) kinematically-valid pair. NaN when the event
+    has no valid 2-hit subset. Blind (energies + 511 keV hypothesis only).
+    """
+    if sizes is not None:
+        group = sizes == 2
+        if not bool(group.any()):
+            return energies.new_tensor(float("nan")).reshape(1)
+        phi, kn, valid = _pair_phi_kn(energies[group, :2])
+        if not bool(valid.any()):
+            return energies.new_tensor(float("nan")).reshape(1)
+        phi, kn = phi[valid], kn[valid]
+        return phi[torch.argmax(kn)].reshape(1)
+
+    e = energies if energies.ndim == 2 else energies.reshape(1, -1)
+    if e.shape[1] != 2:
+        return energies.new_tensor(float("nan")).reshape(1)
+    phi, kn, valid = _pair_phi_kn(e[:, :2])
+    if not bool(valid.any()):
+        return energies.new_tensor(float("nan")).reshape(1)
+    phi, kn = phi[valid], kn[valid]
+    return phi[torch.argmax(kn)].reshape(1)
 
 
 ############################################

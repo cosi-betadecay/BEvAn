@@ -34,9 +34,13 @@ class Evaluator:
             [torch.ones(n_bd, dtype=torch.bool), torch.zeros(n_bg, dtype=torch.bool)]
         )
 
-        # Keep only events whose bucket-relevant features are finite (bucket 1 may
-        # hold invalid-processing events with NaN delta_E).
-        used = ["delta_E"] + (["arm"] if bucket >= 2 else []) + (["anni"] if bucket >= 3 else [])
+        # Keep only events whose model-used features are finite (derive the used
+        # set from this bucket's terms, so it stays correct for any bucket layout).
+        used = set()
+        for spec in model["terms"]:
+            used.add(spec["xfeat"])
+            if spec["kind"] == "2d":
+                used.add(spec["yfeat"])
         valid = torch.ones(ground_truths.shape[0], dtype=torch.bool)
         for f in used:
             valid = valid & torch.isfinite(feats[f])
