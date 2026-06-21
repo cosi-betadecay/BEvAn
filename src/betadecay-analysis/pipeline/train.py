@@ -4,20 +4,12 @@ from modeling.matrix_calculations import build_density_matrix, build_density_mat
 
 from pipeline.eval import Evaluator
 
-# Per-bucket factor layout. Each bucket uses only the features physically
-# available to it; delta_E is double-counted in bucket 3 (it appears in both 2D
-# joints), which the campaign found load-bearing for recall.
 #   bucket 1: P(delta_E)                                   [1D]
 #   bucket 2: P(delta_E, ARM)                              [2D]
 #   bucket 3: P(delta_E, ARM) and P(delta_E, anni)         [2D x2]
 _JOINT_SMOOTHING = 0.5  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
-_MARGINAL_SMOOTHING = 1.0  # for the 1D delta_E marginal
-# Per-bucket bin resolution. The low-n buckets hold only a few hundred signal
-# events; a fine 25x25 grid leaves their signal density mostly smoothing (≈uniform),
-# so the correct ~27:1 background prior crushed borderline 2-hit signal (recall
-# 0.68). Coarse grids let those events actually shape the likelihood. n=3 is
-# signal-rich and stays fine.
-_N_BINS = {1: 25, 2: 10, 3: 25}
+_MARGINAL_SMOOTHING = 0.0  # for the 1D delta_E marginal
+_N_BINS = {1: 25, 2: 8, 3: 35}
 
 
 def _finite(*cols):
