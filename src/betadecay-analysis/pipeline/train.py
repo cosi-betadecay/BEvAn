@@ -26,7 +26,9 @@ class Trainer:
     def fit(self, train):
         # One independent model per hit-multiplicity bucket.
         self.models = {b: self._fit_bucket(train["bdecay"][b], train["bg"][b], b) for b in BUCKETS}
-        Evaluator(self).evaluate(train, split_name="train")
+        # Keep the train per-bucket confusion: it calibrates the class-conditional
+        # rates (eps, beta) the population correction applies to the eval selection.
+        self.train_eval = Evaluator(self).evaluate(train, split_name="train")
         return self
 
     def _fit_bucket(self, bd, bg, bucket):

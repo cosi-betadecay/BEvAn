@@ -1,5 +1,5 @@
 import torch
-from dataset.datasets import BUCKETS, _FEATURES
+from dataset.datasets import _FEATURES, BUCKETS
 from modeling.calculate_probablities import confusion_counts, log_confusion
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
 
@@ -11,17 +11,22 @@ class Evaluator:
     def evaluate(self, data, split_name: str = "eval"):
         t = self.trainer
         total = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
+        by_bucket = {}
 
         for b in BUCKETS:
             counts = self._evaluate_bucket(data, b, t.models[b])
             if counts is None:
                 continue
+            by_bucket[b] = counts
             for k in total:
                 total[k] += counts[k]
             # Per-bucket diagnostics (no confusion image to avoid clutter).
             log_confusion(counts, split_name=f"{split_name}/n{b}", log_image=False)
 
         log_confusion(total, split_name=split_name)
+        # Per-bucket confusion is returned so the population correction can
+        # calibrate class-conditional rates (train) and apply them (eval).
+        return {"by_bucket": by_bucket, "total": total}
 
     def _evaluate_bucket(self, data, bucket, model):
         bd, bg = data["bdecay"][bucket], data["bg"][bucket]

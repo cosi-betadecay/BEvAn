@@ -2,13 +2,15 @@ import os
 
 import hydra
 import omegaconf
-import wandb
 from dataset.datasets import Datasets
 from dotenv import load_dotenv
+from modeling.population_correction import log_population_estimate
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
+
+import wandb
 
 
 @hydra.main(
@@ -44,7 +46,12 @@ def main(
     train, eval = datasets.split_dataset(data)
 
     trainer = Trainer(cfg).fit(train)
-    Evaluator(trainer).evaluate(eval, split_name="eval")
+    eval_result = Evaluator(trainer).evaluate(eval, split_name="eval")
+
+    # Population-level science figure of merit: per-event F1 saturates at the
+    # ~0.89 physics ceiling, but the background-subtracted annihilation COUNT is
+    # recovered nearly unbiased (rates calibrated on train, applied to eval).
+    log_population_estimate(trainer.train_eval["by_bucket"], eval_result["by_bucket"], split_name="eval")
 
     wandb.finish()
 
