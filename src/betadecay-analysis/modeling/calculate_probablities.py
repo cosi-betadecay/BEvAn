@@ -9,21 +9,14 @@ from modeling.bayesian_annihilation import BayesianAnnihiliationModel
 def R(terms, eps: float = 1e-8) -> torch.Tensor:
     """Per-event likelihood ratio R = P(D|β) / P(D|bg).
 
-    ``terms`` is a list of ``(p_beta, p_bg)`` or ``(p_beta, p_bg, weight)`` density
-    lookups, one per feature factor. R is a WEIGHTED product in log space:
+    ``terms`` is a list of ``(p_beta, p_bg)`` density lookups, one per feature
+    factor. R is the naive-Bayes product over the factors, computed in log space:
 
-        log R = sum_i  weight_i * (log p_beta_i - log p_bg_i)
-
-    With every ``weight_i = 1`` (the default when a term omits it) this is the
-    plain naive-Bayes product. The per-feature weights (see ``pipeline.train._W``)
-    let factors be up/down-weighted -- e.g. dialing the delta_E double-count or
-    discounting the chance-level ARM term -- without changing the feature set.
+        log R = sum_i  (log p_beta_i - log p_bg_i)
     """
     log_r = torch.zeros_like(terms[0][0])
-    for term in terms:
-        p_beta, p_bg = term[0], term[1]
-        weight = term[2] if len(term) > 2 else 1.0
-        log_r = log_r + weight * (torch.log(p_beta + eps) - torch.log(p_bg + eps))
+    for p_beta, p_bg in terms:
+        log_r = log_r + torch.log(p_beta + eps) - torch.log(p_bg + eps)
     return torch.exp(log_r)
 
 
