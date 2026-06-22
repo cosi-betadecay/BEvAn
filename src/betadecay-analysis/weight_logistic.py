@@ -88,6 +88,36 @@ def _f1(c):
     return 2 * p * r / (p + r) if p + r else 0.0
 
 
+def _best_f1(score, y):
+    """Max pooled F1 over a swept global threshold, plus the confusion at that point.
+
+    This is the part that makes the weighting test FAIR. Logistic regression fixes
+    its threshold for likelihood (calibration), NOT for F1 -- so at its natural
+    threshold it can sit at a worse-recall operating point even when its *combination*
+    of the LLRs is as good as or better than naive. Sweeping the threshold for BOTH
+    the naive score and the logistic score isolates the COMBINATION (the weights)
+    from WHERE the cut sits. ``score`` is one pooled value per event across buckets."""
+    s = score.tolist()
+    order = sorted(range(len(s)), key=lambda i: s[i])
+    ys = [int(y[i]) for i in order]
+    P = sum(ys)
+    tp, fp, fn, tn = P, len(ys) - P, 0, 0   # threshold below all -> predict all signal
+    best, best_c = 0.0, (tp, fp, fn, tn)
+    for k in range(len(ys)):                # raise threshold past event k (ascending score)
+        if ys[k] == 1:
+            tp -= 1
+            fn += 1
+        else:
+            fp -= 1
+            tn += 1
+        prec = tp / (tp + fp) if tp + fp else 0.0
+        rec = tp / (tp + fn) if tp + fn else 0.0
+        f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
+        if f1 > best:
+            best, best_c = f1, (tp, fp, fn, tn)
+    return best, best_c
+
+
 @hydra.main(config_path="configs", config_name="config", version_base=None)
 def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
     wandb.init(project=cfg.project_names[0])
@@ -104,6 +134,11 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
 
     tot_champ = [0, 0, 0, 0]
     tot_log = [0, 0, 0, 0]
+    # Pooled per-event scores across buckets, so a single global threshold sweep can
+    # find best-F1 for each combination. Both are centered so threshold 0 = natural cut:
+    #   champion score = sum LLR + prior        (log posterior odds; champion cuts at 0)
+    #   logistic score = b + sum c_i * LLR      (the fitted logit;   natural cut at 0)
+    champ_scores, log_scores, all_y = [], [], []
     print("\nper-bucket optimal weights (logistic on the LLRs) vs naive Bayes:")
     for b in BUCKETS:
         m = trainer.models[b]
@@ -113,9 +148,14 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
             continue
         Xtr, ytr, prior = tr
         Xev, yev, _ = ev
-        champ = _conf(Xev.sum(dim=1) + prior, yev)          # w=1, b=prior (= R >= tau)
+        cs = Xev.sum(dim=1) + prior                         # w=1, b=prior (= R >= tau)
         w, bb = fit_logistic(Xtr, ytr)
-        logi = _conf(Xev @ w + bb, yev)
+        ls = Xev @ w + bb
+        champ = _conf(cs, yev)
+        logi = _conf(ls, yev)
+        champ_scores.append(cs)
+        log_scores.append(ls)
+        all_y.append(yev)
         for i in range(4):
             tot_champ[i] += champ[i]
             tot_log[i] += logi[i]
@@ -124,15 +164,34 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
               f"logistic w={[round(x, 2) for x in w.tolist()]} b={float(bb):+.2f}  "
               f"(terms {terms})")
 
-    print(f"\n  champion (naive Bayes)  eval F1 = {_f1(tot_champ):.4f}   {tuple(tot_champ)}  "
-          "<-- must be 0.8935 (LLR-reconstruction sanity check)")
-    print(f"  logistic (optimal lin)  eval F1 = {_f1(tot_log):.4f}   {tuple(tot_log)}")
-    delta = _f1(tot_log) - _f1(tot_champ)
+    cs = torch.cat(champ_scores)
+    ls = torch.cat(log_scores)
+    y = torch.cat(all_y)
+
+    # (1) Natural-threshold confusions -- champion MUST be 0.8935 (LLR-reconstruction
+    #     sanity). The logistic here sits at its likelihood-optimal cut, NOT its
+    #     F1-optimal cut, so a drop here is the THRESHOLD moving, not the weighting.
+    print("\n  -- at each model's natural threshold (logistic cut = likelihood, not F1) --")
+    print(f"  champion (naive Bayes)  eval F1 = {_f1(tot_champ):.4f}   {tuple(tot_champ)}  "
+          "<-- must be 0.8935 (sanity check)")
+    print(f"  logistic (natural cut)  eval F1 = {_f1(tot_log):.4f}   {tuple(tot_log)}")
+
+    # (2) THE FAIR TEST: best-F1 over a swept global threshold for BOTH combinations.
+    #     This isolates the WEIGHTING (how the LLRs are combined) from the operating
+    #     point. If logistic's better combination buys anything, it shows up HERE.
+    champ_best, champ_bc = _best_f1(cs, y)
+    log_best, log_bc = _best_f1(ls, y)
+    delta = log_best - champ_best
+    print("\n  -- best-F1 over a swept threshold (isolates WEIGHTING from the cut) --")
+    print(f"  champion combination  best-F1 = {champ_best:.4f}   {champ_bc}")
+    print(f"  logistic combination  best-F1 = {log_best:.4f}   {log_bc}")
     print(f"  delta = {delta:+.4f}  ->  "
-          + ("LOGISTIC WEIGHTING HELPS" if delta > 1e-4 else
-             "no gain: naive-Bayes weighting is optimal (weighting is exhausted)"))
+          + ("LOGISTIC WEIGHTING HELPS (a better LLR combination exists)" if delta > 1e-4 else
+             "no gain: naive-Bayes weighting is optimal -- R-weighting is exhausted"))
     wandb.log({"weight_logistic/champion_f1": _f1(tot_champ),
-               "weight_logistic/logistic_f1": _f1(tot_log)})
+               "weight_logistic/logistic_natural_f1": _f1(tot_log),
+               "weight_logistic/champion_best_f1": champ_best,
+               "weight_logistic/logistic_best_f1": log_best})
     wandb.finish()
 
 
