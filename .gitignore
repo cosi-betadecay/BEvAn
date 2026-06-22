@@ -10,8 +10,8 @@ wheels/
 .venv
 
 # Simulation output files
-Activation.sim
-Activation.tra
+*.sim
+*.tra
 
 # environment variables
 .env
