@@ -1,8 +1,16 @@
+import os
+
 import torch
 from dataset.datasets import BUCKETS
 from modeling.matrix_calculations import build_density_matrix, build_density_matrix_1d
 
 from pipeline.eval import Evaluator
+
+# Opt-in ablation: drop ARM's density factors entirely (routing unchanged, so the
+# bucket populations stay identical to the champion). ARM is chance-level for
+# volume-distributed activation, so this isolates whether its value helps at all:
+# bucket 2 -> P(delta_E); bucket 3 -> P(delta_E, anni) only.
+_NO_ARM = os.getenv("BETADECAY_NO_ARM", "0") == "1"
 
 #   bucket 1: P(delta_E)                                   [1D]
 #   bucket 2: P(delta_E, ARM)                              [2D]
@@ -49,9 +57,13 @@ class Trainer:
         if bucket == 1:
             self._add_1d(model, bd, bg, "delta_E", n_bins)
         elif bucket == 2:
-            self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+            if _NO_ARM:
+                self._add_1d(model, bd, bg, "delta_E", n_bins)
+            else:
+                self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
         else:  # bucket 3
-            self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+            if not _NO_ARM:
+                self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
             self._add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
         return model
 
