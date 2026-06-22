@@ -12,6 +12,14 @@ from pipeline.eval import Evaluator
 # bucket 2 -> P(delta_E); bucket 3 -> P(delta_E, anni) only.
 _NO_ARM = os.getenv("BETADECAY_NO_ARM", "0") == "1"
 
+# Opt-in: replace ARM's joint with an EXPLICIT second P(delta_E) term. Since ARM is
+# uninformative, P(delta_E, arm) ~ P(delta_E), so the arm joint is really a second
+# copy of the delta_E likelihood ratio. If this recovers the champion F1, ARM's
+# geometry contributes nothing and the gain is purely the delta_E double-count --
+# letting the physically-meaningless ARM be dropped for an honest explicit term.
+# bucket 2 -> P(delta_E); bucket 3 -> P(delta_E) + P(delta_E, anni).
+_ARM_AS_DELTAE = os.getenv("BETADECAY_ARM_AS_DELTAE", "0") == "1"
+
 #   bucket 1: P(delta_E)                                   [1D]
 #   bucket 2: P(delta_E, ARM)                              [2D]
 #   bucket 3: P(delta_E, ARM) and P(delta_E, anni)         [2D x2]
@@ -57,12 +65,16 @@ class Trainer:
         if bucket == 1:
             self._add_1d(model, bd, bg, "delta_E", n_bins)
         elif bucket == 2:
-            if _NO_ARM:
+            # ARM is uninformative in n2 (P(dE,arm) classifies identically to P(dE)),
+            # so both ablations collapse the joint to the delta_E marginal.
+            if _NO_ARM or _ARM_AS_DELTAE:
                 self._add_1d(model, bd, bg, "delta_E", n_bins)
             else:
                 self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
         else:  # bucket 3
-            if not _NO_ARM:
+            if _ARM_AS_DELTAE:
+                self._add_1d(model, bd, bg, "delta_E", n_bins)  # explicit delta_E double-count
+            elif not _NO_ARM:
                 self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
             self._add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
         return model
