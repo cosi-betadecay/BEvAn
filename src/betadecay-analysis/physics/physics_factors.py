@@ -1,10 +1,6 @@
-import itertools
-import os
-
 import numpy as _np
 import omegaconf
 import torch
-from mathematics.calculations import calculate_tolerance
 from mathematics.geometry import theta_geo, theta_kin
 from tqdm import tqdm
 
@@ -278,86 +274,17 @@ def _back_to_back_score(
     return finite.amin().reshape(1)
 
 
-# --- Single-photon + positron extension (opt-in, BETADECAY_EXTENDED_ANNI=1) ----
-# The back-to-back score only fires when BOTH 511 photons deposit (~29% of
-# annihilations). The other ~71% leave one 511 photon plus the positron's own
-# ionization deposit AT the annihilation vertex. This complementary hypothesis
-# fires on a 511-consistent subset (the photon) that has a CO-LOCATED extra
-# deposit next to it (the positron) -- structure a coincidental-511 background
-# event lacks. It returns a single annihilation-like score (NaN when absent), and
-# the event anni is the NaN-aware min of it and the back-to-back score.
-SP_D_CO = 1.5  # cm: co-location radius of the positron deposit to the 511 subset
-SP_E_POS_MIN = 60.0  # keV: minimum positron-like deposit (below = likely a stray hit)
-SP_SCORE = -0.85  # annihilation-like score (comparable to a strong back-to-back cosine)
-
-
-def _extended_anni_enabled() -> bool:
-    return os.getenv("BETADECAY_EXTENDED_ANNI", "0") == "1"
-
-
-def _nanmin2(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """NaN-aware min of two 1-element tensors (NaN where both are NaN)."""
-    stacked = torch.stack([a.reshape(1), b.reshape(1)])
-    finite = stacked[torch.isfinite(stacked)]
-    return (finite.amin() if finite.numel() else a.new_tensor(float("nan"))).reshape(1)
-
-
-def _single_photon_positron_score(positions: torch.Tensor, energies: torch.Tensor) -> torch.Tensor:
-    """Single-photon + positron annihilation signature from the RAW event hits.
-
-    Finds the best 511-consistent subset (the photon); if within detector
-    resolution of 511, looks for a hit OUTSIDE that subset, energetic enough to be
-    a positron deposit (> ``SP_E_POS_MIN``) and spatially co-located (< ``SP_D_CO``)
-    with one of the subset's hits (the annihilation vertex). Returns ``SP_SCORE``
-    when found (annihilation-like), else NaN. Raw hits only (not the combo pool),
-    so the positron hit -- which is by definition outside the photon subset -- is
-    visible.
-    """
-    P = positions.reshape(-1, 3)
-    E = energies.reshape(-1)
-    n = int(E.shape[0])
-    nan = E.new_tensor(float("nan")).reshape(1)
-    if n < 2:
-        return nan
-    e = E.tolist()
-    tol = calculate_tolerance()
-    best, best_idx = float("inf"), ()
-    for r in range(1, min(n + 1, 8)):
-        for c in itertools.combinations(range(n), r):
-            d = abs(sum(e[i] for i in c) - 511.0)
-            if d < best:
-                best, best_idx = d, c
-    if best >= tol or not best_idx:
-        return nan
-    sub = list(best_idx)
-    sub_pos = P[sub]
-    for k in range(n):
-        if k in best_idx or e[k] <= SP_E_POS_MIN:
-            continue
-        dmin = torch.linalg.norm(P[k] - sub_pos, dim=-1).min().item()
-        if dmin < SP_D_CO:
-            return E.new_tensor(SP_SCORE).reshape(1)
-    return nan
-
-
 def annihilation_angle(
     positions: torch.Tensor,
     n_hits: int | None = None,
     sizes: torch.Tensor | None = None,
     energies: torch.Tensor | None = None,
     null_table: dict | None = None,
-    raw_positions: torch.Tensor | None = None,
-    raw_energies: torch.Tensor | None = None,
 ) -> torch.Tensor:
     # PRODUCTION path: with per-hit energies, return the vertex-anchored
     # back-to-back annihilation score (geometry + single-photon energy gate).
     if energies is not None:
-        score = _back_to_back_score(positions, energies, sizes=sizes)
-        # Opt-in: fold in the single-photon+positron hypothesis from the raw hits.
-        if _extended_anni_enabled() and raw_positions is not None and raw_energies is not None:
-            sp = _single_photon_positron_score(raw_positions, raw_energies)
-            return _nanmin2(score, sp)
-        return score
+        return _back_to_back_score(positions, energies, sizes=sizes)
 
     # FALLBACK (no energies): pure-geometry min-cos, optionally null-normalized
     # to its left-tail percentile under the matched-``n_hits`` null.
