@@ -80,7 +80,7 @@ class Datasets:
                 continue
 
             _delta_E = float(delta_E(energies, sizes=sizes))
-            _anni = float(annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies))
+            _anni = float(annihilation_angle(positions, sizes=sizes, energies=energies))
             _arm = float(arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes))
 
             b = _feature_bucket(_arm, _anni)

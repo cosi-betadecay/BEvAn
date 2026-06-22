@@ -186,29 +186,3 @@ def tune_model_params(fit_data, val_data, mode="f1", lam=0.5, pop=24, generation
     result = cem.optimize(reward_fn, log=log)
     result["best_params"] = decode_model_params(result["best_vec"])
     return result
-
-
-# --- FEATURE params (applied by the caller before a feature recompute) ------
-# physics_factors module constants; monkey-patched by tune.py, never hand-edited.
-FEATURE_PARAM_SPACE = [
-    ("B2B_E_FLOOR", 480.0, 511.0, "float"),
-    ("B2B_SIGMA_E", 100.0, 400.0, "float"),
-    ("B2B_LAMBDA", 0.0, 1.0, "float"),
-]
-
-
-def decode_feature_params(vec) -> dict:
-    d = {}
-    for (name, lo, hi, _), v in zip(FEATURE_PARAM_SPACE, vec, strict=False):
-        d[name] = min(max(float(v), lo), hi)
-    return d
-
-
-def apply_feature_params(params: dict):
-    """Patch physics_factors module constants in place (returns the saved values
-    so the caller can restore them)."""
-    import physics.physics_factors as pf
-    saved = {k: getattr(pf, k) for k in params}
-    for k, v in params.items():
-        setattr(pf, k, v)
-    return saved

@@ -15,9 +15,9 @@ Env knobs:
     BETADECAY_TUNE_POP          CEM population per generation     (default 24)
     BETADECAY_TUNE_LAMBDA       bias weight for f1_minus_bias     (default 0.5)
 
-Feature-level params (B2B_*/ARM) are supported by pipeline.tuning
-(FEATURE_PARAM_SPACE / apply_feature_params) but require a feature recompute per
-trial; this entry point tunes the cheap model params on cached features first.
+This entry point tunes the cheap MODEL hyperparameters (per-bucket bins +
+smoothings) on features computed once; feature-level params (B2B_*/ARM) would
+require a feature recompute per trial and are not searched here.
 """
 import os
 
