@@ -34,13 +34,15 @@ from utils.reader_extraction import get_reader
 
 import wandb
 
-DEFAULT_PARAMS = {"n_bins": {1: 25, 2: 8, 3: 35}, "joint_smooth": 0.5, "marg_smooth": 0.0}
+DEFAULT_PARAMS = {"n_bins": {1: 25, 2: 8, 3: 35}, "joint_smooth": 0.5, "marg_smooth": 0.0,
+                  "weights": {"delta_E": 1.0, "arm": 1.0, "anni": 1.0}}
 
 
 def _apply(params):
     train_mod._N_BINS = dict(params["n_bins"])
     train_mod._JOINT_SMOOTHING = float(params["joint_smooth"])
     train_mod._MARGINAL_SMOOTHING = float(params["marg_smooth"])
+    train_mod._W = dict(params["weights"])
 
 
 def _eval_f1(cfg, train, evaluate, params, tag):

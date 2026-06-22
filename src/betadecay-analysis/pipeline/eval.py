@@ -60,7 +60,7 @@ class Evaluator:
                 pg = lookup_density_values(
                     feats[spec["xfeat"]], feats[spec["yfeat"]], spec["bg"], spec["x_bins"], spec["y_bins"]
                 )
-            terms.append((pb, pg))
+            terms.append((pb, pg, spec.get("weight", 1.0)))
 
         counts = confusion_counts(ground_truths, terms, model["n_beta"], model["n_bg"])
         # Count the features-not-finite events as excluded for transparency.

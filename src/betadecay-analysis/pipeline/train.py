@@ -1,3 +1,5 @@
+import os
+
 import torch
 from dataset.datasets import BUCKETS
 from modeling.matrix_calculations import build_density_matrix, build_density_matrix_1d
@@ -10,6 +12,18 @@ from pipeline.eval import Evaluator
 _JOINT_SMOOTHING = 0.5  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
 _MARGINAL_SMOOTHING = 0.0  # for the 1D delta_E marginal
 _N_BINS = {1: 25, 2: 8, 3: 35}
+
+# Per-feature exponents on each likelihood-ratio factor in R: the model is naive
+# Bayes (every term weight 1.0 = champion), but the terms are correlated and the
+# (delta_E, arm) joint is effectively a second delta_E copy, so the "right" weights
+# are unknown. These make them tunable. W_ARM directly controls the delta_E
+# double-count (0 = NO_ARM, 1 = champion); W_ANNI scales the two-photon term.
+# Default 1.0 everywhere => byte-identical champion. Tune on a val split, seal eval.
+_W = {
+    "delta_E": float(os.getenv("BETADECAY_W_DELTAE", "1.0")),
+    "arm": float(os.getenv("BETADECAY_W_ARM", "1.0")),
+    "anni": float(os.getenv("BETADECAY_W_ANNI", "1.0")),
+}
 
 
 def _finite(*cols):
@@ -68,7 +82,8 @@ class Trainer:
             bg[feat][_finite(bg[feat])], x_bins=x_bins, smoothing=_MARGINAL_SMOOTHING
         )
         model["terms"].append(
-            {"kind": "1d", "xfeat": feat, "x_bins": x_bins, "beta": beta, "bg": bgm}
+            {"kind": "1d", "xfeat": feat, "x_bins": x_bins, "beta": beta, "bg": bgm,
+             "weight": _W.get(feat, 1.0)}
         )
 
     def _add_2d(self, model, bd, bg, xfeat, yfeat, spacing_y, floor_y, n_bins):
@@ -104,5 +119,6 @@ class Trainer:
                 "y_bins": y_bins,
                 "beta": beta,
                 "bg": bgm,
+                "weight": _W.get(yfeat, 1.0),
             }
         )

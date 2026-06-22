@@ -71,16 +71,20 @@ def reward(fit_by_bucket: dict, val_by_bucket: dict, mode: str = "f1", lam: floa
 
 # --- environment: fit on fit-subset, evaluate on fit and val ---------------
 
-def lean_fit_eval(fit_data: dict, val_data: dict, n_bins: dict, joint_smooth: float, marg_smooth: float):
+def lean_fit_eval(fit_data: dict, val_data: dict, n_bins: dict, joint_smooth: float,
+                  marg_smooth: float, weights: dict | None = None):
     """Fit per-bucket models on ``fit_data`` with the given MODEL hyperparameters
     and return ``(fit_by_bucket, val_by_bucket)`` confusion dicts. Reuses the real
-    production fit/eval code by patching the three ``pipeline.train`` globals; the
-    patch is always restored. No wandb / no logging side effects."""
-    saved = (train_mod._N_BINS, train_mod._JOINT_SMOOTHING, train_mod._MARGINAL_SMOOTHING)
+    production fit/eval code by patching the ``pipeline.train`` globals (incl. the
+    per-feature R weights ``_W``); the patch is always restored. No side effects."""
+    saved = (train_mod._N_BINS, train_mod._JOINT_SMOOTHING, train_mod._MARGINAL_SMOOTHING,
+             dict(train_mod._W))
     try:
         train_mod._N_BINS = dict(n_bins)
         train_mod._JOINT_SMOOTHING = float(joint_smooth)
         train_mod._MARGINAL_SMOOTHING = float(marg_smooth)
+        if weights is not None:
+            train_mod._W = dict(weights)
         trainer = train_mod.Trainer(cfg=None)
         trainer.models = {
             b: trainer._fit_bucket(fit_data["bdecay"][b], fit_data["bg"][b], b) for b in BUCKETS
@@ -97,7 +101,8 @@ def lean_fit_eval(fit_data: dict, val_data: dict, n_bins: dict, joint_smooth: fl
                 val_by[b] = cv
         return fit_by, val_by
     finally:
-        train_mod._N_BINS, train_mod._JOINT_SMOOTHING, train_mod._MARGINAL_SMOOTHING = saved
+        (train_mod._N_BINS, train_mod._JOINT_SMOOTHING, train_mod._MARGINAL_SMOOTHING,
+         train_mod._W) = saved
 
 
 # --- parameter space (MODEL params) ----------------------------------------
@@ -108,6 +113,9 @@ MODEL_PARAM_SPACE = [
     ("n_bins_3", 10.0, 60.0, "int"),
     ("joint_smoothing", 0.0, 2.0, "float"),
     ("marginal_smoothing", 0.0, 1.0, "float"),
+    ("w_delta_E", 0.5, 3.0, "float"),  # per-feature R weights (1.0 = naive Bayes / champion)
+    ("w_arm", 0.0, 3.0, "float"),
+    ("w_anni", 0.0, 3.0, "float"),
 ]
 
 
@@ -116,11 +124,12 @@ def decode_model_params(vec) -> dict:
     d = {}
     for (name, lo, hi, kind), v in zip(MODEL_PARAM_SPACE, vec, strict=False):
         v = min(max(float(v), lo), hi)
-        d[name] = int(round(v)) if kind == "int" else v
+        d[name] = round(v) if kind == "int" else v
     return {
         "n_bins": {1: d["n_bins_1"], 2: d["n_bins_2"], 3: d["n_bins_3"]},
         "joint_smooth": d["joint_smoothing"],
         "marg_smooth": d["marginal_smoothing"],
+        "weights": {"delta_E": d["w_delta_E"], "arm": d["w_arm"], "anni": d["w_anni"]},
     }
 
 
@@ -141,7 +150,7 @@ class CEM:
         self.lo = torch.tensor([s[1] for s in space], dtype=torch.float64)
         self.hi = torch.tensor([s[2] for s in space], dtype=torch.float64)
         self.pop = pop
-        self.n_elite = max(2, int(round(pop * elite_frac)))
+        self.n_elite = max(2, round(pop * elite_frac))
         self.generations = generations
         self.gen = torch.Generator().manual_seed(seed)
         self.mean = (self.lo + self.hi) / 2.0
@@ -179,7 +188,8 @@ def tune_model_params(fit_data, val_data, mode="f1", lam=0.5, pop=24, generation
     decoded params and reward. Features are NOT recomputed (model-only search)."""
     def reward_fn(vec):
         p = decode_model_params(vec)
-        fit_by, val_by = lean_fit_eval(fit_data, val_data, p["n_bins"], p["joint_smooth"], p["marg_smooth"])
+        fit_by, val_by = lean_fit_eval(fit_data, val_data, p["n_bins"], p["joint_smooth"],
+                                       p["marg_smooth"], p["weights"])
         return reward(fit_by, val_by, mode=mode, lam=lam)
 
     cem = CEM(MODEL_PARAM_SPACE, pop=pop, generations=generations, seed=seed)
