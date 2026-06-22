@@ -65,6 +65,7 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
     generations = int(os.getenv("BETADECAY_TUNE_GENERATIONS", "20"))
     pop = int(os.getenv("BETADECAY_TUNE_POP", "24"))
     lam = float(os.getenv("BETADECAY_TUNE_LAMBDA", "0.5"))
+    weights_only = os.getenv("BETADECAY_TUNE_WEIGHTS_ONLY", "0") == "1"
     ref_energy = 511.0
 
     imager = FarFieldImager(
@@ -81,7 +82,8 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
     train, evaluate = datasets.split_dataset(data)
     fit, val = datasets.split_dataset(train)
 
-    print(f"\nCEM tuning: reward={reward_mode} pop={pop} generations={generations}")
+    print(f"\nCEM tuning: reward={reward_mode} pop={pop} generations={generations} "
+          f"{'WEIGHTS-ONLY (bins fixed at champion)' if weights_only else 'full (bins+smoothing+weights)'}")
 
     def _log(h):
         print(f"  gen {h['gen']:02d}: best={h['best_r']:.4f}  gen_best={h['gen_best']:.4f}  "
@@ -90,7 +92,7 @@ def main(cfg: omegaconf.dictconfig.DictConfig) -> None:
                    "tune/gen_mean": h["gen_mean"], "tune/generation": h["gen"]})
 
     res = tune_model_params(fit, val, mode=reward_mode, lam=lam, pop=pop,
-                            generations=generations, log=_log)
+                            generations=generations, log=_log, weights_only=weights_only)
     tuned = res["best_params"]
     print(f"\nBest val reward ({reward_mode}) = {res['best_reward']:.4f}  params={tuned}")
 

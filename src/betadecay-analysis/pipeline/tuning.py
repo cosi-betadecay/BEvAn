@@ -183,16 +183,40 @@ class CEM:
         return {"best_vec": best_vec, "best_reward": best_r, "history": history}
 
 
-def tune_model_params(fit_data, val_data, mode="f1", lam=0.5, pop=24, generations=25, seed=0, log=None):
-    """Run CEM over the MODEL hyperparameters on cached features. Returns the best
-    decoded params and reward. Features are NOT recomputed (model-only search)."""
+# Weights-only search: the 3 R weights, with bins/smoothing FIXED at champion.
+# Isolates the weighting hypothesis from bin/smoothing drift + reduces overfitting
+# (3 dims instead of 8) on the small val split.
+WEIGHT_PARAM_SPACE = [
+    ("w_delta_E", 0.5, 3.0, "float"),
+    ("w_arm", 0.0, 3.0, "float"),
+    ("w_anni", 0.0, 3.0, "float"),
+]
+
+
+def decode_weight_params(vec) -> dict:
+    bounds = [p[1:3] for p in WEIGHT_PARAM_SPACE]
+    w = [min(max(float(v), lo), hi) for v, (lo, hi) in zip(vec, bounds, strict=False)]
+    return {
+        "n_bins": {1: 25, 2: 8, 3: 35}, "joint_smooth": 0.5, "marg_smooth": 0.0,  # champion
+        "weights": {"delta_E": w[0], "arm": w[1], "anni": w[2]},
+    }
+
+
+def tune_model_params(fit_data, val_data, mode="f1", lam=0.5, pop=24, generations=25,
+                      seed=0, log=None, weights_only=False):
+    """Run CEM on cached features (no feature recompute). With ``weights_only`` the
+    search is the 3 R weights with bins/smoothing fixed at champion; otherwise the
+    full bins+smoothing+weights space. Returns the best decoded params and reward."""
+    space = WEIGHT_PARAM_SPACE if weights_only else MODEL_PARAM_SPACE
+    decode = decode_weight_params if weights_only else decode_model_params
+
     def reward_fn(vec):
-        p = decode_model_params(vec)
+        p = decode(vec)
         fit_by, val_by = lean_fit_eval(fit_data, val_data, p["n_bins"], p["joint_smooth"],
                                        p["marg_smooth"], p["weights"])
         return reward(fit_by, val_by, mode=mode, lam=lam)
 
-    cem = CEM(MODEL_PARAM_SPACE, pop=pop, generations=generations, seed=seed)
+    cem = CEM(space, pop=pop, generations=generations, seed=seed)
     result = cem.optimize(reward_fn, log=log)
-    result["best_params"] = decode_model_params(result["best_vec"])
+    result["best_params"] = decode(result["best_vec"])
     return result
