@@ -1,4 +1,5 @@
 import math
+import os
 from typing import Any
 
 import omegaconf
@@ -80,7 +81,33 @@ class Datasets:
                 continue
 
             _delta_E = float(delta_E(energies, sizes=sizes))
-            _anni = float(annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies))
+            # Opt-in single-photon+positron extension (BETADECAY_EXTENDED_ANNI=1):
+            # pass the raw event hits so annihilation_angle can see the positron
+            # deposit (which lies outside the 511 photon subset). Default path is
+            # byte-identical to the champion.
+            if os.getenv("BETADECAY_EXTENDED_ANNI", "0") == "1":
+                raw_e = torch.tensor(
+                    [event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)], dtype=torch.float32
+                )
+                raw_p = torch.tensor(
+                    [
+                        (
+                            event_sim.GetHTAt(i).GetPosition().X(),
+                            event_sim.GetHTAt(i).GetPosition().Y(),
+                            event_sim.GetHTAt(i).GetPosition().Z(),
+                        )
+                        for i in range(n_hits)
+                    ],
+                    dtype=torch.float32,
+                )
+                _anni = float(
+                    annihilation_angle(
+                        positions, n_hits=n_hits, sizes=sizes, energies=energies,
+                        raw_positions=raw_p, raw_energies=raw_e,
+                    )
+                )
+            else:
+                _anni = float(annihilation_angle(positions, n_hits=n_hits, sizes=sizes, energies=energies))
             _arm = float(arm(energies, positions, cfg, reconstructed_unit_vector, sizes=sizes))
 
             b = _feature_bucket(_arm, _anni)
