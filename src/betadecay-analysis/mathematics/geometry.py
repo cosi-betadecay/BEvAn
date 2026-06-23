@@ -5,6 +5,19 @@ def theta_geo(
     positions: torch.Tensor,
     reconstructed_unit_vector: torch.Tensor,
 ) -> torch.Tensor:
+    """Geometric Compton scatter angle at the first interaction, in radians.
+
+    The angle between the reconstructed incoming photon direction
+    (``reconstructed_unit_vector``) and the first scatter leg (first hit ->
+    second hit), per subset.
+
+    Args:
+        positions: ``(B, n, 3)`` hit positions (or ``(n, 3)`` for one subset).
+        reconstructed_unit_vector: Incoming source direction, ``(3,)`` or ``(B, 3)``.
+
+    Returns:
+        Scatter angle in radians, shape ``(B,)``.
+    """
     pos = positions if positions.ndim == 3 else positions.unsqueeze(0)
     x0 = pos[:, 0, :]  # (B, 3)
     x1 = pos[:, 1, :]  # (B, 3)
@@ -23,6 +36,18 @@ def theta_geo(
 
 
 def theta_kin(energies: torch.Tensor) -> torch.Tensor:
+    """Kinematic Compton scatter angle under the 511 keV hypothesis, in radians.
+
+    Inverts the Compton formula with the incoming photon fixed at the electron
+    rest mass (511 keV) and ``E_2`` the energy deposited after the first hit.
+    Disagreement with :func:`theta_geo` flags non-511 keV (background) photons.
+
+    Args:
+        energies: ``(B, n)`` per-hit energies (or ``(n,)`` for one subset).
+
+    Returns:
+        Scatter angle in radians, shape ``(B,)``.
+    """
     # β⁺ hypothesis: the incoming photon is a 511 keV annihilation photon, so
     # E_1 is fixed at the electron rest mass rather than reconstructed from the
     # measured total deposit. This turns ARM into a 511-keV consistency test:

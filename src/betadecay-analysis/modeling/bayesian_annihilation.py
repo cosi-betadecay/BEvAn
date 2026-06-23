@@ -46,9 +46,11 @@ class BayesianAnnihiliationModel:
         return self.n_bg / (self.n_beta_decay + self.n_bg)
 
     def data_given_beta_decay_probability(self) -> torch.Tensor:
+        """Normalized likelihood P(D | β⁺) from the per-event ratio, ``R / (R + 1)``."""
         return self.ratio / (self.ratio + 1)
 
     def data_given_background_probability(self) -> torch.Tensor:
+        """Normalized likelihood P(D | bg) from the per-event ratio, ``1 / (R + 1)``."""
         return 1 / (self.ratio + 1)
 
     def beta_decay_given_data_probability(self) -> torch.Tensor:

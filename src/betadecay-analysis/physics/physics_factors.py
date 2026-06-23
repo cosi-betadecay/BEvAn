@@ -9,6 +9,21 @@ from mathematics.geometry import theta_geo, theta_kin
 def per_subset_back_to_back(
     positions: torch.Tensor, energies: torch.Tensor, eps: float = 1e-12
 ) -> torch.Tensor:
+    """Vertex-anchored back-to-back annihilation score, one value per subset.
+
+    For each hit taken as the annihilation vertex, scores how anti-parallel the
+    two most-opposed arms are (cosine ~ -1 for a real pair), gated on the
+    two-arm energy clearing a single-photon floor and penalized toward the
+    1022 keV two-photon target. The subset's score is the best (lowest) vertex.
+
+    Args:
+        positions: ``(B, n, 3)`` hit positions for B subsets of size n.
+        energies: ``(B, n)`` per-hit deposited energy.
+        eps: Norm floor when normalizing arm directions.
+
+    Returns:
+        ``(B,)`` scores; ``+inf`` where no vertex passes the gate or ``n < 3``.
+    """
     B2B_E_FLOOR = 511.0 - 3.0 * (2.25 / 2.355)  # ~508 keV: a single Compton photon
     B2B_E_TARGET = 1022.0  # two fully-absorbed 511 keV photons
     B2B_SIGMA_E = 250.0  # deficit-tolerant energy scale (partial deposits dominate)
@@ -41,6 +56,20 @@ def annihilation_angle(
     energies: torch.Tensor,
     sizes: torch.Tensor,
 ) -> torch.Tensor:
+    """Per-event back-to-back annihilation feature, pooled over the subset sizes.
+
+    Groups subsets by size, scores each size-``>= 3`` group with
+    :func:`per_subset_back_to_back`, and returns the per-event best (lowest =
+    most annihilation-like), or NaN when no subset qualifies.
+
+    Args:
+        positions: ``(B, N, 3)`` padded hit positions.
+        energies: ``(B, N)`` padded per-hit energies.
+        sizes: ``(B,)`` true subset size per row.
+
+    Returns:
+        The single best score as a ``(1,)`` tensor (NaN if none qualify).
+    """
     outputs = []
     for size in torch.unique(sizes, sorted=True):
         size_int = int(size.item())
@@ -88,6 +117,21 @@ def arm(
     reconstructed_unit_vector: torch.Tensor,
     sizes: torch.Tensor,
 ) -> torch.Tensor:
+    """Per-event Angular Resolution Measure, pooled over the subset sizes.
+
+    Groups subsets by size and returns the smallest ``|theta_geo - theta_kin|``
+    (via :func:`arm_fixed_size`) across all sizes ``>= 2``, or NaN when none
+    qualify.
+
+    Args:
+        energies: ``(B, N)`` padded per-hit energies.
+        positions: ``(B, N, 3)`` padded hit positions.
+        reconstructed_unit_vector: Source direction passed through to ``theta_geo``.
+        sizes: ``(B,)`` true subset size per row.
+
+    Returns:
+        The single best ARM as a ``(1,)`` tensor (NaN if none qualify).
+    """
     outputs = []
     for size in torch.unique(sizes, sorted=True):
         size_int = int(size.item())
@@ -119,6 +163,18 @@ def delta_E(
     energies: torch.Tensor,
     sizes: torch.Tensor,
 ) -> torch.Tensor:
+    """Per-event energy feature: minimum ``|summed subset energy - 511 keV|``.
+
+    Sums each subset's valid (non-padding) hit energies and returns the
+    smallest absolute deviation from 511 keV over all subsets.
+
+    Args:
+        energies: ``(B, N)`` padded per-hit energies.
+        sizes: ``(B,)`` true subset size per row (selects the valid entries).
+
+    Returns:
+        The smallest deviation as a ``(1,)`` tensor.
+    """
     seq = torch.arange(energies.shape[1], device=energies.device).unsqueeze(0)
     valid = seq < sizes.unsqueeze(1)
     E = torch.where(valid, energies, torch.zeros_like(energies)).sum(dim=1)

@@ -24,17 +24,41 @@ class Trainer:
         self.marginal_smoothing = marginal_smoothing  # for the 1D delta_E marginal
 
     def fit(self, train: dict[str, dict[int, dict[str, torch.Tensor]]]) -> "Trainer":
+        """Fit one independent density model per hit-multiplicity bucket.
+
+        Args:
+            train: Nested per-class, per-bucket training feature dict.
+
+        Returns:
+            ``self``, with ``models`` populated (one model per bucket).
+        """
         # One independent model per hit-multiplicity bucket.
         self.models = {b: self.fit_bucket(train["bdecay"][b], train["bg"][b], b) for b in BUCKETS}
         return self
 
     def finite(self, *cols: torch.Tensor) -> torch.Tensor:
+        """Boolean mask of positions that are finite across all given feature columns."""
         mask = torch.ones_like(cols[0], dtype=torch.bool)
         for c in cols:
             mask = mask & torch.isfinite(c)
         return mask
 
     def fit_bucket(self, bd: dict[str, torch.Tensor], bg: dict[str, torch.Tensor], bucket: int) -> dict:
+        """Build the density terms and class prior for one bucket.
+
+        Priors use the full per-bucket class counts (incl. NaN-feature events);
+        densities are estimated from finite values only. Bucket 1 gets a 1D
+        delta_E term, bucket 2 a 2D (delta_E, ARM) term, and bucket 3 adds a 2D
+        (delta_E, anni) term. An empty class yields a prior-only model.
+
+        Args:
+            bd: β-decay per-feature tensors for this bucket.
+            bg: Background per-feature tensors for this bucket.
+            bucket: Hit-multiplicity bucket (1, 2, or 3).
+
+        Returns:
+            Dict with ``n_beta``, ``n_bg``, and ``terms``.
+        """
         n_beta = int(bd["delta_E"].numel())
         n_bg = int(bg["delta_E"].numel())
         model = {"n_beta": n_beta, "n_bg": n_bg, "terms": []}
@@ -59,6 +83,18 @@ class Trainer:
         feat: str,
         n_bins: int,
     ) -> None:
+        """Append a 1D density term over ``feat`` to ``model`` (in place).
+
+        Bins are built from the pooled finite values; per-class densities use
+        the marginal smoothing. No-op if no finite values exist.
+
+        Args:
+            model: Model dict whose ``terms`` list is appended to.
+            bd: β-decay per-feature tensors.
+            bg: Background per-feature tensors.
+            feat: Feature name to histogram.
+            n_bins: Number of bins.
+        """
         comb = torch.cat([bd[feat], bg[feat]])
         comb = comb[self.finite(comb)]
         if comb.numel() == 0:
@@ -83,6 +119,21 @@ class Trainer:
         floor_y: float | None,
         n_bins: int,
     ) -> None:
+        """Append a 2D density term over ``(xfeat, yfeat)`` to ``model`` (in place).
+
+        Bins are built from the pooled finite pairs; per-class densities use the
+        joint smoothing. No-op if no finite pairs exist.
+
+        Args:
+            model: Model dict whose ``terms`` list is appended to.
+            bd: β-decay per-feature tensors.
+            bg: Background per-feature tensors.
+            xfeat: First (x-axis) feature name; x is log-spaced.
+            yfeat: Second (y-axis) feature name.
+            spacing_y: Y-axis bin spacing, ``"log"`` or ``"linear"``.
+            floor_y: Log-floor for the y-axis (ignored when linear).
+            n_bins: Number of bins per axis.
+        """
         cx = torch.cat([bd[xfeat], bg[xfeat]])
         cy = torch.cat([bd[yfeat], bg[yfeat]])
         m = self.finite(cx, cy)

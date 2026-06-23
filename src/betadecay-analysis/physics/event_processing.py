@@ -7,6 +7,20 @@ from utils.megalib_types import MSimEvent
 def event_data_processing(
     event_sim: MSimEvent,
 ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+    """Expand one simulated event into per-hit-subset energy and position tensors.
+
+    Enumerates hit subsets up to size 7 (Boggs & Jean 2000), orders each by
+    Compton-kinematic-discrepancy consistency, and pads them to a fixed width
+    with a NaN sentinel row so downstream gathers stay rectangular.
+
+    Args:
+        event_sim: A MEGAlib simulated event with measured hits.
+
+    Returns:
+        ``(energies, positions, sizes)`` shaped ``(n_combo, max_r)``,
+        ``(n_combo, max_r, 3)``, and ``(n_combo,)``; or ``(None, None, None)``
+        for a hitless event.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_hits = event_sim.GetNHTs()
 
@@ -43,6 +57,7 @@ def event_data_processing(
     CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo - cosφ_kin) <= this
 
     def unit(a: list[float], b: list[float]) -> tuple[float, float, float] | None:
+        """Unit vector from point ``a`` to point ``b``, or None if they coincide."""
         v = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
         n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
         if n < 1e-9:
@@ -76,7 +91,13 @@ def event_data_processing(
         return sum(resids) / len(resids)
 
     def orderings(c: tuple[int, ...]) -> list[tuple[int, ...]]:
+        """Candidate hit orderings for subset ``c``, filtered by CKD consistency.
 
+        Size-2 subsets return the energy-ordered (E_1 >= E_2) pair; size 3-4
+        keep orderings whose mean CKD residual is within ``CKD_ORDER_MAX`` (or
+        the single most-consistent one if none qualify); larger subsets return
+        the input plus its energy-sorted ordering.
+        """
         r = len(c)
         if r < 2:
             return [c]

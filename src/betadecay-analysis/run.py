@@ -42,6 +42,7 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments: the geo/sim/tra file paths and the ``--wandb`` flag."""
     parser = argparse.ArgumentParser(description="Run β⁺ annihilation detection on one .sim/.tra dataset.")
     parser.add_argument(
         "--geo-file",

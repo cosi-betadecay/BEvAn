@@ -10,12 +10,32 @@ if TYPE_CHECKING:
 
 
 class Evaluator:
+    """
+    Evaluate a trained per-bucket model on a feature dataset. For each
+    hit-multiplicity bucket it builds the per-event likelihood-ratio terms, applies
+    the Bayesian decision rule to tally confusion counts, and (separately) pools the
+    prior-free log-likelihood ratio across buckets for threshold-independent metrics
+    such as AUC and best-F1.
+    """
+
     def __init__(self, trainer: "Trainer") -> None:
         self.trainer = trainer
 
     def evaluate(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], split_name: str = "eval"
     ) -> dict:
+        """Evaluate every bucket and return the pooled confusion counts.
+
+        Per-bucket counts are summed into a dataset total; both the per-bucket
+        and total counts are logged via :func:`log_confusion`.
+
+        Args:
+            data: Nested per-class, per-bucket feature dict for this split.
+            split_name: Metric namespace prefix for logging.
+
+        Returns:
+            The summed ``tp``/``fp``/``fn``/``tn``/``excluded`` counts.
+        """
         t = self.trainer
         total = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
 
@@ -35,6 +55,21 @@ class Evaluator:
     def prepare_terms(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], bucket: int, model: dict
     ) -> tuple[list[tuple[torch.Tensor, torch.Tensor]], torch.Tensor, torch.Tensor] | None:
+        """Shared per-bucket setup: features, finite mask, and per-term densities.
+
+        Concatenates the β and bg features for ``bucket``, drops events whose
+        bucket-relevant features are not finite, and looks up each model term's
+        ``(p_beta, p_bg)`` densities.
+
+        Args:
+            data: Nested per-class, per-bucket feature dict.
+            bucket: Hit-multiplicity bucket to prepare.
+            model: The bucket's fitted model (``terms`` plus prior counts).
+
+        Returns:
+            ``(terms, ground_truths, valid)`` where ``valid`` is the pre-filter
+            finite mask, or None for an empty bucket.
+        """
         bd, bg = data["bdecay"][bucket], data["bg"][bucket]
         n_bd, n_bg = bd["delta_E"].numel(), bg["delta_E"].numel()
         if n_bd + n_bg == 0:
@@ -68,6 +103,10 @@ class Evaluator:
     def evaluate_bucket(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], bucket: int, model: dict
     ) -> dict | None:
+        """Confusion counts for one bucket, non-finite-feature events excluded.
+
+        Returns None for an empty bucket.
+        """
         prepared = self.prepare_terms(data, bucket, model)
         if prepared is None:
             return None
@@ -81,6 +120,10 @@ class Evaluator:
     def bucket_log_ratio(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], bucket: int, model: dict
     ) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Prior-free per-event log-likelihood ratio and truths for one bucket.
+
+        Returns ``(log_r, ground_truths)``, or None for an empty bucket.
+        """
         prepared = self.prepare_terms(data, bucket, model)
         if prepared is None:
             return None
@@ -95,6 +138,11 @@ class Evaluator:
     def pooled_log_ratio(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]]
     ) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Concatenate the prior-free log-ratios and truths across all buckets.
+
+        Returns ``(log_r, ground_truths)`` over the whole dataset, or None if
+        every bucket is empty.
+        """
         log_rs, gts = [], []
         for b in BUCKETS:
             out = self.bucket_log_ratio(data, b, self.trainer.models[b])

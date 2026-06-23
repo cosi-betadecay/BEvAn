@@ -47,12 +47,15 @@ class SimHit:
 
 @dataclass
 class SimTextEvent:
+    """One parsed SE block: its event id, truth IA records, and measured hits."""
+
     event_id: int
     ias: list[SimIA] = field(default_factory=list)
     hits: list[SimHit] = field(default_factory=list)
 
 
 def parse_ia(line: str) -> SimIA:
+    """Parse one ``IA`` truth line into a :class:`SimIA`."""
     head, rest = line[3:].split(maxsplit=1)
     fields = rest.split(";")
     # fields: [0]=ID [1]=origin [2]=detector [3]=time [4..6]=x,y,z
@@ -70,6 +73,7 @@ def parse_ia(line: str) -> SimIA:
 
 
 def parse_ht(line: str) -> SimHit:
+    """Parse one ``HTsim`` measured-hit line into a :class:`SimHit`."""
     fields = line.split(maxsplit=1)[1].split(";")
     # fields: [0]=detector [1..3]=x,y,z [4]=energy [5]=time [6..]=origin IAs
     return SimHit(

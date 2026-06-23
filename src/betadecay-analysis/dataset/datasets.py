@@ -21,6 +21,15 @@ CLASSES = ("bdecay", "bg")
 
 
 class Datasets:
+    """
+    Build the per-event feature dataset for the β/bg classifier from a MEGAlib
+    simulation reader. Streams every event, labels it β-decay or background via the
+    ANNI ground truth, computes the three physics features (delta_E, ARM,
+    annihilation angle) over the event's hit subsets, and routes each event to a
+    hit-multiplicity bucket by which of those features it actually produced. Also
+    splits the assembled features into reproducible train/eval partitions.
+    """
+
     def __init__(
         self,
         reader_sim: MFileEventsSim,
@@ -31,6 +40,11 @@ class Datasets:
         self.train_percentage = 0.8
 
     def feature_bucket(self, d_arm: float, d_anni: float) -> int:
+        """Route an event to its feature bucket from which features are finite.
+
+        Returns 3 if the back-to-back annihilation score exists, 2 if only ARM
+        exists, else 1 (delta_E only).
+        """
         if math.isfinite(d_anni):
             return 3
         if math.isfinite(d_arm):
@@ -38,6 +52,16 @@ class Datasets:
         return 1
 
     def compute_event_features(self) -> dict[str, dict[int, dict[str, torch.Tensor]]]:
+        """Stream every event from the reader into per-class, per-bucket feature tensors.
+
+        Each event is labeled β-decay/bg, expanded into hit-subset energies and
+        positions, and reduced to its delta_E, ARM, and annihilation-angle
+        features. Events with no usable processing are parked in bucket 1 with
+        NaN so they still count toward the class prior but are excluded downstream.
+
+        Returns:
+            Nested dict ``data[class][bucket][feature]`` of per-event float tensors.
+        """
         # data[class][bucket][feature] -> list of per-event floats. The class and
         # bucket are decided together, per event, so the label and the bucket
         # routing can never desync (they are co-located by construction).
@@ -86,6 +110,16 @@ class Datasets:
         }
 
     def split_dataset(self, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> tuple[dict, dict]:
+        """Split each per-class, per-bucket feature tensor into train/eval partitions.
+
+        Uses a fixed seed and ``train_percentage`` so the split is reproducible.
+
+        Args:
+            data: Nested feature dict from :meth:`compute_event_features`.
+
+        Returns:
+            ``(train, evaluate)``, each mirroring the nested structure of ``data``.
+        """
         generator = torch.Generator().manual_seed(42)
         train = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
         evaluate = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
