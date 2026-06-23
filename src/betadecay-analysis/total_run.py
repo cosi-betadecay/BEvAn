@@ -1,4 +1,6 @@
+import csv
 import os
+from datetime import datetime
 from pathlib import Path
 
 import hydra
@@ -15,6 +17,21 @@ import wandb
 # Directory holding the {name}.sim / {name}.tra pairs, relative to the repo root
 # (hydra runs with chdir disabled, so the cwd is the invocation directory).
 DATA_DIR = Path("data")
+# Where per-run result CSVs are written (one timestamped file per total run).
+RESULTS_DIR = Path("results")
+
+
+def _metrics(counts: dict) -> dict:
+    """Derive precision/recall/FPR/F1 from raw confusion counts.
+
+    Matches the definitions in modeling.calculate_probablities.log_confusion.
+    """
+    tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
 
 
 def _geo_from_header(sim_file: Path) -> str:
@@ -58,8 +75,11 @@ def _discover_datasets() -> list[dict[str, str]]:
     return datasets
 
 
-def _run_one(cfg: omegaconf.dictconfig.DictConfig, ds: dict[str, str]) -> None:
-    """Run the exact run.py pipeline for a single (geo, sim, tra) dataset."""
+def _run_one(cfg: omegaconf.dictconfig.DictConfig, ds: dict[str, str]) -> dict:
+    """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
+
+    Returns the pooled confusion counts for each split, keyed by split name.
+    """
     wandb.init(project=cfg.project_names[0], name=ds["name"], reinit=True)
 
     imager = FarFieldImager(
@@ -80,9 +100,14 @@ def _run_one(cfg: omegaconf.dictconfig.DictConfig, ds: dict[str, str]) -> None:
     train, eval = datasets.split_dataset(data)
 
     trainer = Trainer(cfg).fit(train)
-    Evaluator(trainer).evaluate(eval, split_name="eval")
+    evaluator = Evaluator(trainer)
+    totals = {
+        "train": evaluator.evaluate(train, split_name="train"),
+        "eval": evaluator.evaluate(eval, split_name="eval"),
+    }
 
     wandb.finish()
+    return totals
 
 
 @hydra.main(
@@ -103,9 +128,31 @@ def main(
         raise RuntimeError(f"No .sim/.tra pairs found in {DATA_DIR.resolve()}")
 
     print(f"Found {len(datasets)} dataset(s): {', '.join(d['name'] for d in datasets)}")
+    rows = []
     for ds in datasets:
         print(f"\n{'=' * 60}\nRunning {ds['name']}\n  geo: {ds['geo_file']}\n  sim: {ds['sim_file']}\n  tra: {ds['tra_file']}\n{'=' * 60}")
-        _run_one(cfg, ds)
+        totals = _run_one(cfg, ds)
+        for split, counts in totals.items():
+            rows.append(
+                {
+                    "dataset": ds["name"],
+                    "split": split,
+                    "geo_file": ds["geo_file"],
+                    "sim_file": ds["sim_file"],
+                    "tra_file": ds["tra_file"],
+                    **{k: counts[k] for k in ("tp", "fp", "fn", "tn", "excluded")},
+                    **_metrics(counts),
+                }
+            )
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_path = RESULTS_DIR / f"{timestamp}.csv"
+    with out_path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"\nSaved results for {len(rows)} dataset(s) to {out_path.resolve()}")
 
 
 if __name__ == "__main__":
