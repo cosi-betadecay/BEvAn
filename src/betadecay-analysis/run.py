@@ -1,7 +1,6 @@
+import argparse
 import os
 
-import hydra
-import omegaconf
 from dataset.datasets import Datasets
 from dotenv import load_dotenv
 from physics.compton_cone_reconstruction import FarFieldImager
@@ -11,52 +10,56 @@ from utils.reader_extraction import get_reader
 
 import wandb
 
+PROJECT = "cosi-betadecay"
 
-@hydra.main(
-    config_path="configs",
-    config_name="config",
-    version_base=None,
-)
-def main(
-    cfg: omegaconf.dictconfig.DictConfig,
-) -> None:
-    """Run annihilation detection extraction.
 
-    Args:
-        cfg (omegaconf.dictconfig.DictConfig): Configuration object.
-    """
-    wandb.init(project=cfg.project_names[0])
+def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
+    """Run β⁺ annihilation detection on a single (geo, sim, tra) dataset."""
+    if use_wandb:
+        wandb.init(project=PROJECT)
 
     imager = FarFieldImager(
-        geometry_file=cfg.setup.geo_file,
+        geometry_file=geo_file,
         n_phi=360,
         n_theta=180,
         coordinate_system="spheric",
     )
-    n_events = imager.backproject_file(cfg.setup.tra_file)
-    print(f"Accumulated {n_events} Compton events from {cfg.setup.tra_file}")
+    n_events = imager.backproject_file(tra_file)
+    print(f"Accumulated {n_events} Compton events from {tra_file}")
     unit_vector = imager.peak_direction_cartesian()
 
-    ref_energy = 511.0
-    reader_sim, reader_tra = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
+    reader_sim = get_reader(geo_file, sim_file)
 
-    datasets = Datasets(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
-    data = datasets.compute_event_features(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
-    train, eval = datasets.split_dataset(data)
+    datasets = Datasets(reader_sim, unit_vector)
+    data = datasets.compute_event_features()
+    train, eval_data = datasets.split_dataset(data)
 
-    trainer = Trainer(cfg).fit(train)
-    Evaluator(trainer).evaluate(eval, split_name="eval")
+    trainer = Trainer().fit(train)
+    Evaluator(trainer).evaluate(eval_data, split_name="eval")
 
-    wandb.finish()
+    if use_wandb:
+        wandb.finish()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run β⁺ annihilation detection on one .sim/.tra dataset.")
+    parser.add_argument(
+        "--geo-file",
+        default="$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup",
+        help="MEGAlib geometry setup file",
+    )
+    parser.add_argument("--sim-file", default="data/SPILike.sim", help="MEGAlib .sim file (simulated events)")
+    parser.add_argument("--tra-file", default="data/SPILike.tra", help="MEGAlib .tra file (Compton events)")
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    wandb_api_key = os.getenv("WANDB_API_KEY")
-
-    if wandb_api_key is None:
-        raise RuntimeError("WANDB_API_KEY not found in .env")
-
-    wandb.login(key=wandb_api_key)
-
-    main()
+    args = parse_args()
+    if args.wandb:
+        load_dotenv()
+        wandb_api_key = os.getenv("WANDB_API_KEY")
+        if wandb_api_key is None:
+            raise RuntimeError("WANDB_API_KEY not found in .env")
+        wandb.login(key=wandb_api_key)
+    main(args.geo_file, args.sim_file, args.tra_file, args.wandb)

@@ -7,6 +7,7 @@ import numpy as np
 import ROOT as M
 import torch
 from tqdm import tqdm
+from utils.megalib_types import MPhysicalEvent
 
 # --------------------------------------------------------------------------- #
 # MEGAlib + wrapper setup (idempotent)
@@ -16,7 +17,7 @@ from tqdm import tqdm
 _MGLOBAL_INITIALIZED = False
 
 
-def _ensure_megalib_loaded() -> None:
+def ensure_megalib_loaded() -> None:
     """Load libMEGAlib into the ROOT interpreter. No-op if already loaded."""
     global _MGLOBAL_INITIALIZED
     if not hasattr(M, "MBackprojectionFarField"):
@@ -34,7 +35,7 @@ def _ensure_megalib_loaded() -> None:
 _WRAPPER_DECLARED = False
 
 
-def _declare_wrapper() -> None:
+def declare_wrapper() -> None:
     """Inline a C++ helper so we can call Backproject cleanly from Python.
 
     The native signature is
@@ -92,8 +93,8 @@ class FarFieldImager:
         phi_range: tuple[float, float] = (0.0, 2.0 * math.pi),
         theta_range: tuple[float, float] = (0.0, math.pi),
     ) -> None:
-        _ensure_megalib_loaded()
-        _declare_wrapper()
+        ensure_megalib_loaded()
+        declare_wrapper()
 
         self.n_phi = int(n_phi)
         self.n_theta = int(n_theta)
@@ -150,17 +151,13 @@ class FarFieldImager:
 
     # --- image management -------------------------------------------------- #
 
-    def reset(self) -> None:
-        """Zero the accumulated image."""
-        self.accumulated.zero_()
-
     def image_2d(self) -> torch.Tensor:
         """Accumulated image reshaped as ``(n_theta, n_phi)``."""
         return self.accumulated.reshape(self.n_theta, self.n_phi)
 
     # --- event ingestion --------------------------------------------------- #
 
-    def backproject_event(self, event) -> bool:
+    def backproject_event(self, event: MPhysicalEvent) -> bool:
         """Add one event's cone contribution to the accumulator.
 
         Returns True on success, False if the event was skipped
@@ -239,9 +236,3 @@ class FarFieldImager:
             ],
             dtype=torch.float64,
         )
-
-    # --- persistence ------------------------------------------------------- #
-
-    def save_image_numpy(self, path: str | Path) -> None:
-        """Save the accumulated image as ``.npy``."""
-        np.save(str(path), self.image_2d().cpu().numpy())

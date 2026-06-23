@@ -8,33 +8,21 @@ import wandb
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
 
 
-def R(terms, eps: float = 1e-8) -> torch.Tensor:
-    """Per-event likelihood ratio R = P(D|β) / P(D|bg).
-
-    ``terms`` is a list of ``(p_beta, p_bg)`` density lookups, one per feature
-    factor. R is the naive-Bayes product over the factors, computed in log space:
-
-        log R = sum_i  (log p_beta_i - log p_bg_i)
-    """
+def R(terms: list[tuple[torch.Tensor, torch.Tensor]], eps: float = 1e-8) -> torch.Tensor:
     log_r = torch.zeros_like(terms[0][0])
     for p_beta, p_bg in terms:
         log_r = log_r + torch.log(p_beta + eps) - torch.log(p_bg + eps)
     return torch.exp(log_r)
 
 
-def confusion_counts(ground_truths, terms, n_beta_decay: int, n_bg: int) -> dict:
-    """Classify and return raw confusion counts (no logging), for a single
-    bucket. ``terms`` may be empty (prior-only bucket), in which case the
-    likelihood ratio is 1 everywhere and the per-bucket class prior decides.
-
-    Returns ``{"tp","fp","fn","tn","excluded"}``. Events with a NaN ratio (e.g.
-    invalid/empty subsets) are excluded.
-    """
+def confusion_counts(
+    ground_truths: torch.Tensor,
+    terms: list[tuple[torch.Tensor, torch.Tensor]],
+    n_beta_decay: int,
+    n_bg: int,
+) -> dict:
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
-    if terms:
-        ratio = R(terms)
-    else:
-        ratio = torch.ones(ground_truths.shape[0])
+    ratio = R(terms) if terms else torch.ones(ground_truths.shape[0])
 
     predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
     valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
@@ -50,9 +38,7 @@ def confusion_counts(ground_truths, terms, n_beta_decay: int, n_bg: int) -> dict
     }
 
 
-def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True):
-    """Print + log a confusion-matrix summary from raw counts (the sum across
-    buckets, or one bucket's counts for diagnostics)."""
+def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True) -> None:
     tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
@@ -67,6 +53,10 @@ def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True
         f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, "
         f"F1 Score: {f1_score:.4f}, MCC: {mcc:.4f}"
     )
+
+    # Console output always happens; wandb logging only when a run is active.
+    if wandb.run is None:
+        return
 
     log = {
         f"{split_name}/TP": tp,

@@ -24,6 +24,9 @@ ignore = [
     "E501"    # Let formatter handle line length
 ]
 
+# Mathematical notation used intentionally in docstrings (not typos).
+allowed-confusables = ["×", "α", "σ", "−", "φ"]
+
 # Use preview lint rules (new recommended config name)
 explicit-preview-rules = true
 

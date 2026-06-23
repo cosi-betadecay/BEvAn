@@ -23,7 +23,7 @@ class BayesianAnnihiliationModel:
         ratio: torch.Tensor,
         n_beta_decay: int,
         n_bg: int,
-    ):
+    ) -> None:
         self.ratio = ratio
         # We should compute these two with other datasets
         self.n_beta_decay = n_beta_decay
@@ -71,7 +71,7 @@ class BayesianAnnihiliationModel:
         )
         return numerator / denominator
 
-    def background_given_data_probability(self) -> torch.Tensor | float:
+    def background_given_data_probability(self) -> torch.Tensor:
         """
         Compute the probability of a background event given the observed data.
 
@@ -91,7 +91,7 @@ class BayesianAnnihiliationModel:
         )
         return numerator / denominator
 
-    def inference(self) -> torch.Tensor | bool:
+    def inference(self) -> torch.Tensor:
         """
         Perform classification based on probabilities.
 

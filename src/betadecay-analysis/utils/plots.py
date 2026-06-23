@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from matplotlib.figure import Figure
 
 
-def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int):
+def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> Figure:
     """Plot and save a confusion matrix heatmap.
 
     Args:

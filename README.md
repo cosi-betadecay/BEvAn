@@ -83,8 +83,10 @@ pipeline produces a ground-truth label and a prediction, then compares the two.
 
 ## Repository layout
 
-- `src/betadecay-analysis/run.py`: Hydra + W&B entry point; calls
-  `annihilation_extractor`.
+- `src/betadecay-analysis/run.py`: CLI entry point for a single dataset
+  (`--geo-file`, `--sim-file`, `--tra-file`; optional `--wandb`).
+- `src/betadecay-analysis/total_run.py`: CLI entry point that runs every
+  `.sim`/`.tra` pair in `data/` and writes a results CSV (optional `--wandb`).
 - `src/betadecay-analysis/physics/annihilation_detection.py`: top-level
   pipeline — feature extraction, tensor assembly, density matrices, prediction.
 - `src/betadecay-analysis/physics/annihilation_detection_utils.py`: Zoglauer-style
@@ -102,9 +104,6 @@ pipeline produces a ground-truth label and a prediction, then compares the two.
   (`calculations.py`) and geometry helpers (`geometry.py`).
 - `src/betadecay-analysis/utils/`: ROOT reader setup, plots, and a synthetic
   event generator used by the tests.
-- `src/betadecay-analysis/configs/`: Hydra configs (`config.yaml`,
-  `wandb.yaml`, `likelihoods.yaml`) controlling setup paths, W&B project, and
-  ARM parameters.
 - `tests/tests_physics/`: pytest suite for the physics modules.
 - `scripts/generate_test_summary.py`: converts pytest JUnit output into a
   Markdown summary for documentation.
@@ -115,7 +114,7 @@ pipeline produces a ground-truth label and a prediction, then compares the two.
 
 - Python 3.10
 - MEGAlib + ROOT with `MEGALIB` set in your environment
-- W&B account and API key (required by the current scripts)
+- W&B account and API key (optional — only needed when running with `--wandb`)
 
 ## Setup
 
@@ -124,7 +123,7 @@ uv sync
 source .venv/bin/activate
 ```
 
-Create a `.env` file with your W&B key so the scripts can log runs:
+To enable W&B logging (pass `--wandb`), create a `.env` file with your key:
 
 ```text
 WANDB_API_KEY=your_key_here

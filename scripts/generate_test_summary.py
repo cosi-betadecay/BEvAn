@@ -9,15 +9,15 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-def _as_int(value: str | None) -> int:
+def as_int(value: str | None) -> int:
     return int(value) if value not in (None, "") else 0
 
 
-def _as_float(value: str | None) -> float:
+def as_float(value: str | None) -> float:
     return float(value) if value not in (None, "") else 0.0
 
 
-def _collect_testsuites(root: ET.Element) -> list[ET.Element]:
+def collect_testsuites(root: ET.Element) -> list[ET.Element]:
     if root.tag == "testsuite":
         return [root]
     if root.tag == "testsuites":
@@ -25,7 +25,7 @@ def _collect_testsuites(root: ET.Element) -> list[ET.Element]:
     raise ValueError(f"Unsupported JUnit root tag: {root.tag}")
 
 
-def _collect_failures(testsuites: list[ET.Element]) -> list[dict[str, str]]:
+def collect_failures(testsuites: list[ET.Element]) -> list[dict[str, str]]:
     failures: list[dict[str, str]] = []
 
     for suite in testsuites:
@@ -55,20 +55,20 @@ def _collect_failures(testsuites: list[ET.Element]) -> list[dict[str, str]]:
 def build_summary(xml_path: Path, environment: str) -> str:
     tree = ET.parse(xml_path)
     root = tree.getroot()
-    testsuites = _collect_testsuites(root)
+    testsuites = collect_testsuites(root)
 
-    total = sum(_as_int(suite.get("tests")) for suite in testsuites)
-    failures_count = sum(_as_int(suite.get("failures")) for suite in testsuites)
-    errors_count = sum(_as_int(suite.get("errors")) for suite in testsuites)
-    skipped_count = sum(_as_int(suite.get("skipped")) for suite in testsuites)
-    duration = sum(_as_float(suite.get("time")) for suite in testsuites)
+    total = sum(as_int(suite.get("tests")) for suite in testsuites)
+    failures_count = sum(as_int(suite.get("failures")) for suite in testsuites)
+    errors_count = sum(as_int(suite.get("errors")) for suite in testsuites)
+    skipped_count = sum(as_int(suite.get("skipped")) for suite in testsuites)
+    duration = sum(as_float(suite.get("time")) for suite in testsuites)
     passed = total - failures_count - errors_count - skipped_count
 
     timestamp = root.get("timestamp")
     if not timestamp and testsuites:
         timestamp = testsuites[0].get("timestamp")
 
-    failures = _collect_failures(testsuites)
+    failures = collect_failures(testsuites)
 
     lines = [
         "# Test Summary",
@@ -94,12 +94,12 @@ def build_summary(xml_path: Path, environment: str) -> str:
         lines.extend(["## Test Suites", ""])
         for suite in testsuites:
             suite_name = suite.get("name", "unnamed suite")
-            suite_total = _as_int(suite.get("tests"))
-            suite_failures = _as_int(suite.get("failures"))
-            suite_errors = _as_int(suite.get("errors"))
-            suite_skipped = _as_int(suite.get("skipped"))
+            suite_total = as_int(suite.get("tests"))
+            suite_failures = as_int(suite.get("failures"))
+            suite_errors = as_int(suite.get("errors"))
+            suite_skipped = as_int(suite.get("skipped"))
             suite_passed = suite_total - suite_failures - suite_errors - suite_skipped
-            suite_duration = _as_float(suite.get("time"))
+            suite_duration = as_float(suite.get("time"))
             lines.append(
                 f"- `{suite_name}`: {suite_passed} passed, {suite_failures} failed, "
                 f"{suite_errors} errors, {suite_skipped} skipped in {suite_duration:.3f}s"

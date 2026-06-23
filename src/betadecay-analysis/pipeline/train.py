@@ -2,74 +2,90 @@ import torch
 from dataset.datasets import BUCKETS
 from modeling.matrix_calculations import build_density_matrix, build_density_matrix_1d
 
-#   bucket 1: P(delta_E)                                   [1D]
-#   bucket 2: P(delta_E, ARM)                              [2D]
-#   bucket 3: P(delta_E, ARM) and P(delta_E, anni)         [2D x2]
-_JOINT_SMOOTHING = 0.5  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
-_MARGINAL_SMOOTHING = 0.0  # for the 1D delta_E marginal
-_N_BINS = {1: 25, 2: 8, 3: 35}
-
-
-def _finite(*cols):
-    mask = torch.ones_like(cols[0], dtype=torch.bool)
-    for c in cols:
-        mask = mask & torch.isfinite(c)
-    return mask
-
 
 class Trainer:
-    def __init__(self, cfg):
-        self.cfg = cfg
+    """
+    Train a per-bucket generative model for the β+/bg classification task. Each bucket
+    has a different set of features (bucket 1: delta_E, bucket 2: delta_E & ARM,
+    bucket 3: delta_E & ARM + delta_E & anni), so we build one independent model per bucket.
+    Each model consists of a set of density terms (1D or 2D) and a class prior. The density
+    terms are estimated from the training data using histogramming with Laplace smoothing.
+    The class prior is estimated from the full per-bucket class counts.
+    """
 
-    def fit(self, train):
+    def __init__(
+        self,
+        n_bins: dict[int, int] | None = None,
+        joint_smoothing: float = 0.5,
+        marginal_smoothing: float = 0.0,
+    ) -> None:
+        self.n_bins = n_bins if n_bins is not None else {1: 25, 2: 8, 3: 35}
+        self.joint_smoothing = joint_smoothing  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
+        self.marginal_smoothing = marginal_smoothing  # for the 1D delta_E marginal
+
+    def fit(self, train: dict[str, dict[int, dict[str, torch.Tensor]]]) -> "Trainer":
         # One independent model per hit-multiplicity bucket.
-        self.models = {b: self._fit_bucket(train["bdecay"][b], train["bg"][b], b) for b in BUCKETS}
+        self.models = {b: self.fit_bucket(train["bdecay"][b], train["bg"][b], b) for b in BUCKETS}
         return self
 
-    def _fit_bucket(self, bd, bg, bucket):
-        """Build the density terms + class prior for one bucket.
+    def finite(self, *cols: torch.Tensor) -> torch.Tensor:
+        mask = torch.ones_like(cols[0], dtype=torch.bool)
+        for c in cols:
+            mask = mask & torch.isfinite(c)
+        return mask
 
-        Returns ``{"n_beta", "n_bg", "terms"}`` where each term is a generic
-        spec the evaluator can look up without knowing the bucket layout. Priors
-        use the FULL per-bucket class counts (incl. NaN-feature events); the
-        densities are estimated from finite values only.
-        """
+    def fit_bucket(self, bd: dict[str, torch.Tensor], bg: dict[str, torch.Tensor], bucket: int) -> dict:
         n_beta = int(bd["delta_E"].numel())
         n_bg = int(bg["delta_E"].numel())
         model = {"n_beta": n_beta, "n_bg": n_bg, "terms": []}
         if n_beta == 0 or n_bg == 0:
             return model  # prior-only: cannot estimate class-conditional densities
 
-        n_bins = _N_BINS[bucket]
+        n_bins = self.n_bins[bucket]
         if bucket == 1:
-            self._add_1d(model, bd, bg, "delta_E", n_bins)
+            self.add_1d(model, bd, bg, "delta_E", n_bins)
         elif bucket == 2:
-            self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
         else:  # bucket 3
-            self._add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
-            self._add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+            self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
         return model
 
-    def _add_1d(self, model, bd, bg, feat, n_bins):
+    def add_1d(
+        self,
+        model: dict,
+        bd: dict[str, torch.Tensor],
+        bg: dict[str, torch.Tensor],
+        feat: str,
+        n_bins: int,
+    ) -> None:
         comb = torch.cat([bd[feat], bg[feat]])
-        comb = comb[_finite(comb)]
+        comb = comb[self.finite(comb)]
         if comb.numel() == 0:
             return  # no finite values to estimate from -> prior-only
         _, x_bins = build_density_matrix_1d(comb, n_bins_x=n_bins, spacing_x="log", log_x_floor=1e-3)
         beta, _ = build_density_matrix_1d(
-            bd[feat][_finite(bd[feat])], x_bins=x_bins, smoothing=_MARGINAL_SMOOTHING
+            bd[feat][self.finite(bd[feat])], x_bins=x_bins, smoothing=self.marginal_smoothing
         )
         bgm, _ = build_density_matrix_1d(
-            bg[feat][_finite(bg[feat])], x_bins=x_bins, smoothing=_MARGINAL_SMOOTHING
+            bg[feat][self.finite(bg[feat])], x_bins=x_bins, smoothing=self.marginal_smoothing
         )
-        model["terms"].append(
-            {"kind": "1d", "xfeat": feat, "x_bins": x_bins, "beta": beta, "bg": bgm}
-        )
+        model["terms"].append({"kind": "1d", "xfeat": feat, "x_bins": x_bins, "beta": beta, "bg": bgm})
 
-    def _add_2d(self, model, bd, bg, xfeat, yfeat, spacing_y, floor_y, n_bins):
+    def add_2d(
+        self,
+        model: dict,
+        bd: dict[str, torch.Tensor],
+        bg: dict[str, torch.Tensor],
+        xfeat: str,
+        yfeat: str,
+        spacing_y: str,
+        floor_y: float | None,
+        n_bins: int,
+    ) -> None:
         cx = torch.cat([bd[xfeat], bg[xfeat]])
         cy = torch.cat([bd[yfeat], bg[yfeat]])
-        m = _finite(cx, cy)
+        m = self.finite(cx, cy)
         if int(m.sum()) == 0:
             return  # no finite (x, y) pairs to estimate from -> prior-only
         _, x_bins, y_bins = build_density_matrix(
@@ -82,13 +98,13 @@ class Trainer:
             n_bins_x=n_bins,
             n_bins_y=n_bins,
         )
-        mb = _finite(bd[xfeat], bd[yfeat])
-        mg = _finite(bg[xfeat], bg[yfeat])
+        mb = self.finite(bd[xfeat], bd[yfeat])
+        mg = self.finite(bg[xfeat], bg[yfeat])
         beta, _, _ = build_density_matrix(
-            bd[xfeat][mb], bd[yfeat][mb], x_bins=x_bins, y_bins=y_bins, smoothing=_JOINT_SMOOTHING
+            bd[xfeat][mb], bd[yfeat][mb], x_bins=x_bins, y_bins=y_bins, smoothing=self.joint_smoothing
         )
         bgm, _, _ = build_density_matrix(
-            bg[xfeat][mg], bg[yfeat][mg], x_bins=x_bins, y_bins=y_bins, smoothing=_JOINT_SMOOTHING
+            bg[xfeat][mg], bg[yfeat][mg], x_bins=x_bins, y_bins=y_bins, smoothing=self.joint_smoothing
         )
         model["terms"].append(
             {
