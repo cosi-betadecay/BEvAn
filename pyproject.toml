@@ -1,11 +1,10 @@
 [project]
 name = "betadecay"
 version = "0.1.0"
-description = "Add your description here"
+description = "Physics-based likelihood classifier for β⁺ (511 keV) annihilation events in COSI simulations"
 readme = "README.md"
 requires-python = "==3.10.*"
 dependencies = [
-    "logging>=0.4.9.6",
     "numpy==1.26.4",
     "ruff>=0.12.11",
     "torch==2.1.2",
