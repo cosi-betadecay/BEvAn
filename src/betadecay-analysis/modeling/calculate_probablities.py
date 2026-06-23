@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 import torch
 from utils.plots import plot_confusion_matrix
@@ -56,11 +58,14 @@ def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    mcc_denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    mcc = (tp * tn - fp * fn) / mcc_denom if mcc_denom > 0 else 0.0
 
     print(f"{split_name} - NaN excluded: {counts.get('excluded', 0)}")
     print(f"{split_name} - TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
     print(
-        f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, F1 Score: {f1_score:.4f}"
+        f"{split_name} - Precision: {precision:.4f}, Recall: {recall:.4f}, FPR: {fpr:.4f}, "
+        f"F1 Score: {f1_score:.4f}, MCC: {mcc:.4f}"
     )
 
     log = {
