@@ -217,33 +217,3 @@ def lookup_density_values_1d(
     x_idx_full = x_idx_full.clamp(min=0, max=n_x - 1)
     values[finite] = matrix[x_idx_full[finite]]
     return values
-
-
-def conditional_from_joint(joint: torch.Tensor, axis: int = 0, eps: float = 1e-12) -> torch.Tensor:
-    """Convert a joint P(x, y) matrix into a conditional P(y | x) or P(x | y).
-
-    With ``axis=0`` (default) each row sums to 1.0 where the row has any mass
-    and to 0.0 where the row is completely empty. Use ``axis=1`` to normalize
-    columns instead.
-
-    Rationale: when the likelihood ratio multiplies P(ΔE, angle) · P(ΔE, arm)
-    as if the two sub-spaces were conditionally independent, ΔE is counted
-    twice. The fix is to multiply P(ΔE) · P(angle | ΔE) · P(arm | ΔE), which
-    requires this helper to turn the two pre-existing joints into conditionals.
-    """
-    if joint.ndim != 2:
-        raise ValueError(f"conditional_from_joint expects a 2D matrix, got shape {tuple(joint.shape)}")
-    if axis == 0:
-        row_sums = joint.sum(dim=1, keepdim=True)
-        safe = row_sums.clamp_min(eps)
-        cond = joint / safe
-        # Zero-out rows that were completely empty.
-        cond = torch.where(row_sums > 0, cond, torch.zeros_like(cond))
-        return cond
-    if axis == 1:
-        col_sums = joint.sum(dim=0, keepdim=True)
-        safe = col_sums.clamp_min(eps)
-        cond = joint / safe
-        cond = torch.where(col_sums > 0, cond, torch.zeros_like(cond))
-        return cond
-    raise ValueError(f"axis must be 0 or 1, got {axis}")

@@ -2,13 +2,14 @@ import os
 
 import hydra
 import omegaconf
-import wandb
 from dataset.datasets import Datasets
 from dotenv import load_dotenv
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
+
+import wandb
 
 
 @hydra.main(
@@ -40,36 +41,8 @@ def main(
     reader_sim, reader_tra = get_reader(cfg.setup.geo_file, cfg.setup.sim_file)
 
     datasets = Datasets(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
-    (
-        _ground_truths,
-        bdecay_tensor_delta_E,
-        bdecay_tensor_annihilation_angle,
-        bdecay_tensor_arm,
-        bdecay_tensor_lor,
-        bg_tensor_delta_E,
-        bg_tensor_annihilation_angle,
-        bg_tensor_arm,
-        bg_tensor_lor,
-        _gen_tensor_delta_E,
-        _gen_tensor_annihilation_angle,
-        _gen_tensor_arm,
-        _gen_tensor_lor,
-        _combined_tensor_delta_E,
-        _combined_tensor_annihilation_angle,
-        _combined_tensor_arm,
-        _combined_tensor_lor,
-    ) = datasets.compute_event_features(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
-
-    train, eval = datasets.split_dataset(
-        bdecay_tensor_delta_E,
-        bdecay_tensor_annihilation_angle,
-        bdecay_tensor_arm,
-        bdecay_tensor_lor,
-        bg_tensor_delta_E,
-        bg_tensor_annihilation_angle,
-        bg_tensor_arm,
-        bg_tensor_lor,
-    )
+    data = datasets.compute_event_features(cfg, ref_energy, reader_sim, reader_tra, unit_vector)
+    train, eval = datasets.split_dataset(data)
 
     trainer = Trainer(cfg).fit(train)
     Evaluator(trainer).evaluate(eval, split_name="eval")

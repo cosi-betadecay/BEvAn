@@ -4,20 +4,6 @@ defaults:
   - wandb
 
 setup:
-  geo_file: ${oc.env:MEGALIB}/resource/examples/geomega/special/Max.geo.setup
-  sim_file: data/Activation.sim
-  tra_file: data/Activation.tra
-
-modeling:
-  # When false (default), the likelihood ratio factors P(ΔE, angle, ARM) as
-  # P(ΔE) · P(angle|ΔE) · P(ARM|ΔE) so ΔE evidence is used once.
-  # When true, it multiplies the joints P(ΔE, angle) · P(ΔE, ARM) directly,
-  # which double-counts ΔE. Kept as a flag for A/B comparison.
-  double_count_deltaE: true
-
-  # When true, replace the fixed prior-odds decision rule (R >= n_bg/n_beta)
-  # with a cut tuned on the train split to maximize threshold_metric ('mcc' or
-  # 'f1'), then applied to eval. The prior-odds rule sacrifices the minority
-  # class; most missed signal sits at 1 < R < prior-odds.
-  tune_threshold: false
-  threshold_metric: mcc
+  geo_file: $(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup
+  sim_file: data/SPILike.sim
+  tra_file: data/SPILike.tra
