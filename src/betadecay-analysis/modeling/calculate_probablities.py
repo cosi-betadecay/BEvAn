@@ -2,10 +2,10 @@ import math
 
 import matplotlib.pyplot as plt
 import torch
-from utils.plots import plot_confusion_matrix
 
 import wandb
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
+from utils.plots import plot_confusion_matrix
 
 
 def R(terms: list[tuple[torch.Tensor, torch.Tensor]], eps: float = 1e-8) -> torch.Tensor:

@@ -1,6 +1,7 @@
 import itertools
 
 import torch
+
 from utils.megalib_types import MSimEvent
 
 

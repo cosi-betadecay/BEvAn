@@ -2,10 +2,11 @@ import math
 
 import ROOT as M
 import torch
+from tqdm import tqdm
+
 from physics.event_processing import event_data_processing
 from physics.ground_truths import ground_truth_bdecay
 from physics.physics_factors import annihilation_angle, arm, delta_E
-from tqdm import tqdm
 from utils.megalib_types import MFileEventsSim
 
 # Hit-multiplicity buckets, keyed by which features are physically available.
@@ -21,11 +22,11 @@ CLASSES = ("bdecay", "bg")
 
 
 class Datasets:
-    """
-    Build the per-event feature dataset for the β/bg classifier from a MEGAlib
-    simulation reader. Streams every event, labels it β-decay or background via the
-    ANNI ground truth, computes the three physics features (delta_E, ARM,
-    annihilation angle) over the event's hit subsets, and routes each event to a
+    """Build the per-event feature dataset for the β/bg classifier from a MEGAlib reader.
+
+    Streams every event, labels it β-decay or background via the ANNI ground
+    truth, computes the three physics features (delta_E, ARM, annihilation
+    angle) over the event's hit subsets, and routes each event to a
     hit-multiplicity bucket by which of those features it actually produced. Also
     splits the assembled features into reproducible train/eval partitions.
     """
@@ -35,6 +36,13 @@ class Datasets:
         reader_sim: MFileEventsSim,
         reconstructed_unit_vector: torch.Tensor,
     ) -> None:
+        """Bind the dataset builder to a simulation reader and source direction.
+
+        Args:
+            reader_sim: Open MEGAlib ``.sim`` event reader to stream events from.
+            reconstructed_unit_vector: Reconstructed source direction the ARM
+                feature is measured against.
+        """
         self.reader_sim = reader_sim
         self.reconstructed_unit_vector = reconstructed_unit_vector
         self.train_percentage = 0.8

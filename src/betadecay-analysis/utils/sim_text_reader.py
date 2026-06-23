@@ -106,10 +106,11 @@ def iter_sim_events(path: str) -> Iterator[SimTextEvent]:
 
 
 def event_is_bdecay(event: SimTextEvent, tolerance: float) -> bool:
-    """Replicates physics.ground_truths.ground_truth_bdecay on text records:
-    the event is signal iff some ANNI photon's direct secondaries deposit a
-    summed hit energy within ``tolerance`` of 511 keV. Each hit counts
-    once (first matching secondary), matching the production loop's break.
+    """Replicate physics.ground_truths.ground_truth_bdecay on text records.
+
+    The event is signal iff some ANNI photon's direct secondaries deposit a
+    summed hit energy within ``tolerance`` of 511 keV. Each hit counts once
+    (first matching secondary), matching the production loop's break.
     """
     for ia in event.ias:
         if ia.process != "ANNI":

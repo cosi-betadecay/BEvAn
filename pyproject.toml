@@ -22,24 +22,8 @@ dependencies = [
     "scipy>=1.15.3",
 ]
 
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-src = [".", "tests"]
-
-[tool.ruff.lint]
-# E/F/W: pycodestyle/pyflakes warnings; D: pydocstyle for docstrings; I: isort import order.
-select = ["E", "F", "W", "D", "I"]
-# Relax module/package docstring requirements; adjust as needed.
-ignore = ["D100", "D104"]
-per-file-ignores = { "tests/*" = ["D"] }
-
-[tool.ruff.lint.isort]
-known-first-party = ["physics", "mathematics", "utils", "experiments"]
-lines-after-imports = 1
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+# Ruff configuration lives in the standalone ruff.toml (it takes precedence
+# over any [tool.ruff] block here, so keeping it there avoids a silent override).
 
 [tool.setuptools]
 package-dir = { "" = "." }

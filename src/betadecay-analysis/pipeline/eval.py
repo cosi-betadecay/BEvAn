@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import torch
+
 from dataset.datasets import BUCKETS, FEATURES
 from modeling.calculate_probablities import confusion_counts, log_confusion
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
@@ -10,20 +11,24 @@ if TYPE_CHECKING:
 
 
 class Evaluator:
-    """
-    Evaluate a trained per-bucket model on a feature dataset. For each
-    hit-multiplicity bucket it builds the per-event likelihood-ratio terms, applies
-    the Bayesian decision rule to tally confusion counts, and (separately) pools the
-    prior-free log-likelihood ratio across buckets for threshold-independent metrics
-    such as AUC and best-F1.
+    """Evaluate a trained per-bucket model on a feature dataset.
+
+    For each hit-multiplicity bucket it builds the per-event likelihood-ratio
+    terms, applies the Bayesian decision rule to tally confusion counts, and
+    (separately) pools the prior-free log-likelihood ratio across buckets for
+    threshold-independent metrics such as AUC and best-F1.
     """
 
     def __init__(self, trainer: "Trainer") -> None:
+        """Bind the evaluator to a fitted trainer.
+
+        Args:
+            trainer: A fitted :class:`~pipeline.train.Trainer` providing the
+                per-bucket models used for scoring.
+        """
         self.trainer = trainer
 
-    def evaluate(
-        self, data: dict[str, dict[int, dict[str, torch.Tensor]]], split_name: str = "eval"
-    ) -> dict:
+    def evaluate(self, data: dict[str, dict[int, dict[str, torch.Tensor]]], split_name: str = "eval") -> dict:
         """Evaluate every bucket and return the pooled confusion counts.
 
         Per-bucket counts are summed into a dataset total; both the per-bucket

@@ -5,14 +5,14 @@ from datetime import datetime
 from pathlib import Path
 
 import torch
-from dataset.datasets import Datasets
 from dotenv import load_dotenv
+
+import wandb
+from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
-
-import wandb
 
 PROJECT = "cosi-betadecay"
 DATA_DIR = Path("data")

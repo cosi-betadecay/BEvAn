@@ -7,6 +7,7 @@ import numpy as np
 import ROOT as M
 import torch
 from tqdm import tqdm
+
 from utils.megalib_types import MPhysicalEvent
 
 # --------------------------------------------------------------------------- #
@@ -93,6 +94,20 @@ class FarFieldImager:
         phi_range: tuple[float, float] = (0.0, 2.0 * math.pi),
         theta_range: tuple[float, float] = (0.0, math.pi),
     ) -> None:
+        """Build the backprojector, sky grid, and per-event scratch buffers.
+
+        Args:
+            geometry_file: MEGAlib geometry setup file (required by the reader).
+            n_phi: Number of azimuthal (phi) sky bins.
+            n_theta: Number of polar (theta) sky bins.
+            coordinate_system: ``"spheric"`` or ``"galactic"``.
+            phi_range: ``(min, max)`` phi extent in radians.
+            theta_range: ``(min, max)`` theta extent in radians.
+
+        Raises:
+            ValueError: If ``coordinate_system`` is not recognized.
+            RuntimeError: If the geometry fails to load or grid setup fails.
+        """
         ensure_megalib_loaded()
         declare_wrapper()
 

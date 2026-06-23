@@ -1,16 +1,18 @@
 import torch
+
 from dataset.datasets import BUCKETS
 from modeling.matrix_calculations import build_density_matrix, build_density_matrix_1d
 
 
 class Trainer:
-    """
-    Train a per-bucket generative model for the β+/bg classification task. Each bucket
-    has a different set of features (bucket 1: delta_E, bucket 2: delta_E & ARM,
-    bucket 3: delta_E & ARM + delta_E & anni), so we build one independent model per bucket.
-    Each model consists of a set of density terms (1D or 2D) and a class prior. The density
-    terms are estimated from the training data using histogramming with Laplace smoothing.
-    The class prior is estimated from the full per-bucket class counts.
+    """Train a per-bucket generative model for the β+/bg classification task.
+
+    Each bucket has a different set of features (bucket 1: delta_E, bucket 2:
+    delta_E & ARM, bucket 3: delta_E & ARM + delta_E & anni), so we build one
+    independent model per bucket. Each model consists of a set of density terms
+    (1D or 2D) and a class prior. The density terms are estimated from the
+    training data using histogramming with Laplace smoothing. The class prior is
+    estimated from the full per-bucket class counts.
     """
 
     def __init__(
@@ -19,6 +21,13 @@ class Trainer:
         joint_smoothing: float = 0.5,
         marginal_smoothing: float = 0.0,
     ) -> None:
+        """Configure the per-bucket bin counts and Laplace smoothing strengths.
+
+        Args:
+            n_bins: Per-bucket histogram bin counts; defaults to ``{1: 25, 2: 8, 3: 35}``.
+            joint_smoothing: Laplace pseudo-counts for the 2D joint densities.
+            marginal_smoothing: Laplace pseudo-counts for the 1D delta_E marginal.
+        """
         self.n_bins = n_bins if n_bins is not None else {1: 25, 2: 8, 3: 35}
         self.joint_smoothing = joint_smoothing  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
         self.marginal_smoothing = marginal_smoothing  # for the 1D delta_E marginal
