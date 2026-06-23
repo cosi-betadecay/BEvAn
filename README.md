@@ -17,40 +17,6 @@ deposits and hit positions. By analysing the energy and geometry of those hits,
 the pipeline reconstructs each event's kinematics and decides whether it is
 consistent with 511 keV annihilation radiation.
 
-## What is novel here
-
-- **Physics-based, not learned.** Discrimination comes from a Bayesian
-  likelihood ratio built directly out of detector physics — deviation from
-  511 keV, the Angular Resolution Measure (ARM), and a back-to-back
-  annihilation score — so every decision is interpretable in physical terms.
-  The scheme adapts Zoglauer's Bayesian Compton Sequence Reconstruction
-  (B-CSR) to the β⁺-vs-background problem.
-- **It reuses COSI's own reconstruction.** The source direction that the ARM
-  feature is measured against comes from MEGAlib's native far-field Compton
-  backprojection (`MBackprojectionFarField`), not a hand-rolled imager — so the
-  analysis stays consistent with the instrument's standard event reconstruction.
-- **Multiplicity-aware modelling.** Events are routed by how many usable hits
-  they produce into separate buckets, each with its own generative model and
-  class prior, so an event is only ever scored on features it actually has.
-- **Detector-agnostic by construction.** The same pipeline runs over any
-  MEGAlib `.sim`/`.tra` pair and reads each detector's geometry straight from
-  the file header, so the method can be exercised across COSI-family
-  geometries without code changes.
-
-## How it works
-
-For every dataset the pipeline runs four stages:
-
-1. **Compton reconstruction** — backproject the Compton events in the `.tra`
-   file into an accumulated sky image and take the peak as the source direction.
-2. **Feature extraction** — stream the `.sim` events, label each one β⁺ /
-   background from its `ANNI` interaction history (a 511 keV photopeak criterion
-   set by the HPGe energy resolution), and compute its physics features.
-3. **Training** — estimate per-bucket class-conditional densities and class
-   priors on a reproducible training split.
-4. **Evaluation** — combine the per-event likelihood ratio with the prior into a
-   Bayesian posterior, decide signal vs background, and report the metrics.
-
 ## Requirements
 
 - Python 3.10
