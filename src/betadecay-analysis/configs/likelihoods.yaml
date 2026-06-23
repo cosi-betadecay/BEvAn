@@ -1,4 +1,0 @@
-likelihoods:
-  arm:
-    sigma_x: 4.0
-    n_sigma_cos_theta_kin: 1

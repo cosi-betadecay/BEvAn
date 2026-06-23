@@ -8,6 +8,8 @@ import ROOT as M
 import torch
 from tqdm import tqdm
 
+from utils.megalib_types import MPhysicalEvent
+
 # --------------------------------------------------------------------------- #
 # MEGAlib + wrapper setup (idempotent)
 # --------------------------------------------------------------------------- #
@@ -16,7 +18,7 @@ from tqdm import tqdm
 _MGLOBAL_INITIALIZED = False
 
 
-def _ensure_megalib_loaded() -> None:
+def ensure_megalib_loaded() -> None:
     """Load libMEGAlib into the ROOT interpreter. No-op if already loaded."""
     global _MGLOBAL_INITIALIZED
     if not hasattr(M, "MBackprojectionFarField"):
@@ -34,7 +36,7 @@ def _ensure_megalib_loaded() -> None:
 _WRAPPER_DECLARED = False
 
 
-def _declare_wrapper() -> None:
+def declare_wrapper() -> None:
     """Inline a C++ helper so we can call Backproject cleanly from Python.
 
     The native signature is
@@ -92,8 +94,22 @@ class FarFieldImager:
         phi_range: tuple[float, float] = (0.0, 2.0 * math.pi),
         theta_range: tuple[float, float] = (0.0, math.pi),
     ) -> None:
-        _ensure_megalib_loaded()
-        _declare_wrapper()
+        """Build the backprojector, sky grid, and per-event scratch buffers.
+
+        Args:
+            geometry_file: MEGAlib geometry setup file (required by the reader).
+            n_phi: Number of azimuthal (phi) sky bins.
+            n_theta: Number of polar (theta) sky bins.
+            coordinate_system: ``"spheric"`` or ``"galactic"``.
+            phi_range: ``(min, max)`` phi extent in radians.
+            theta_range: ``(min, max)`` theta extent in radians.
+
+        Raises:
+            ValueError: If ``coordinate_system`` is not recognized.
+            RuntimeError: If the geometry fails to load or grid setup fails.
+        """
+        ensure_megalib_loaded()
+        declare_wrapper()
 
         self.n_phi = int(n_phi)
         self.n_theta = int(n_theta)
@@ -150,17 +166,13 @@ class FarFieldImager:
 
     # --- image management -------------------------------------------------- #
 
-    def reset(self) -> None:
-        """Zero the accumulated image."""
-        self.accumulated.zero_()
-
     def image_2d(self) -> torch.Tensor:
         """Accumulated image reshaped as ``(n_theta, n_phi)``."""
         return self.accumulated.reshape(self.n_theta, self.n_phi)
 
     # --- event ingestion --------------------------------------------------- #
 
-    def backproject_event(self, event) -> bool:
+    def backproject_event(self, event: MPhysicalEvent) -> bool:
         """Add one event's cone contribution to the accumulator.
 
         Returns True on success, False if the event was skipped
@@ -239,9 +251,3 @@ class FarFieldImager:
             ],
             dtype=torch.float64,
         )
-
-    # --- persistence ------------------------------------------------------- #
-
-    def save_image_numpy(self, path: str | Path) -> None:
-        """Save the accumulated image as ``.npy``."""
-        np.save(str(path), self.image_2d().cpu().numpy())

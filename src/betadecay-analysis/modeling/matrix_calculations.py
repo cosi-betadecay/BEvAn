@@ -1,7 +1,7 @@
 import torch
 
 
-def _build_default_edges(
+def build_default_edges(
     x: torch.Tensor,
     n_bins: int,
     spacing: str,
@@ -81,13 +81,13 @@ def build_density_matrix(
         raise ValueError("Cannot create probability matrix from empty tensors.")
 
     if x_bins is None:
-        x_bins = _build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
+        x_bins = build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
     else:
         n_bins_x = x_bins.numel() - 1
         x_bins = x_bins.to(device=x.device, dtype=x.dtype)
 
     if y_bins is None:
-        y_bins = _build_default_edges(y, n_bins_y, spacing_y, log_y_floor)
+        y_bins = build_default_edges(y, n_bins_y, spacing_y, log_y_floor)
     else:
         n_bins_y = y_bins.numel() - 1
         y_bins = y_bins.to(device=y.device, dtype=y.dtype)
@@ -180,7 +180,7 @@ def build_density_matrix_1d(
         raise ValueError("Cannot create probability vector from empty tensor.")
 
     if x_bins is None:
-        x_bins = _build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
+        x_bins = build_default_edges(x, n_bins_x, spacing_x, log_x_floor)
     else:
         n_bins_x = x_bins.numel() - 1
         x_bins = x_bins.to(device=x.device, dtype=x.dtype)

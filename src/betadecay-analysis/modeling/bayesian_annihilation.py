@@ -2,8 +2,7 @@ import torch
 
 
 class BayesianAnnihiliationModel:
-    """
-    Bayesian classifier for identifying 511 keV positron-annihilation events.
+    """Bayesian classifier for identifying 511 keV positron-annihilation events.
 
     This model combines class-conditional likelihood scores
     P(D | β⁺) and P(D | bg) with prior class probabilities
@@ -23,7 +22,14 @@ class BayesianAnnihiliationModel:
         ratio: torch.Tensor,
         n_beta_decay: int,
         n_bg: int,
-    ):
+    ) -> None:
+        """Bind the per-event likelihood ratio and the class counts for the prior.
+
+        Args:
+            ratio: Per-event likelihood ratio P(D | β⁺) / P(D | bg).
+            n_beta_decay: β⁺ event count used to estimate the class prior.
+            n_bg: Background event count used to estimate the class prior.
+        """
         self.ratio = ratio
         # We should compute these two with other datasets
         self.n_beta_decay = n_beta_decay
@@ -46,14 +52,15 @@ class BayesianAnnihiliationModel:
         return self.n_bg / (self.n_beta_decay + self.n_bg)
 
     def data_given_beta_decay_probability(self) -> torch.Tensor:
+        """Normalized likelihood P(D | β⁺) from the per-event ratio, ``R / (R + 1)``."""
         return self.ratio / (self.ratio + 1)
 
     def data_given_background_probability(self) -> torch.Tensor:
+        """Normalized likelihood P(D | bg) from the per-event ratio, ``1 / (R + 1)``."""
         return 1 / (self.ratio + 1)
 
     def beta_decay_given_data_probability(self) -> torch.Tensor:
-        """
-        Compute the probability of a β⁺ event given the observed data.
+        """Compute the probability of a β⁺ event given the observed data.
 
         Applies Bayes' theorem:
 
@@ -71,9 +78,8 @@ class BayesianAnnihiliationModel:
         )
         return numerator / denominator
 
-    def background_given_data_probability(self) -> torch.Tensor | float:
-        """
-        Compute the probability of a background event given the observed data.
+    def background_given_data_probability(self) -> torch.Tensor:
+        """Compute the probability of a background event given the observed data.
 
         Applies Bayes' theorem:
 
@@ -91,9 +97,8 @@ class BayesianAnnihiliationModel:
         )
         return numerator / denominator
 
-    def inference(self) -> torch.Tensor | bool:
-        """
-        Perform classification based on probabilities.
+    def inference(self) -> torch.Tensor:
+        """Perform classification based on probabilities.
 
         Returns:
             torch.Tensor: Batched classification output.

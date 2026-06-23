@@ -18,6 +18,7 @@ match the production pipeline.
 Units: cm, keV, seconds.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 
@@ -46,12 +47,15 @@ class SimHit:
 
 @dataclass
 class SimTextEvent:
+    """One parsed SE block: its event id, truth IA records, and measured hits."""
+
     event_id: int
     ias: list[SimIA] = field(default_factory=list)
     hits: list[SimHit] = field(default_factory=list)
 
 
-def _parse_ia(line: str) -> SimIA:
+def parse_ia(line: str) -> SimIA:
+    """Parse one ``IA`` truth line into a :class:`SimIA`."""
     head, rest = line[3:].split(maxsplit=1)
     fields = rest.split(";")
     # fields: [0]=ID [1]=origin [2]=detector [3]=time [4..6]=x,y,z
@@ -68,7 +72,8 @@ def _parse_ia(line: str) -> SimIA:
     )
 
 
-def _parse_ht(line: str) -> SimHit:
+def parse_ht(line: str) -> SimHit:
+    """Parse one ``HTsim`` measured-hit line into a :class:`SimHit`."""
     fields = line.split(maxsplit=1)[1].split(";")
     # fields: [0]=detector [1..3]=x,y,z [4]=energy [5]=time [6..]=origin IAs
     return SimHit(
@@ -79,7 +84,7 @@ def _parse_ht(line: str) -> SimHit:
     )
 
 
-def iter_sim_events(path: str):
+def iter_sim_events(path: str) -> Iterator[SimTextEvent]:
     """Yield SimTextEvent for every SE block in the file, in order."""
     event = None
     with open(path) as fh:
@@ -93,18 +98,19 @@ def iter_sim_events(path: str):
             elif line.startswith("ID"):
                 event.event_id = int(line.split()[1])
             elif line.startswith("IA"):
-                event.ias.append(_parse_ia(line))
+                event.ias.append(parse_ia(line))
             elif line.startswith("HTsim"):
-                event.hits.append(_parse_ht(line))
+                event.hits.append(parse_ht(line))
     if event is not None:
         yield event
 
 
-def event_is_bdecay(event: SimTextEvent, ref_energy: float, tolerance: float) -> bool:
-    """Replicates physics.ground_truths.ground_truth_bdecay on text records:
-    the event is signal iff some ANNI photon's direct secondaries deposit a
-    summed hit energy within ``tolerance`` of ``ref_energy``. Each hit counts
-    once (first matching secondary), matching the production loop's break.
+def event_is_bdecay(event: SimTextEvent, tolerance: float) -> bool:
+    """Replicate physics.ground_truths.ground_truth_bdecay on text records.
+
+    The event is signal iff some ANNI photon's direct secondaries deposit a
+    summed hit energy within ``tolerance`` of 511 keV. Each hit counts once
+    (first matching secondary), matching the production loop's break.
     """
     for ia in event.ias:
         if ia.process != "ANNI":
@@ -114,6 +120,6 @@ def event_is_bdecay(event: SimTextEvent, ref_energy: float, tolerance: float) ->
         for hit in event.hits:
             if any(o in secondary_ids for o in hit.origins):
                 total += hit.energy
-        if abs(total - ref_energy) < tolerance:
+        if abs(total - 511.0) < tolerance:
             return True
     return False

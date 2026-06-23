@@ -1,9 +1,0 @@
-defaults:
-  - _self_
-  - likelihoods
-  - wandb
-
-setup:
-  geo_file: $(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup
-  sim_file: data/SPILike.sim
-  tra_file: data/SPILike.tra
