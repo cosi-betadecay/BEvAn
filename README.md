@@ -1,4 +1,4 @@
-# COSI 511 keV Annihilation Analysis
+# β⁺ Decay Signatures in COSI: 511 keV Annihilation Detection
 
 <p align="center">
   <img src="docs/COSI-SMEX%20Emblem_2E.png" alt="COSI-SMEX mission emblem" width="320">
