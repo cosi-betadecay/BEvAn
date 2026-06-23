@@ -15,11 +15,7 @@ from utils.reader_extraction import get_reader
 import wandb
 
 PROJECT = "cosi-betadecay"
-
-# Directory holding the {name}.sim / {name}.tra pairs, relative to the
-# current working directory.
 DATA_DIR = Path("data")
-# Where per-run result CSVs are written (one timestamped file per total run).
 RESULTS_DIR = Path("results")
 
 
@@ -27,6 +23,12 @@ def metrics(counts: dict) -> dict:
     """Derive precision/recall/FPR/F1 from raw confusion counts.
 
     Matches the definitions in modeling.calculate_probablities.log_confusion.
+
+    Args:
+        counts (dict): Confusion counts with tp/fp/fn/tn keys.
+
+    Returns:
+        dict: Keys precision, recall, fpr, and f1_score.
     """
     tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
@@ -40,7 +42,14 @@ def auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
     """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
 
     Invariant to any monotonic transform of ``scores`` (so the log-ratio gives
-    the same answer as the ratio). Returns NaN if either class is empty.
+    the same answer as the ratio).
+
+    Args:
+        scores (torch.Tensor): Per-event separating scores.
+        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
+
+    Returns:
+        float: The ROC AUC, or NaN if either class is empty.
     """
     labels = labels.bool()
     n_pos = int(labels.sum())
@@ -64,8 +73,14 @@ def auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
 def best_f1(scores: torch.Tensor, labels: torch.Tensor) -> float:
     """Best F1 achievable by sweeping a threshold over the prior-free score.
 
-    Cuts are only allowed between distinct score values (tie-aware). Returns
-    NaN if there are no positives.
+    Cuts are only allowed between distinct score values (tie-aware).
+
+    Args:
+        scores (torch.Tensor): Per-event separating scores.
+        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
+
+    Returns:
+        float: The best F1 over all thresholds, or NaN if there are no positives.
     """
     labels = labels.bool()
     n_pos = int(labels.sum())
@@ -86,7 +101,15 @@ def best_f1(scores: torch.Tensor, labels: torch.Tensor) -> float:
 
 
 def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> dict:
-    """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio."""
+    """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio.
+
+    Args:
+        evaluator (Evaluator): Trained evaluator providing the pooled log-ratio.
+        data (dict): Nested per-class, per-bucket feature dict for one split.
+
+    Returns:
+        dict: Keys best_f1 and auc (both NaN if no events pool).
+    """
     pooled = evaluator.pooled_log_ratio(data)
     if pooled is None:
         return {"best_f1": float("nan"), "auc": float("nan")}
@@ -103,6 +126,15 @@ def geo_from_header(sim_file: Path) -> str:
     file, e.g. ``/home/arya/.../resource/examples/geomega/special/SPILike.geo.setup``.
     We rewrite it to a portable ``$(MEGALIB)/resource/...`` path so MEGAlib
     resolves it on whichever machine runs this.
+
+    Args:
+        sim_file (Path): Path to the .sim or .tra file to read the header from.
+
+    Returns:
+        str: The portable geometry setup path.
+
+    Raises:
+        RuntimeError: If no Geometry line is found in the header.
     """
     with sim_file.open("r", errors="ignore") as fh:
         for line in fh:
@@ -119,7 +151,12 @@ def geo_from_header(sim_file: Path) -> str:
 
 
 def discover_datasets() -> list[dict[str, str]]:
-    """Find every {name}.sim that has a matching {name}.tra in DATA_DIR."""
+    """Find every {name}.sim that has a matching {name}.tra in DATA_DIR.
+
+    Returns:
+        list[dict[str, str]]: One dict per dataset with name, geo_file,
+            sim_file, and tra_file keys.
+    """
     datasets = []
     for sim_file in sorted(DATA_DIR.glob("*.sim")):
         tra_file = sim_file.with_suffix(".tra")
@@ -140,7 +177,12 @@ def discover_datasets() -> list[dict[str, str]]:
 def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
     """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
 
-    Returns the pooled confusion counts for each split, keyed by split name.
+    Args:
+        ds (dict[str, str]): Dataset paths with name, geo_file, sim_file, tra_file.
+        use_wandb (bool): Whether to use Weights & Biases for logging.
+
+    Returns:
+        dict: Pooled confusion counts plus prior-free metrics, keyed by split name.
     """
     if use_wandb:
         wandb.init(project=PROJECT, name=ds["name"], reinit=True)
@@ -174,7 +216,17 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
 
 
 def main(use_wandb: bool) -> None:
-    """Run annihilation detection extraction over every .sim/.tra/geometry triple."""
+    """Run annihilation detection extraction over every .sim/.tra/geometry triple.
+
+    Args:
+        use_wandb (bool): Whether to use Weights & Biases for logging.
+
+    Raises:
+        FileNotFoundError: If the data directory does not exist.
+        RuntimeError: If the data directory contains no ``.sim``/``.tra`` pairs.
+    """
+    if not DATA_DIR.is_dir():
+        raise FileNotFoundError(f"Data directory not found: {DATA_DIR.resolve()}")
     datasets = discover_datasets()
     if not datasets:
         raise RuntimeError(f"No .sim/.tra pairs found in {DATA_DIR.resolve()}")

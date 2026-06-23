@@ -1,5 +1,6 @@
 import argparse
 import os
+from pathlib import Path
 
 from dataset.datasets import Datasets
 from dotenv import load_dotenv
@@ -14,7 +15,30 @@ PROJECT = "cosi-betadecay"
 
 
 def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
-    """Run β⁺ annihilation detection on a single (geo, sim, tra) dataset."""
+    """Run the β⁺ annihilation detection pipeline on a given MEGAlib dataset.
+
+    Args:
+        geo_file (str): Path to the MEGAlib geometry setup file.
+        sim_file (str): Path to the MEGAlib .sim file containing simulated events.
+        tra_file (str): Path to the MEGAlib .tra file containing Compton events.
+        use_wandb (bool): Whether to use Weights & Biases for logging.
+
+    Raises:
+        ValueError: If any of the input files have the wrong extension.
+        FileNotFoundError: If any of the input files do not exist.
+        FileNotFoundError: If any of the input files do not exist.
+        FileNotFoundError: If any of the input files do not exist.
+    """
+    sim_path, tra_path = Path(sim_file), Path(tra_file)
+    if sim_path.suffix != ".sim":
+        raise ValueError(f"--sim-file must be a .sim file, got: {sim_file}")
+    if tra_path.suffix != ".tra":
+        raise ValueError(f"--tra-file must be a .tra file, got: {tra_file}")
+    if not sim_path.is_file():
+        raise FileNotFoundError(f"Simulation file not found: {sim_file}")
+    if not tra_path.is_file():
+        raise FileNotFoundError(f"Tra file not found: {tra_file}")
+
     if use_wandb:
         wandb.init(project=PROJECT)
 
@@ -42,7 +66,11 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments: the geo/sim/tra file paths and the ``--wandb`` flag."""
+    """Parse CLI arguments: the geo/sim/tra file paths and the ``--wandb`` flag.
+
+    Returns:
+        argparse.Namespace: The parsed arguments.
+    """
     parser = argparse.ArgumentParser(description="Run β⁺ annihilation detection on one .sim/.tra dataset.")
     parser.add_argument(
         "--geo-file",
