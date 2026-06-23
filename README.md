@@ -1,5 +1,9 @@
 # COSI 511 keV Annihilation Analysis
 
+<p align="center">
+  <img src="docs/COSI-SMEX%20Emblem_2E.png" alt="COSI-SMEX mission emblem" width="320">
+</p>
+
 This project is part of the Compton Spectrometer and Imager (COSI) program at the
 Space Sciences Laboratory, UC Berkeley. It flags each simulated COSI event as
 either a β⁺ (positron) annihilation signal or background, using the event's
