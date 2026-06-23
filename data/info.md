@@ -1,1 +1,0 @@
-Put your .sim files in the data folder.
