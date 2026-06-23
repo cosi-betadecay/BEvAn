@@ -25,12 +25,12 @@ wheels/
 # Weights & Biases
 wandb
 
-# Hydra
-outputs/
-
 # UV
 uv.lock
 
 # Logs
 *.log
 runs/
+
+# MEGAlib
+crossections/
