@@ -62,3 +62,59 @@ class Evaluator:
         # Count the features-not-finite events as excluded for transparency.
         counts["excluded"] += int((~valid).sum().item())
         return counts
+
+    def _bucket_log_ratio(self, data, bucket, model):
+        """Per-event prior-free log likelihood ratio log R = log P(D|β) - log P(D|bg)
+        for one bucket, plus the matching ground truths. Mirrors the exact
+        feature/valid/term construction of ``_evaluate_bucket`` but returns the
+        raw separating score instead of a thresholded decision (no prior applied).
+        Returns ``None`` for empty buckets.
+        """
+        bd, bg = data["bdecay"][bucket], data["bg"][bucket]
+        n_bd, n_bg = bd["delta_E"].numel(), bg["delta_E"].numel()
+        if n_bd + n_bg == 0:
+            return None
+
+        feats = {f: torch.cat([bd[f], bg[f]]) for f in _FEATURES}
+        ground_truths = torch.cat(
+            [torch.ones(n_bd, dtype=torch.bool), torch.zeros(n_bg, dtype=torch.bool)]
+        )
+
+        used = ["delta_E"] + (["arm"] if bucket >= 2 else []) + (["anni"] if bucket >= 3 else [])
+        valid = torch.ones(ground_truths.shape[0], dtype=torch.bool)
+        for f in used:
+            valid = valid & torch.isfinite(feats[f])
+        feats = {f: v[valid] for f, v in feats.items()}
+        ground_truths = ground_truths[valid]
+
+        eps = 1e-8
+        log_r = torch.zeros(ground_truths.shape[0])
+        for spec in model["terms"]:
+            if spec["kind"] == "1d":
+                pb = lookup_density_values_1d(feats[spec["xfeat"]], spec["beta"], spec["x_bins"])
+                pg = lookup_density_values_1d(feats[spec["xfeat"]], spec["bg"], spec["x_bins"])
+            else:
+                pb = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["beta"], spec["x_bins"], spec["y_bins"]
+                )
+                pg = lookup_density_values(
+                    feats[spec["xfeat"]], feats[spec["yfeat"]], spec["bg"], spec["x_bins"], spec["y_bins"]
+                )
+            log_r = log_r + torch.log(pb + eps) - torch.log(pg + eps)
+        return log_r, ground_truths
+
+    def pooled_log_ratio(self, data):
+        """Pool the prior-free per-event log likelihood ratio (and ground truths)
+        across all buckets, so a prior-independent AUC / best-F1 can be computed
+        over the whole dataset. Returns ``(log_r, ground_truths)`` or ``None``.
+        """
+        log_rs, gts = [], []
+        for b in BUCKETS:
+            out = self._bucket_log_ratio(data, b, self.trainer.models[b])
+            if out is None:
+                continue
+            log_rs.append(out[0])
+            gts.append(out[1])
+        if not log_rs:
+            return None
+        return torch.cat(log_rs), torch.cat(gts)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import hydra
 import omegaconf
+import torch
 from dataset.datasets import Datasets
 from dotenv import load_dotenv
 from physics.compton_cone_reconstruction import FarFieldImager
@@ -32,6 +33,66 @@ def _metrics(counts: dict) -> dict:
     fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
     return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
+
+
+def _auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
+    """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
+
+    Invariant to any monotonic transform of ``scores`` (so the log-ratio gives
+    the same answer as the ratio). Returns NaN if either class is empty.
+    """
+    labels = labels.bool()
+    n_pos = int(labels.sum())
+    n_neg = labels.numel() - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+
+    order = torch.argsort(scores)
+    s_sorted = scores[order]
+    _, inv, counts = torch.unique_consecutive(s_sorted, return_inverse=True, return_counts=True)
+    starts = torch.cumsum(counts, 0) - counts  # 0-based start index of each tie group
+    avg_rank_group = starts.double() + (counts.double() + 1) / 2  # 1-based average rank
+    ranks_sorted = avg_rank_group[inv]
+    ranks = torch.empty_like(ranks_sorted)
+    ranks[order] = ranks_sorted
+
+    r_pos = ranks[labels].sum().item()
+    return (r_pos - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+
+
+def _best_f1(scores: torch.Tensor, labels: torch.Tensor) -> float:
+    """Best F1 achievable by sweeping a threshold over the prior-free score.
+
+    Cuts are only allowed between distinct score values (tie-aware). Returns
+    NaN if there are no positives.
+    """
+    labels = labels.bool()
+    n_pos = int(labels.sum())
+    if n_pos == 0:
+        return float("nan")
+
+    order = torch.argsort(scores, descending=True)
+    s_sorted = scores[order]
+    y_sorted = labels[order].double()
+    tp_cum = torch.cumsum(y_sorted, 0)
+    k = torch.arange(1, s_sorted.numel() + 1, dtype=torch.double)
+    f1 = 2 * tp_cum / (k + n_pos)
+
+    # Valid threshold boundaries: last element, or where the next score differs.
+    boundary = torch.ones(s_sorted.numel(), dtype=torch.bool)
+    boundary[:-1] = s_sorted[:-1] != s_sorted[1:]
+    return float(f1[boundary].max().item())
+
+
+def _prior_free_scores(evaluator, data) -> dict:
+    """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio."""
+    pooled = evaluator.pooled_log_ratio(data)
+    if pooled is None:
+        return {"best_f1": float("nan"), "auc": float("nan")}
+    scores, labels = pooled
+    finite = torch.isfinite(scores)
+    scores, labels = scores[finite], labels[finite]
+    return {"best_f1": _best_f1(scores, labels), "auc": _auc(scores, labels)}
 
 
 def _geo_from_header(sim_file: Path) -> str:
@@ -101,13 +162,13 @@ def _run_one(cfg: omegaconf.dictconfig.DictConfig, ds: dict[str, str]) -> dict:
 
     trainer = Trainer(cfg).fit(train)
     evaluator = Evaluator(trainer)
-    totals = {
-        "train": evaluator.evaluate(train, split_name="train"),
-        "eval": evaluator.evaluate(eval, split_name="eval"),
-    }
+    results = {}
+    for split_name, split_data in (("train", train), ("eval", eval)):
+        counts = evaluator.evaluate(split_data, split_name=split_name)
+        results[split_name] = {**counts, **_prior_free_scores(evaluator, split_data)}
 
     wandb.finish()
-    return totals
+    return results
 
 
 @hydra.main(
@@ -142,6 +203,11 @@ def main(
                     "tra_file": ds["tra_file"],
                     **{k: counts[k] for k in ("tp", "fp", "fn", "tn", "excluded")},
                     **_metrics(counts),
+                    # Prior-free, threshold-independent separating power: best_f1 is
+                    # the best F1 over all score thresholds (ignores the prior),
+                    # auc is the ROC AUC of the per-event likelihood ratio.
+                    "best_f1": counts["best_f1"],
+                    "auc": counts["auc"],
                 }
             )
 
