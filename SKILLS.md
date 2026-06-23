@@ -13,6 +13,11 @@ in `skills-lock.json` (all from the `wentorai/research-plugins` GitHub source).
   repo's pipeline consumes them. Deep material lives in
   `.claude/skills/megalib/references/`. Maintained by hand; update when
   the data format or pipeline changes.
+- **code-quality** (`.claude/skills/code-quality/SKILL.md`) — code-quality
+  workflow: ruff lint/format commands, the dual-config gotcha (root
+  `ruff.toml` silently overrides `pyproject.toml [tool.ruff]`), import/style
+  conventions, pytest, and the discipline of never regressing the champion
+  F1 (0.8935) during cleanups. Use before committing or when reviewing a diff.
 
 ## Domain skills
 

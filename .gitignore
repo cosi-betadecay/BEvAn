@@ -10,8 +10,8 @@ wheels/
 .venv
 
 # Simulation output files
-Activation.sim
-Activation.tra
+*.sim
+*.tra
 
 # environment variables
 .env
@@ -25,12 +25,12 @@ Activation.tra
 # Weights & Biases
 wandb
 
-# Hydra
-outputs/
-
 # UV
 uv.lock
 
 # Logs
 *.log
 runs/
+
+# MEGAlib
+crossections/

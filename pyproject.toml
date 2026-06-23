@@ -1,11 +1,10 @@
 [project]
 name = "betadecay"
 version = "0.1.0"
-description = "Add your description here"
+description = "Physics-based likelihood classifier for β⁺ (511 keV) annihilation events in COSI simulations"
 readme = "README.md"
 requires-python = "==3.10.*"
 dependencies = [
-    "logging>=0.4.9.6",
     "numpy==1.26.4",
     "ruff>=0.12.11",
     "torch==2.1.2",
@@ -19,28 +18,11 @@ dependencies = [
     "pytest-cov>=5.0.0",
     "tqdm>=4.67.1",
     "python-dotenv>=1.2.1",
-    "hydra-core>=1.3.2",
     "scipy>=1.15.3",
 ]
 
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-src = [".", "tests"]
-
-[tool.ruff.lint]
-# E/F/W: pycodestyle/pyflakes warnings; D: pydocstyle for docstrings; I: isort import order.
-select = ["E", "F", "W", "D", "I"]
-# Relax module/package docstring requirements; adjust as needed.
-ignore = ["D100", "D104"]
-per-file-ignores = { "tests/*" = ["D"] }
-
-[tool.ruff.lint.isort]
-known-first-party = ["physics", "mathematics", "utils", "experiments"]
-lines-after-imports = 1
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+# Ruff configuration lives in the standalone ruff.toml (it takes precedence
+# over any [tool.ruff] block here, so keeping it there avoids a silent override).
 
 [tool.setuptools]
 package-dir = { "" = "." }
