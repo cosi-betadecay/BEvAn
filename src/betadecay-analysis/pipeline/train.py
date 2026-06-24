@@ -1,7 +1,7 @@
 import torch
 
 from dataset.datasets import BUCKETS
-from modeling.matrix_calculations import build_density_matrix, build_density_matrix_1d
+from modeling.matrix_calculations import bins_from_counts, build_density_matrix, build_density_matrix_1d
 
 
 class Trainer:
@@ -17,18 +17,24 @@ class Trainer:
 
     def __init__(
         self,
-        n_bins: dict[int, int] | None = None,
+        rho_floor: float | dict[int, float] = 10.0,
         joint_smoothing: float = 0.5,
         marginal_smoothing: float = 0.0,
     ) -> None:
-        """Configure the per-bucket bin counts and Laplace smoothing strengths.
+        """Configure the bin-size rule and Laplace smoothing strengths.
 
         Args:
-            n_bins: Per-bucket histogram bin counts; defaults to ``{1: 25, 2: 8, 3: 35}``.
+            rho_floor: Target events per histogram cell. Each density term sizes
+                its bins-per-axis to the scarcer class via :func:`bins_from_counts`,
+                so cells stay populated regardless of how many events a simulation
+                yields; smaller ``rho_floor`` -> finer bins -> higher variance. A
+                scalar applies to every bucket; a ``{bucket: rho_floor}`` dict sets
+                each hit-multiplicity bucket independently (so the resolution can
+                match a per-bucket bin budget like the hardcoded ``{1:25, 2:8, 3:35}``).
             joint_smoothing: Laplace pseudo-counts for the 2D joint densities.
             marginal_smoothing: Laplace pseudo-counts for the 1D delta_E marginal.
         """
-        self.n_bins = n_bins if n_bins is not None else {1: 25, 2: 8, 3: 35}
+        self.rho_floor = rho_floor
         self.joint_smoothing = joint_smoothing  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
         self.marginal_smoothing = marginal_smoothing  # for the 1D delta_E marginal
 
@@ -74,14 +80,14 @@ class Trainer:
         if n_beta == 0 or n_bg == 0:
             return model  # prior-only: cannot estimate class-conditional densities
 
-        n_bins = self.n_bins[bucket]
+        rho = self.rho_floor[bucket] if isinstance(self.rho_floor, dict) else self.rho_floor
         if bucket == 1:
-            self.add_1d(model, bd, bg, "delta_E", n_bins)
+            self.add_1d(model, bd, bg, "delta_E", rho)
         elif bucket == 2:
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
         else:  # bucket 3
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, n_bins)
-            self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None, n_bins)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
+            self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None, rho)
         return model
 
     def add_1d(
@@ -90,31 +96,32 @@ class Trainer:
         bd: dict[str, torch.Tensor],
         bg: dict[str, torch.Tensor],
         feat: str,
-        n_bins: int,
+        rho_floor: float,
     ) -> None:
         """Append a 1D density term over ``feat`` to ``model`` (in place).
 
-        Bins are built from the pooled finite values; per-class densities use
-        the marginal smoothing. No-op if no finite values exist.
+        Bins-per-axis is sized from the scarcer class's finite count via
+        :func:`bins_from_counts` (floored at 5 bins). Per-class densities share
+        the pooled-data edges and use the marginal smoothing. No-op unless both
+        classes have a finite value (a ratio needs both densities).
 
         Args:
             model: Model dict whose ``terms`` list is appended to.
             bd: β-decay per-feature tensors.
             bg: Background per-feature tensors.
             feat: Feature name to histogram.
-            n_bins: Number of bins.
+            rho_floor: Target events per cell for this bucket's bin rule.
         """
-        comb = torch.cat([bd[feat], bg[feat]])
-        comb = comb[self.finite(comb)]
-        if comb.numel() == 0:
-            return  # no finite values to estimate from -> prior-only
-        _, x_bins = build_density_matrix_1d(comb, n_bins_x=n_bins, spacing_x="log", log_x_floor=1e-3)
-        beta, _ = build_density_matrix_1d(
-            bd[feat][self.finite(bd[feat])], x_bins=x_bins, smoothing=self.marginal_smoothing
+        fb = bd[feat][self.finite(bd[feat])]
+        fg = bg[feat][self.finite(bg[feat])]
+        if fb.numel() == 0 or fg.numel() == 0:
+            return  # need both class densities -> prior-only
+        n_bins = bins_from_counts(min(fb.numel(), fg.numel()), d=1, rho_floor=rho_floor, min_bins=5)
+        _, x_bins = build_density_matrix_1d(
+            torch.cat([fb, fg]), n_bins_x=n_bins, spacing_x="log", log_x_floor=1e-3
         )
-        bgm, _ = build_density_matrix_1d(
-            bg[feat][self.finite(bg[feat])], x_bins=x_bins, smoothing=self.marginal_smoothing
-        )
+        beta, _ = build_density_matrix_1d(fb, x_bins=x_bins, smoothing=self.marginal_smoothing)
+        bgm, _ = build_density_matrix_1d(fg, x_bins=x_bins, smoothing=self.marginal_smoothing)
         model["terms"].append({"kind": "1d", "xfeat": feat, "x_bins": x_bins, "beta": beta, "bg": bgm})
 
     def add_2d(
@@ -126,12 +133,14 @@ class Trainer:
         yfeat: str,
         spacing_y: str,
         floor_y: float | None,
-        n_bins: int,
+        rho_floor: float,
     ) -> None:
         """Append a 2D density term over ``(xfeat, yfeat)`` to ``model`` (in place).
 
-        Bins are built from the pooled finite pairs; per-class densities use the
-        joint smoothing. No-op if no finite pairs exist.
+        Bins-per-axis is sized from the scarcer class's finite-pair count via
+        :func:`bins_from_counts` (``d=2``, floored at 4 -> a 4x4 grid). Per-class
+        densities share the pooled-data edges and use the joint smoothing. No-op
+        unless both classes have a finite pair (a ratio needs both densities).
 
         Args:
             model: Model dict whose ``terms`` list is appended to.
@@ -141,16 +150,17 @@ class Trainer:
             yfeat: Second (y-axis) feature name.
             spacing_y: Y-axis bin spacing, ``"log"`` or ``"linear"``.
             floor_y: Log-floor for the y-axis (ignored when linear).
-            n_bins: Number of bins per axis.
+            rho_floor: Target events per cell for this bucket's bin rule.
         """
-        cx = torch.cat([bd[xfeat], bg[xfeat]])
-        cy = torch.cat([bd[yfeat], bg[yfeat]])
-        m = self.finite(cx, cy)
-        if int(m.sum()) == 0:
-            return  # no finite (x, y) pairs to estimate from -> prior-only
+        mb = self.finite(bd[xfeat], bd[yfeat])
+        mg = self.finite(bg[xfeat], bg[yfeat])
+        n_beta, n_bg = int(mb.sum()), int(mg.sum())
+        if n_beta == 0 or n_bg == 0:
+            return  # need both class densities -> prior-only
+        n_bins = bins_from_counts(min(n_beta, n_bg), d=2, rho_floor=rho_floor, min_bins=4)
         _, x_bins, y_bins = build_density_matrix(
-            cx[m],
-            cy[m],
+            torch.cat([bd[xfeat][mb], bg[xfeat][mg]]),
+            torch.cat([bd[yfeat][mb], bg[yfeat][mg]]),
             spacing_x="log",
             spacing_y=spacing_y,
             log_x_floor=1e-3,
@@ -158,8 +168,6 @@ class Trainer:
             n_bins_x=n_bins,
             n_bins_y=n_bins,
         )
-        mb = self.finite(bd[xfeat], bd[yfeat])
-        mg = self.finite(bg[xfeat], bg[yfeat])
         beta, _, _ = build_density_matrix(
             bd[xfeat][mb], bd[yfeat][mb], x_bins=x_bins, y_bins=y_bins, smoothing=self.joint_smoothing
         )

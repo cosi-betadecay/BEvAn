@@ -7,16 +7,20 @@ def build_default_edges(
     spacing: str,
     log_floor: float | None,
 ) -> torch.Tensor:
-    """Construct default bin edges for histogramming.
+    """Build default bin edges for a 1D histogram.
 
-    ``spacing="linear"`` gives uniform linspace edges spanning the data range.
-    ``spacing="log"`` gives geometrically-spaced edges over ``[floor, x.max()]``
-    where ``floor = max(log_floor, smallest_positive_value)``. Zoglauer-style:
-    densifies resolution near zero for residual-like features (ΔE, ARM) whose
-    signal clusters at small values and whose tails are long.
+    Args:
+        x (torch.Tensor): Input tensor from which to derive the bin edges.
+        n_bins (int): Number of bins to create.
+        spacing (str): Spacing type for the bins ('linear' or 'log').
+        log_floor (float | None): Floor value for log-spaced bins.
 
-    Values below the floor at lookup time clamp into the first bin via
-    ``lookup_density_values``' existing out-of-support semantics.
+    Raises:
+        ValueError: If the spacing is not 'linear' or 'log'.
+        ValueError: If the log floor is not positive.
+
+    Returns:
+        torch.Tensor: The bin edges.
     """
     if spacing == "linear":
         x_min, x_max = x.min(), x.max()
@@ -43,6 +47,29 @@ def build_default_edges(
     raise ValueError(f"Unknown spacing {spacing!r}; expected 'linear' or 'log'.")
 
 
+def bins_from_counts(n_min: int, d: int, rho_floor: float, min_bins: int = 2) -> int:
+    """Bins-per-axis sized so the scarcer class keeps ~``rho_floor`` events per cell.
+
+    A ``d``-dimensional histogram has ``B ** d`` cells; choosing
+    ``B = floor((n_min / rho_floor) ** (1 / d))`` keeps the expected count per
+    cell near ``rho_floor`` for the limiting (minority) class, so the estimated
+    density is not a set of memorized single-event spikes. Total cells stay
+    ``O(n_min / rho_floor)`` — linear in the data, never blowing up the matrix.
+
+    Args:
+        n_min (int): Finite-feature event count of the limiting class for this term.
+        d (int): Histogram dimensionality (1 or 2).
+        rho_floor (float): Target events per cell.
+        min_bins (int): Smallest bins-per-axis to return.
+
+    Returns:
+        int: Bins-per-axis, at least ``min_bins``.
+    """
+    if n_min <= 0:
+        return min_bins
+    return max(int((n_min / rho_floor) ** (1.0 / d)), min_bins)
+
+
 def build_density_matrix(
     x: torch.Tensor,
     y: torch.Tensor,
@@ -58,17 +85,24 @@ def build_density_matrix(
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Build a normalized 2D probability matrix over (x, y).
 
-    With typical event counts in the low thousands the previous default of
-    2000×2000 gave 4 M cells, the vast majority empty and noise-dominated.
-    200×200 = 40 k cells gives enough resolution to retain structure while
-    keeping bins statistically populated. Callers that need a different
-    resolution can still pass n_bins_x / n_bins_y or pre-built x_bins / y_bins.
+    Args:
+        x (torch.Tensor): _x_ values for the 2D histogram.
+        y (torch.Tensor): _y_ values for the 2D histogram.
+        x_bins (torch.Tensor | None, optional): Pre-built bin edges for the x-axis. Defaults to None.
+        y_bins (torch.Tensor | None, optional): Pre-built bin edges for the y-axis. Defaults to None.
+        n_bins_x (int, optional): Number of bins for the x-axis. Defaults to 200.
+        n_bins_y (int, optional): Number of bins for the y-axis. Defaults to 200.
+        spacing_x (str, optional): Spacing type for the x-axis ('linear' or 'log'). Defaults to "linear".
+        spacing_y (str, optional): Spacing type for the y-axis ('linear' or 'log'). Defaults to "linear".
+        log_x_floor (float | None, optional): Floor value for log-spaced x-axis bins. Defaults to None.
+        log_y_floor (float | None, optional): Floor value for log-spaced y-axis bins. Defaults to None.
+        smoothing (float, optional): Smoothing parameter for Laplace-style pseudo-counts. Defaults to 0.0.
 
-    ``smoothing`` adds Laplace-style pseudo-counts (α per cell) to every bin
-    before normalization. This prevents zero-density bins from dominating the
-    log-likelihood ratio for minority-class test events that happen to land
-    in a cell their class never populated. Default 0.0 preserves legacy
-    behaviour; the per-class likelihood builders pass a non-zero value.
+    Raises:
+        ValueError: If the input tensors are empty or if the binning parameters are invalid.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The normalized 2D probability matrix and the bin edges for both axes.
     """
     x = x.flatten()
     y = y.flatten()
@@ -125,12 +159,17 @@ def lookup_density_values(
     x_bins: torch.Tensor,
     y_bins: torch.Tensor,
 ) -> torch.Tensor:
-    """Read `matrix` at the cell corresponding to each (x, y) query.
+    """Lookup density values from a 2D probability matrix for given (x, y) pairs.
 
-    Events that are NaN / ±inf, or that fall outside the training bin range
-    on either axis, return 0.0 (they contribute no evidence to the likelihood
-    ratio). This preserves the Zoglauer §4.5.3 semantics that an event must
-    fall inside the response's support to update R.
+    Args:
+        x (torch.Tensor): _x_ values for which to lookup density values.
+        y (torch.Tensor): _y_ values for which to lookup density values.
+        matrix (torch.Tensor): 2D probability matrix from which to lookup values.
+        x_bins (torch.Tensor): _x_ bin edges corresponding to the matrix.
+        y_bins (torch.Tensor): _y_ bin edges corresponding to the matrix.
+
+    Returns:
+        torch.Tensor: Density values corresponding to the input (x, y) pairs. Out-of-range or NaN values are assigned a density of 0.0.
     """
     x = x.flatten().to(device=matrix.device, dtype=x_bins.dtype)
     y = y.flatten().to(device=matrix.device, dtype=y_bins.dtype)
@@ -166,13 +205,19 @@ def build_density_matrix_1d(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Build a normalized 1D probability vector over x.
 
-    Mirrors :func:`build_density_matrix` but in a single dimension. Used to
-    factor a 2D joint P(ΔE, y) into the marginal P(ΔE) and the conditional
-    P(y | ΔE) so that ΔE evidence is not double-counted when the likelihood
-    ratio multiplies several sub-spaces that all contain ΔE.
+    Args:
+        x (torch.Tensor): _x_ values for the 1D histogram.
+        x_bins (torch.Tensor | None, optional): The bin edges for the x-axis. Defaults to None.
+        n_bins_x (int, optional): The number of bins for the x-axis. Defaults to 20.
+        spacing_x (str, optional): The spacing for the x-axis bins. Defaults to "linear".
+        log_x_floor (float | None, optional): The floor value for the logarithmic spacing of the x-axis. Defaults to None.
+        smoothing (float, optional): The amount of smoothing to apply to the probability vector. Defaults to 0.0.
 
-    ``smoothing`` adds Laplace-style pseudo-counts per bin (see
-    :func:`build_density_matrix`).
+    Raises:
+        ValueError: If the input tensors are empty or if the binning parameters are invalid.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: The normalized 1D probability vector and the bin edges for the x-axis.
     """
     x = x.flatten()
     x = x[torch.isfinite(x)]
@@ -205,7 +250,16 @@ def lookup_density_values_1d(
     matrix: torch.Tensor,
     x_bins: torch.Tensor,
 ) -> torch.Tensor:
-    """1D analogue of :func:`lookup_density_values`. OOD / NaN → 0.0."""
+    """1D analogue of :func:`lookup_density_values`. OOD / NaN → 0.0.
+
+    Args:
+        x (torch.Tensor): _x_ values for which to lookup density values.
+        matrix (torch.Tensor): The density matrix.
+        x_bins (torch.Tensor): The bin edges for the x-axis.
+
+    Returns:
+        torch.Tensor: The density values for the given x values.
+    """
     x = x.flatten().to(device=matrix.device, dtype=x_bins.dtype)
     values = torch.full_like(x, 0.0, dtype=matrix.dtype, device=matrix.device)
     finite = torch.isfinite(x)

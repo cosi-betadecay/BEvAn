@@ -5,12 +5,13 @@ from datetime import datetime
 from pathlib import Path
 
 import torch
+import wandb
 from dotenv import load_dotenv
 
-import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator
+from pipeline.eval import Evaluator, best_f1_threshold, roc_auc
+from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -38,68 +39,6 @@ def metrics(counts: dict) -> dict:
     return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
 
 
-def auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
-    """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
-
-    Invariant to any monotonic transform of ``scores`` (so the log-ratio gives
-    the same answer as the ratio).
-
-    Args:
-        scores (torch.Tensor): Per-event separating scores.
-        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
-
-    Returns:
-        float: The ROC AUC, or NaN if either class is empty.
-    """
-    labels = labels.bool()
-    n_pos = int(labels.sum())
-    n_neg = labels.numel() - n_pos
-    if n_pos == 0 or n_neg == 0:
-        return float("nan")
-
-    order = torch.argsort(scores)
-    s_sorted = scores[order]
-    _, inv, counts = torch.unique_consecutive(s_sorted, return_inverse=True, return_counts=True)
-    starts = torch.cumsum(counts, 0) - counts  # 0-based start index of each tie group
-    avg_rank_group = starts.double() + (counts.double() + 1) / 2  # 1-based average rank
-    ranks_sorted = avg_rank_group[inv]
-    ranks = torch.empty_like(ranks_sorted)
-    ranks[order] = ranks_sorted
-
-    r_pos = ranks[labels].sum().item()
-    return (r_pos - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
-
-
-def best_f1(scores: torch.Tensor, labels: torch.Tensor) -> float:
-    """Best F1 achievable by sweeping a threshold over the prior-free score.
-
-    Cuts are only allowed between distinct score values (tie-aware).
-
-    Args:
-        scores (torch.Tensor): Per-event separating scores.
-        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
-
-    Returns:
-        float: The best F1 over all thresholds, or NaN if there are no positives.
-    """
-    labels = labels.bool()
-    n_pos = int(labels.sum())
-    if n_pos == 0:
-        return float("nan")
-
-    order = torch.argsort(scores, descending=True)
-    s_sorted = scores[order]
-    y_sorted = labels[order].double()
-    tp_cum = torch.cumsum(y_sorted, 0)
-    k = torch.arange(1, s_sorted.numel() + 1, dtype=torch.double)
-    f1 = 2 * tp_cum / (k + n_pos)
-
-    # Valid threshold boundaries: last element, or where the next score differs.
-    boundary = torch.ones(s_sorted.numel(), dtype=torch.bool)
-    boundary[:-1] = s_sorted[:-1] != s_sorted[1:]
-    return float(f1[boundary].max().item())
-
-
 def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> dict:
     """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio.
 
@@ -116,7 +55,7 @@ def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, 
     scores, labels = pooled
     finite = torch.isfinite(scores)
     scores, labels = scores[finite], labels[finite]
-    return {"best_f1": best_f1(scores, labels), "auc": auc(scores, labels)}
+    return {"best_f1": best_f1_threshold(scores, labels)[0], "auc": roc_auc(scores, labels)}
 
 
 def geo_from_header(sim_file: Path) -> str:
@@ -174,15 +113,18 @@ def discover_datasets() -> list[dict[str, str]]:
     return datasets
 
 
-def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
+def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -> tuple[dict, dict]:
     """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
 
     Args:
         ds (dict[str, str]): Dataset paths with name, geo_file, sim_file, tra_file.
         use_wandb (bool): Whether to use Weights & Biases for logging.
+        n_iter (int): Number of champion-seeded search candidates per dataset.
+        calibrate (bool): Whether to calibrate the decision-threshold offset for F1.
 
     Returns:
-        dict: Pooled confusion counts plus prior-free metrics, keyed by split name.
+        tuple[dict, dict]: (per-split confusion counts plus prior-free metrics,
+            the flattened chosen config plus selection diagnostics).
     """
     if use_wandb:
         wandb.init(project=PROJECT, name=ds["name"], reinit=True)
@@ -203,7 +145,33 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
     data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
-    trainer = Trainer().fit(train)
+    # Champion-seeded, AUC-rewarded search per dataset (geometries differ wildly
+    # in event counts), leak-free on the training split and overfit-guarded (keeps
+    # the champion unless beaten by >1 SE), then refit on the full train set.
+    best_config, info = search_hyperparams(train, n_iter=n_iter)
+    flat = flatten_config(best_config)
+    print(
+        f"  selected {flat} (accepted={info['accepted']}; confirm AUC "
+        f"{info['confirm_best_mean']:.4f} vs seed {info['confirm_seed_mean']:.4f})"
+    )
+    selection = {**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]}
+
+    trainer = Trainer(**best_config).fit(train)
+
+    # Calibrate the global decision-threshold offset for F1 (guarded; 0 keeps the
+    # count-prior default and stays byte-identical), then deploy it.
+    if calibrate:
+        offset, cal_info = calibrate_global_offset(trainer, train, best_config)
+        apply_offset(trainer, offset)
+        print(f"  threshold offset c={offset:.4f} (accepted={cal_info['accepted']})")
+        selection["threshold_offset"] = offset
+        selection["threshold_moved"] = cal_info["accepted"]
+    else:
+        selection["threshold_offset"] = 0.0
+        selection["threshold_moved"] = False
+    if use_wandb:
+        wandb.log(selection)
+
     evaluator = Evaluator(trainer)
     results = {}
     for split_name, split_data in (("train", train), ("eval", eval_data)):
@@ -212,14 +180,16 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
 
     if use_wandb:
         wandb.finish()
-    return results
+    return results, selection
 
 
-def main(use_wandb: bool) -> None:
+def main(use_wandb: bool, n_iter: int, calibrate: bool) -> None:
     """Run annihilation detection extraction over every .sim/.tra/geometry triple.
 
     Args:
         use_wandb (bool): Whether to use Weights & Biases for logging.
+        n_iter (int): Number of champion-seeded search candidates per dataset.
+        calibrate (bool): Whether to calibrate the decision-threshold offset for F1.
 
     Raises:
         FileNotFoundError: If the data directory does not exist.
@@ -237,7 +207,7 @@ def main(use_wandb: bool) -> None:
         print(
             f"\n{'=' * 60}\nRunning {ds['name']}\n  geo: {ds['geo_file']}\n  sim: {ds['sim_file']}\n  tra: {ds['tra_file']}\n{'=' * 60}"
         )
-        totals = run_one(ds, use_wandb)
+        totals, selection = run_one(ds, use_wandb, n_iter, calibrate)
         for split, counts in totals.items():
             rows.append(
                 {
@@ -253,6 +223,8 @@ def main(use_wandb: bool) -> None:
                     # auc is the ROC AUC of the per-event likelihood ratio.
                     "best_f1": counts["best_f1"],
                     "auc": counts["auc"],
+                    # The per-dataset config the search chose, for traceability.
+                    **selection,
                 }
             )
 
@@ -269,6 +241,17 @@ def main(use_wandb: bool) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run β⁺ detection over every .sim/.tra pair found in data/.")
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument(
+        "--search-iters",
+        type=int,
+        default=50,
+        help="Champion-seeded search candidates per dataset (0 keeps the champion seed; cost scales with this x folds x datasets)",
+    )
+    parser.add_argument(
+        "--no-calibrate",
+        action="store_true",
+        help="Skip the decision-threshold calibration (keep the raw count-prior operating point)",
+    )
     args = parser.parse_args()
 
     if args.wandb:
@@ -278,4 +261,4 @@ if __name__ == "__main__":
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
 
-    main(args.wandb)
+    main(args.wandb, args.search_iters, not args.no_calibrate)

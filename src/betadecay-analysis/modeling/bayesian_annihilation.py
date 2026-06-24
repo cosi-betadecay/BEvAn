@@ -1,3 +1,5 @@
+import math
+
 import torch
 
 
@@ -97,10 +99,23 @@ class BayesianAnnihiliationModel:
         )
         return numerator / denominator
 
-    def inference(self) -> torch.Tensor:
+    def inference(self, log_threshold: float | None = None) -> torch.Tensor:
         """Perform classification based on probabilities.
 
+        With ``log_threshold=None`` the decision is the Bayesian posterior rule
+        (predict β⁺ when ``P(β⁺ | D) >= P(bg | D)``), i.e. the operating point set
+        by the raw class-count prior. A ``log_threshold`` instead applies a
+        calibrated cut on the log-likelihood ratio: predict β⁺ when
+        ``log R >= log_threshold`` (equivalently ``R >= exp(log_threshold)``).
+        This lets a leak-free F1 calibration shift the operating point off the
+        count-prior default without touching the densities.
+
+        Args:
+            log_threshold: Calibrated LLR cut, or None for the count-prior posterior rule.
+
         Returns:
-            torch.Tensor: Batched classification output.
+            torch.Tensor: Batched boolean classification output.
         """
-        return self.beta_decay_given_data_probability() >= self.background_given_data_probability()
+        if log_threshold is None:
+            return self.beta_decay_given_data_probability() >= self.background_given_data_probability()
+        return self.ratio >= math.exp(log_threshold)
