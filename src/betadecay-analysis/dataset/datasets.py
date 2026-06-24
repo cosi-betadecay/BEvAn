@@ -35,6 +35,7 @@ class Datasets:
         self,
         reader_sim: MFileEventsSim,
         reconstructed_unit_vector: torch.Tensor,
+        ordering: str = "ckd",
     ) -> None:
         """Bind the dataset builder to a simulation reader and source direction.
 
@@ -42,9 +43,13 @@ class Datasets:
             reader_sim: Open MEGAlib ``.sim`` event reader to stream events from.
             reconstructed_unit_vector: Reconstructed source direction the ARM
                 feature is measured against.
+            ordering: Hit-subset ordering passed to event processing — ``"ckd"``
+                (the default Compton-kinematic-discrepancy ordering) or ``"energy"``
+                (plain energy sort), the latter used by the no-CKD-order ablation.
         """
         self.reader_sim = reader_sim
         self.reconstructed_unit_vector = reconstructed_unit_vector
+        self.ordering = ordering
 
     def feature_bucket(self, d_arm: float, d_anni: float) -> int:
         """Route an event to its feature bucket from which features are finite.
@@ -87,7 +92,7 @@ class Datasets:
 
             cls = "bdecay" if ground_truth_bdecay(event_sim) else "bg"
 
-            energies, positions, sizes = event_data_processing(event_sim)
+            energies, positions, sizes = event_data_processing(event_sim, ordering=self.ordering)
             if energies is None or positions is None or sizes is None:
                 # Invalid processing -> no usable feature; park in bucket 1 with
                 # NaN so it counts toward the class prior but is excluded from the

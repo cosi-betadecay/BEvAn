@@ -1,23 +1,53 @@
-"""Ablation A8 — learned term weights (vs the equal-weight default).
+from harness import (
+    FACTORS,
+    Evaluator,
+    Trainer,
+    best_f1_threshold,
+    fit_logistic,
+    metrics,
+    roc_auc,
+    term_llr_columns,
+)
 
-What it is:
-    The champion combines per-term log-likelihood ratios with equal weights
-    (log R = sum_t [log p_beta - log p_bg], each term weight 1). This row instead
-    fits per-term weights — a logistic regression on the per-term LLRs, which is
-    the provably-optimal (MLE) weighting — and classifies with those learned
-    coefficients in place of the uniform ones.
 
-What it tries to prove:
-    That equal weights are not an arbitrary convenience but the optimum. The VM
-    result is definitive: the best-F1-swept champion scores 0.8947 vs logistic
-    0.8925 (-0.0022, overfit), so learning the weights does not help and slightly
-    hurts — equal weighting *is* the MLE solution for this likelihood. This row
-    turns "why 1,1,1?" from an assertion into a demonstrated result.
+def run(train: dict, eval_data: dict, config: dict) -> dict:
+    """Fit logistic weights on the per-term LLRs and evaluate with them.
 
-Why it is important:
-    A reviewer reasonably suspects that uniform weights are a missed tuning
-    opportunity. Showing that the optimal learned weights collapse back to (near)
-    equal — and that any apparent gain is eval-set overfit — closes that line of
-    attack and reinforces the paper's overall message that the simple, transparent
-    choice is also the statistically correct one.
-"""
+    Builds the champion model, fits a logistic regression over the three per-term
+    log-likelihood ratios on the training split (the MLE weighting), then scores the
+    eval split at the logistic decision boundary. The fitted weights are returned
+    alongside the metrics — they are themselves the result (expected near equal).
+
+    Args:
+        train: Nested per-class, per-bucket training feature dict.
+        eval_data: The held-out evaluation split.
+        config: The champion ``Trainer`` config.
+
+    Returns:
+        The eval-split metric record plus the fitted ``weights`` and ``bias``.
+    """
+    trainer = Trainer(**config).fit(train)
+    evaluator = Evaluator(trainer)
+
+    x_train, y_train = term_llr_columns(evaluator, train)
+    weights, bias = fit_logistic(x_train, y_train)
+
+    x_eval, y_eval = term_llr_columns(evaluator, eval_data)
+    logits = (x_eval.double() @ weights + bias).float()
+    ground_truths = y_eval.bool()
+    predictions = logits >= 0.0
+    counts = {
+        "tp": int((predictions & ground_truths).sum()),
+        "fp": int((predictions & ~ground_truths).sum()),
+        "fn": int((~predictions & ground_truths).sum()),
+        "tn": int((~predictions & ~ground_truths).sum()),
+        "excluded": 0,
+    }
+    return {
+        **counts,
+        **metrics(counts),
+        "best_f1": best_f1_threshold(logits, ground_truths)[0],
+        "auc": roc_auc(logits, ground_truths),
+        "weights": {factor: float(w) for factor, w in zip(FACTORS, weights, strict=True)},
+        "bias": bias,
+    }
