@@ -11,6 +11,7 @@ import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
+from pipeline.model_selection import select_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -203,7 +204,14 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
     data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
-    trainer = Trainer().fit(train)
+    # Select bins + smoothing per dataset (geometries differ wildly in event
+    # counts), leak-free on the training split, then refit on the full train set.
+    best_config, cv_scores = select_hyperparams(train)
+    print(f"  selected {best_config} (CV log-likelihood {cv_scores[(best_config['rho_floor'], best_config['joint_smoothing'], best_config['marginal_smoothing'])]:.4f})")
+    if use_wandb:
+        wandb.log(best_config)
+
+    trainer = Trainer(**best_config).fit(train)
     evaluator = Evaluator(trainer)
     results = {}
     for split_name, split_data in (("train", train), ("eval", eval_data)):
