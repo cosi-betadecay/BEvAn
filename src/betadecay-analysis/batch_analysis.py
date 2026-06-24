@@ -12,7 +12,14 @@ from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator, metrics, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
+from utils.local_results import (
+    save_confusion_matrix,
+    save_density_terms,
+    save_score_curves,
+    write_metrics_json,
+)
 from utils.reader_extraction import get_reader
+from utils.wandb_logging import log_density_terms
 
 PROJECT = "cosi-betadecay"
 DATA_DIR = Path("data")
@@ -63,7 +70,9 @@ def discover_datasets() -> list[dict[str, str]]:
     return datasets
 
 
-def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -> tuple[dict, dict]:
+def run_one(
+    ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool, run_dir: Path
+) -> tuple[dict, dict]:
     """Run the exact analysis.py pipeline for a single (geo, sim, tra) dataset.
 
     Args:
@@ -71,6 +80,9 @@ def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -
         use_wandb (bool): Whether to use Weights & Biases for logging.
         n_iter (int): Number of champion-seeded search candidates per dataset.
         calibrate (bool): Whether to calibrate the decision-threshold offset for F1.
+        run_dir (Path): The run's ``results/<timestamp>/`` directory; this
+            dataset's plots and ``metrics.json`` are written under
+            ``run_dir/<name>``.
 
     Returns:
         tuple[dict, dict]: (per-split confusion counts plus prior-free metrics,
@@ -122,11 +134,32 @@ def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -
     if use_wandb:
         wandb.log(selection)
 
+    # Density terms are model-level: log to W&B and save to disk once per run.
+    out_dir = run_dir / ds["name"]
+    log_density_terms(trainer)
+    save_density_terms(trainer, out_dir)
+
     evaluator = Evaluator(trainer)
     results = {}
     for split_name, split_data in (("train", train), ("eval", eval_data)):
         counts = evaluator.evaluate(split_data, split_name=split_name)
-        results[split_name] = {**counts, **prior_free_scores(evaluator, split_data)}
+        results[split_name] = {**counts, **metrics(counts), **prior_free_scores(evaluator, split_data)}
+        save_confusion_matrix(counts, out_dir, split_name)
+        save_score_curves(evaluator, split_data, out_dir, split_name)
+
+    # One metrics.json per dataset, both splits, with the chosen config.
+    write_metrics_json(
+        out_dir,
+        {
+            "dataset": ds["name"],
+            "geo_file": ds["geo_file"],
+            "sim_file": ds["sim_file"],
+            "tra_file": ds["tra_file"],
+            "selection": selection,
+            "train": results["train"],
+            "eval": results["eval"],
+        },
+    )
 
     if use_wandb:
         wandb.finish()
@@ -152,12 +185,17 @@ def main(use_wandb: bool, n_iter: int, calibrate: bool) -> None:
         raise RuntimeError(f"No .sim/.tra pairs found in {DATA_DIR.resolve()}")
 
     print(f"Found {len(datasets)} dataset(s): {', '.join(d['name'] for d in datasets)}")
+    # One results/<timestamp>/ folder per run (same convention the CSV used),
+    # created up front so every dataset writes its plots and metrics under it.
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = RESULTS_DIR / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for ds in datasets:
         print(
             f"\n{'=' * 60}\nRunning {ds['name']}\n  geo: {ds['geo_file']}\n  sim: {ds['sim_file']}\n  tra: {ds['tra_file']}\n{'=' * 60}"
         )
-        totals, selection = run_one(ds, use_wandb, n_iter, calibrate)
+        totals, selection = run_one(ds, use_wandb, n_iter, calibrate, run_dir)
         for split, counts in totals.items():
             rows.append(
                 {
@@ -178,14 +216,12 @@ def main(use_wandb: bool, n_iter: int, calibrate: bool) -> None:
                 }
             )
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    out_path = RESULTS_DIR / f"{timestamp}.csv"
+    out_path = run_dir / "summary.csv"
     with out_path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
-    print(f"\nSaved results for {len(rows)} dataset(s) to {out_path.resolve()}")
+    print(f"\nSaved results for {len(rows)} dataset(s) to {run_dir.resolve()}")
 
 
 if __name__ == "__main__":

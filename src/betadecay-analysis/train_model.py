@@ -10,6 +10,7 @@ from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
+from utils.wandb_logging import log_density_terms
 
 PROJECT = "cosi-betadecay"
 MODELS_DIR = Path("models")
@@ -102,6 +103,9 @@ def train_and_save(
         )
         if use_wandb:
             wandb.log({"threshold_offset": offset, "threshold_moved": cal_info["accepted"]})
+
+    # Log the fitted per-bucket density terms (model-level; no-op without a run).
+    log_density_terms(trainer)
 
     trainer.save(
         out_file,

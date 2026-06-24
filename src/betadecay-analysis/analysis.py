@@ -1,5 +1,6 @@
 import argparse
 import os
+from datetime import datetime
 from pathlib import Path
 
 import wandb
@@ -7,12 +8,20 @@ from dotenv import load_dotenv
 
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator
+from pipeline.eval import Evaluator, metrics, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
+from utils.local_results import (
+    save_confusion_matrix,
+    save_density_terms,
+    save_score_curves,
+    write_metrics_json,
+)
 from utils.reader_extraction import get_reader
+from utils.wandb_logging import log_density_terms
 
 PROJECT = "cosi-betadecay"
+RESULTS_DIR = Path("results")
 
 
 def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: int, calibrate: bool) -> None:
@@ -70,8 +79,9 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: i
         f"Selected {flat} (accepted={info['accepted']}; confirm AUC "
         f"{info['confirm_best_mean']:.4f} vs seed {info['confirm_seed_mean']:.4f})"
     )
+    selection = {**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]}
     if use_wandb:
-        wandb.log({**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]})
+        wandb.log(selection)
 
     trainer = Trainer(**best_config).fit(train)
 
@@ -84,10 +94,46 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: i
             f"Threshold offset c={offset:.4f} (accepted={cal_info['accepted']}; "
             f"CV F1 gain {cal_info.get('cv_mean_gain', float('nan')):.4f})"
         )
+        selection["threshold_offset"] = offset
+        selection["threshold_moved"] = cal_info["accepted"]
         if use_wandb:
             wandb.log({"threshold_offset": offset, "threshold_moved": cal_info["accepted"]})
+    else:
+        selection["threshold_offset"] = 0.0
+        selection["threshold_moved"] = False
 
-    Evaluator(trainer).evaluate(eval_data, split_name="eval")
+    # Per-run results folder: results/<timestamp>/<dataset>/ (same convention the
+    # batch CSV uses), created up front like batch_analysis so results/ always
+    # exists even if a step writes nothing. Density terms are model-level, so log
+    # + save them once.
+    name = Path(sim_file).stem
+    out_dir = RESULTS_DIR / datetime.now().strftime("%Y-%m-%d_%H-%M-%S") / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_density_terms(trainer)
+    save_density_terms(trainer, out_dir)
+
+    evaluator = Evaluator(trainer)
+    split_metrics = {}
+    for split_name, split_data in (("train", train), ("eval", eval_data)):
+        counts = evaluator.evaluate(split_data, split_name=split_name)
+        split_metrics[split_name] = {**counts, **metrics(counts), **prior_free_scores(evaluator, split_data)}
+        save_confusion_matrix(counts, out_dir, split_name)
+        save_score_curves(evaluator, split_data, out_dir, split_name)
+
+    # One metrics.json per dataset, both splits, with the chosen config.
+    path = write_metrics_json(
+        out_dir,
+        {
+            "dataset": name,
+            "geo_file": geo_file,
+            "sim_file": sim_file,
+            "tra_file": tra_file,
+            "selection": selection,
+            "train": split_metrics["train"],
+            "eval": split_metrics["eval"],
+        },
+    )
+    print(f"Saved results to {path.parent.resolve()}")
 
     if use_wandb:
         wandb.finish()

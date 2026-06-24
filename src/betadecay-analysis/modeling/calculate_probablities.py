@@ -1,11 +1,10 @@
 import math
 
-import matplotlib.pyplot as plt
 import torch
 import wandb
 
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
-from utils.plots import plot_confusion_matrix
+from utils.wandb_logging import log_confusion_matrix
 
 
 def R(terms: list[tuple[torch.Tensor, torch.Tensor]], eps: float = 1e-8) -> torch.Tensor:
@@ -98,18 +97,18 @@ def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True
     if wandb.run is None:
         return
 
-    log = {
-        f"{split_name}/TP": tp,
-        f"{split_name}/FP": fp,
-        f"{split_name}/FN": fn,
-        f"{split_name}/TN": tn,
-        f"{split_name}/precision": precision,
-        f"{split_name}/recall": recall,
-        f"{split_name}/false_positive_rate": fpr,
-        f"{split_name}/f1_score": f1_score,
-    }
+    wandb.log(
+        {
+            f"{split_name}/TP": tp,
+            f"{split_name}/FP": fp,
+            f"{split_name}/FN": fn,
+            f"{split_name}/TN": tn,
+            f"{split_name}/precision": precision,
+            f"{split_name}/recall": recall,
+            f"{split_name}/false_positive_rate": fpr,
+            f"{split_name}/f1_score": f1_score,
+        }
+    )
+    # Delegate the confusion-matrix image to the centralized figure logger.
     if log_image:
-        fig = plot_confusion_matrix(tp, fp, fn, tn)
-        log[f"{split_name}/confusion_matrix"] = wandb.Image(fig)
-        plt.close(fig)
-    wandb.log(log)
+        log_confusion_matrix(counts, split_name)
