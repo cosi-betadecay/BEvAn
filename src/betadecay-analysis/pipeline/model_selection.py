@@ -228,7 +228,7 @@ def _sample_config(
 
 def search_hyperparams(
     train: dict[str, dict[int, dict[str, torch.Tensor]]],
-    n_iter: int = 1000,
+    n_iter: int = 50,
     k: int = 5,
     seed: int = 0,
     reward: str = "auc",
@@ -285,7 +285,7 @@ def search_hyperparams(
     best_mean, _ = _mean_se(cv_fold_scores(train, seed_config, k, seed, reward))
     if best_mean != best_mean:
         raise ValueError("Champion seed produced no finite CV fold; cannot search.")
-    pbar = tqdm(range(n_iter), desc="hyperparam search", unit="cfg")
+    pbar = tqdm(range(n_iter), desc="Hyperparameter search", unit="cfg")
     pbar.set_postfix(best_auc=f"{best_mean:.4f}")
     for _ in pbar:
         candidate = _sample_config(seed_config, generator, rho_factor, joint_range, marginal_range)

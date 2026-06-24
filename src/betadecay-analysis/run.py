@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--search-iters",
         type=int,
-        default=1000,
+        default=50,
         help="Champion-seeded bin-search candidates (0 keeps the champion seed; cost scales with this x folds)",
     )
     parser.add_argument(

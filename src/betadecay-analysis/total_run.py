@@ -244,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search-iters",
         type=int,
-        default=1000,
+        default=50,
         help="Champion-seeded search candidates per dataset (0 keeps the champion seed; cost scales with this x folds x datasets)",
     )
     parser.add_argument(
