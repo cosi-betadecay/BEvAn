@@ -4,13 +4,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-import torch
 import wandb
 from dotenv import load_dotenv
 
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, best_f1_threshold, roc_auc
+from pipeline.eval import Evaluator, metrics, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
@@ -19,78 +18,24 @@ PROJECT = "cosi-betadecay"
 DATA_DIR = Path("data")
 RESULTS_DIR = Path("results")
 
-
-def metrics(counts: dict) -> dict:
-    """Derive precision/recall/FPR/F1 from raw confusion counts.
-
-    Matches the definitions in modeling.calculate_probablities.log_confusion.
-
-    Args:
-        counts (dict): Confusion counts with tp/fp/fn/tn keys.
-
-    Returns:
-        dict: Keys precision, recall, fpr, and f1_score.
-    """
-    tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
-
-
-def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> dict:
-    """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio.
-
-    Args:
-        evaluator (Evaluator): Trained evaluator providing the pooled log-ratio.
-        data (dict): Nested per-class, per-bucket feature dict for one split.
-
-    Returns:
-        dict: Keys best_f1 and auc (both NaN if no events pool).
-    """
-    pooled = evaluator.pooled_log_ratio(data)
-    if pooled is None:
-        return {"best_f1": float("nan"), "auc": float("nan")}
-    scores, labels = pooled
-    finite = torch.isfinite(scores)
-    scores, labels = scores[finite], labels[finite]
-    return {"best_f1": best_f1_threshold(scores, labels)[0], "auc": roc_auc(scores, labels)}
-
-
-def geo_from_header(sim_file: Path) -> str:
-    """Extract the geometry setup path recorded in a .sim/.tra header.
-
-    The header stores the absolute path used on the machine that produced the
-    file, e.g. ``/home/arya/.../resource/examples/geomega/special/SPILike.geo.setup``.
-    We rewrite it to a portable ``$(MEGALIB)/resource/...`` path so MEGAlib
-    resolves it on whichever machine runs this.
-
-    Args:
-        sim_file (Path): Path to the .sim or .tra file to read the header from.
-
-    Returns:
-        str: The portable geometry setup path.
-
-    Raises:
-        RuntimeError: If no Geometry line is found in the header.
-    """
-    with sim_file.open("r", errors="ignore") as fh:
-        for line in fh:
-            if line.startswith("Geometry"):
-                raw = line.split(None, 1)[1].strip()
-                idx = raw.find("resource/examples/geomega")
-                if idx != -1:
-                    return f"$(MEGALIB)/{raw[idx:]}"
-                return raw
-            # Geometry is in the first handful of header lines; bail out early.
-            if line.startswith(("SE", "EN", "TI")):
-                break
-    raise RuntimeError(f"No Geometry line found in header of {sim_file}")
+# Static dataset-name -> geometry setup map for the batch runner. Each simulation
+# in data/ was produced against a different geometry, so the batch runner cannot
+# take a single --geo-file flag; the per-dataset entry points (run.py,
+# train_model.py, inference.py) pass geometry explicitly instead.
+GEOMETRIES = {
+    "SPILike": "$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup",
+    "NCT": "$(MEGALIB)/resource/examples/geomega/special/Simple_Ge_NCT_try1_040721.geo.setup",
+    "Max": "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup",
+    "GeACT": "$(MEGALIB)/resource/examples/geomega/special/GeACT.geo.setup",
+    "COSI_Balloon": "$(MEGALIB)/resource/examples/geomega/cosiballoon/COSIBalloon.12Detector.geo.setup",
+}
 
 
 def discover_datasets() -> list[dict[str, str]]:
-    """Find every {name}.sim that has a matching {name}.tra in DATA_DIR.
+    """Find every {name}.sim with a matching {name}.tra and a registered geometry.
+
+    A simulation is skipped (with a message) if it has no matching ``.tra`` or no
+    entry in :data:`GEOMETRIES`.
 
     Returns:
         list[dict[str, str]]: One dict per dataset with name, geo_file,
@@ -102,10 +47,15 @@ def discover_datasets() -> list[dict[str, str]]:
         if not tra_file.exists():
             print(f"Skipping {sim_file.name}: no matching {tra_file.name}")
             continue
+        name = sim_file.stem
+        geo_file = GEOMETRIES.get(name)
+        if geo_file is None:
+            print(f"Skipping {name}: no geometry registered in GEOMETRIES")
+            continue
         datasets.append(
             {
-                "name": sim_file.stem,
-                "geo_file": geo_from_header(sim_file),
+                "name": name,
+                "geo_file": geo_file,
                 "sim_file": str(sim_file),
                 "tra_file": str(tra_file),
             }

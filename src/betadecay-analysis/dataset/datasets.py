@@ -45,7 +45,6 @@ class Datasets:
         """
         self.reader_sim = reader_sim
         self.reconstructed_unit_vector = reconstructed_unit_vector
-        self.train_percentage = 0.8
 
     def feature_bucket(self, d_arm: float, d_anni: float) -> int:
         """Route an event to its feature bucket from which features are finite.
@@ -117,13 +116,19 @@ class Datasets:
             for cls in CLASSES
         }
 
-    def split_dataset(self, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> tuple[dict, dict]:
+    def split_dataset(
+        self, data: dict[str, dict[int, dict[str, torch.Tensor]]], train_percentage: float = 0.8
+    ) -> tuple[dict, dict]:
         """Split each per-class, per-bucket feature tensor into train/eval partitions.
 
-        Uses a fixed seed and ``train_percentage`` so the split is reproducible.
+        Uses a fixed seed so the split is reproducible. Only the split-using
+        entry points (``run.py``, ``total_run.py``) call this; ``train_model.py``
+        fits on the full feature dict and never splits.
 
         Args:
             data: Nested feature dict from :meth:`compute_event_features`.
+            train_percentage: Fraction of each class/bucket assigned to the train
+                partition; the remainder is the eval partition.
 
         Returns:
             ``(train, evaluate)``, each mirroring the nested structure of ``data``.
@@ -136,7 +141,7 @@ class Datasets:
             for b in BUCKETS:
                 n = data[cls][b]["delta_E"].shape[0]
                 perm = torch.randperm(n, generator=generator)
-                n_train = int(n * self.train_percentage)
+                n_train = int(n * train_percentage)
                 train_idx, eval_idx = perm[:n_train], perm[n_train:]
                 for f in FEATURES:
                     train[cls][b][f] = data[cls][b][f][train_idx]

@@ -10,6 +10,25 @@ if TYPE_CHECKING:
     from pipeline.train import Trainer
 
 
+def metrics(counts: dict) -> dict:
+    """Derive precision/recall/FPR/F1 from raw confusion counts.
+
+    Matches the definitions in :func:`modeling.calculate_probablities.log_confusion`.
+
+    Args:
+        counts: Confusion counts with ``tp``/``fp``/``fn``/``tn`` keys.
+
+    Returns:
+        Dict with ``precision``, ``recall``, ``fpr``, and ``f1_score``.
+    """
+    tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
+
+
 def roc_auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
     """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
 
@@ -306,3 +325,25 @@ class Evaluator:
         if scores.numel() == 0:
             return float("nan")
         return roc_auc(scores, labels)
+
+
+def prior_free_scores(evaluator: "Evaluator", data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> dict:
+    """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio.
+
+    Threshold- and prior-independent separating power: ``best_f1`` is the best F1
+    over all score cuts and ``auc`` is the ROC AUC of the pooled log-ratio.
+
+    Args:
+        evaluator: Trained evaluator providing the pooled log-ratio.
+        data: Nested per-class, per-bucket feature dict for one split.
+
+    Returns:
+        Dict with ``best_f1`` and ``auc`` (both NaN if no events pool).
+    """
+    pooled = evaluator.pooled_log_ratio(data)
+    if pooled is None:
+        return {"best_f1": float("nan"), "auc": float("nan")}
+    scores, labels = pooled
+    finite = torch.isfinite(scores)
+    scores, labels = scores[finite], labels[finite]
+    return {"best_f1": best_f1_threshold(scores, labels)[0], "auc": roc_auc(scores, labels)}

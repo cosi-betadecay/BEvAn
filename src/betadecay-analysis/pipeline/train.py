@@ -1,7 +1,13 @@
+from pathlib import Path
+
 import torch
 
-from dataset.datasets import BUCKETS
+from dataset.datasets import BUCKETS, FEATURES
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix, build_density_matrix_1d
+
+# Bumped whenever the saved-artifact layout changes incompatibly; load refuses
+# a payload whose version differs so a stale file fails loudly.
+SAVE_FORMAT_VERSION = 1
 
 
 class Trainer:
@@ -38,6 +44,21 @@ class Trainer:
         self.joint_smoothing = joint_smoothing  # Laplace pseudo-counts for the 2D joints (sparse-bucket safe)
         self.marginal_smoothing = marginal_smoothing  # for the 1D delta_E marginal
 
+    def config(self) -> dict:
+        """The constructor kwargs that define this trainer's binning and smoothing.
+
+        Re-passing the result to :class:`Trainer` reproduces an identically
+        configured trainer, so it is what :meth:`save` records for :meth:`load`.
+
+        Returns:
+            ``{"rho_floor": ..., "joint_smoothing": ..., "marginal_smoothing": ...}``.
+        """
+        return {
+            "rho_floor": self.rho_floor,
+            "joint_smoothing": self.joint_smoothing,
+            "marginal_smoothing": self.marginal_smoothing,
+        }
+
     def fit(self, train: dict[str, dict[int, dict[str, torch.Tensor]]]) -> "Trainer":
         """Fit one independent density model per hit-multiplicity bucket.
 
@@ -50,6 +71,80 @@ class Trainer:
         # One independent model per hit-multiplicity bucket.
         self.models = {b: self.fit_bucket(train["bdecay"][b], train["bg"][b], b) for b in BUCKETS}
         return self
+
+    def save(
+        self,
+        path: str | Path,
+        threshold_offset: float = 0.0,
+        provenance: dict | None = None,
+    ) -> None:
+        """Serialize the fitted per-bucket models to a self-describing torch artifact.
+
+        Alongside the density matrices the payload records this trainer's config
+        (so :meth:`load` can rebuild it), a feature/bucket signature validated on
+        load, the calibrated threshold offset (already baked into each model's
+        ``log_threshold``, so this copy is for traceability only), and free-form
+        provenance. Every value is a plain scalar, string, or tensor, so the
+        artifact reloads without re-fitting and without a live MEGAlib reader.
+
+        Args:
+            path: Destination ``.pt`` file; parent directories are created.
+            threshold_offset: The global margin offset from calibration, recorded
+                for traceability (its effect already lives in ``log_threshold``).
+            provenance: Optional metadata, e.g. the source sim/tra/geometry paths.
+
+        Raises:
+            RuntimeError: If called before :meth:`fit` populated ``models``.
+        """
+        if not hasattr(self, "models"):
+            raise RuntimeError("Trainer must be fit before it can be saved.")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "format_version": SAVE_FORMAT_VERSION,
+            "feature_signature": {"features": list(FEATURES), "buckets": list(BUCKETS)},
+            "models": self.models,
+            "trainer_kwargs": self.config(),
+            "threshold_offset": threshold_offset,
+            "provenance": provenance or {},
+        }
+        torch.save(payload, path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "Trainer":
+        """Reconstruct a fitted trainer from a :meth:`save` artifact, without re-fitting.
+
+        Validates the format version and feature/bucket signature so a stale
+        artifact fails loudly instead of scoring against a mismatched feature
+        layout, rebuilds the trainer from the stored config, and restores its
+        per-bucket density models. The result is ready for
+        :class:`~pipeline.eval.Evaluator` and reproduces the saved decision rule
+        exactly (the calibrated ``log_threshold`` rides along inside ``models``).
+
+        Args:
+            path: Path to a ``.pt`` artifact written by :meth:`save`.
+
+        Returns:
+            A trainer with ``models`` populated, equivalent to the saved one.
+
+        Raises:
+            ValueError: If the artifact's format version or feature/bucket
+                signature does not match this code.
+        """
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        version = payload.get("format_version")
+        if version != SAVE_FORMAT_VERSION:
+            raise ValueError(f"Unsupported model format version {version!r}; expected {SAVE_FORMAT_VERSION}.")
+        signature = payload.get("feature_signature")
+        expected = {"features": list(FEATURES), "buckets": list(BUCKETS)}
+        if signature != expected:
+            raise ValueError(
+                f"Model feature signature {signature} does not match this code {expected}; "
+                "the artifact was trained against a different feature/bucket layout."
+            )
+        trainer = cls(**payload["trainer_kwargs"])
+        trainer.models = payload["models"]
+        return trainer
 
     def finite(self, *cols: torch.Tensor) -> torch.Tensor:
         """Boolean mask of positions that are finite across all given feature columns."""
