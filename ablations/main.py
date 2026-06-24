@@ -101,8 +101,8 @@ def main(
 
         if "factor_contributions" in selected:
             print("  ablation: factor_contributions")
-            contributions[name] = factor_contributions.run(champion_trainer, eval_data)
-            full_model[name] = {"f1": champion_eval["f1_score"], "auc": champion_eval["auc"]}
+            contributions[name] = factor_contributions.run(train, eval_data)
+            full_model[name] = harness.bucket_full_scores(champion_trainer, eval_data)
 
     # One timestamped run folder per invocation, mirroring the results/<timestamp>/
     # convention: a run's figures and CSVs share the same stamp.

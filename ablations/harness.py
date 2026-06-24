@@ -10,6 +10,7 @@ import torch
 from batch_analysis import discover_datasets
 
 from dataset.datasets import BUCKETS, Datasets
+from modeling.matrix_calculations import bins_from_counts, build_density_matrix_1d, lookup_density_values_1d
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator, best_f1_threshold, metrics, prior_free_scores, roc_auc
 from pipeline.model_selection import apply_offset, calibrate_global_offset, search_hyperparams
@@ -21,6 +22,9 @@ EPS = 1e-8
 # The three physics factors, in plot/column order; each maps to one pipeline term.
 FACTORS = ("delta_E", "arm", "anni")
 FACTOR_INDEX = {f: i for i, f in enumerate(FACTORS)}
+# Per-factor 1D-histogram spacing (matching how the pipeline bins each feature):
+# delta_E and arm are log-spaced with a small floor, anni is linear.
+FACTOR_SPACING = {"delta_E": ("log", 1e-3), "arm": ("log", 1e-3), "anni": ("linear", None)}
 # Feature-cache directory: ablations/cache.
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
 
@@ -34,10 +38,11 @@ __all__ = [
     "Evaluator",
     "Trainer",
     "best_f1_threshold",
+    "bucket_full_scores",
     "champion",
     "discover_datasets",
     "extract_split",
-    "factor_term_scores",
+    "factor_1d_llr",
     "fit_logistic",
     "metric_record",
     "metrics",
@@ -145,37 +150,86 @@ def term_factor(spec: dict) -> str:
     return spec["xfeat"] if spec.get("kind") == "1d" else spec["yfeat"]
 
 
-def factor_term_scores(evaluator: Evaluator, data: dict) -> dict[str, tuple[torch.Tensor, torch.Tensor]]:
-    """Per-factor ``(llr_scores, labels)`` from each factor's own pipeline term.
+def _all_factors_finite(bucket_features: dict) -> torch.Tensor:
+    """Boolean mask of events finite across all three factor features in a bucket."""
+    mask = torch.ones_like(bucket_features["delta_E"], dtype=torch.bool)
+    for f in FACTORS:
+        mask = mask & torch.isfinite(bucket_features[f])
+    return mask
 
-    Keeps the pipeline statistics as-is (the delta_E double-count inside the ARM and
-    anni joints is retained), so each factor is scored on the events of the buckets
-    where its term is active.
+
+def factor_1d_llr(
+    train: dict,
+    eval_data: dict,
+    factor: str,
+    bucket: int = 3,
+    rho_floor: float = 10.0,
+    smoothing: float = 0.5,
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    """1D-density log-ratio for one factor on the common all-features-finite population.
+
+    Fits a single-feature density (signal vs background) for ``factor`` on the
+    training events of ``bucket`` and scores the eval events of ``bucket``, both
+    restricted to events finite in every factor — so all three factors are scored on
+    the *same* population (bucket 3 = the >=3-hit events where the back-to-back
+    hypothesis exists). This removes the per-active-bucket / double-count confound of
+    the earlier per-term design.
 
     Args:
-        evaluator: Evaluator bound to the fitted champion trainer.
-        data: The split to score.
+        train: Nested per-class, per-bucket training feature dict.
+        eval_data: The held-out evaluation split.
+        factor: One of :data:`FACTORS`.
+        bucket: Hit-multiplicity bucket holding the common population (default 3).
+        rho_floor: Target events per histogram cell for the 1D density.
+        smoothing: Laplace pseudo-counts for the 1D density.
 
     Returns:
-        ``{factor: (scores, labels)}`` over the factors whose term is present.
+        ``(llr, labels)`` over the eval-bucket events, or None if a class is empty.
     """
-    collected: dict[str, tuple[list, list]] = {f: ([], []) for f in FACTORS}
-    for b in BUCKETS:
-        model = evaluator.trainer.models[b]
-        prepared = evaluator.prepare_terms(data, b, model)
-        if prepared is None:
-            continue
-        terms, ground_truths, _ = prepared
-        for spec, (p_beta, p_bg) in zip(model["terms"], terms, strict=True):
-            llr = torch.log(p_beta + EPS) - torch.log(p_bg + EPS)
-            scores, labels = collected[term_factor(spec)]
-            scores.append(llr)
-            labels.append(ground_truths)
-    return {
-        factor: (torch.cat(scores), torch.cat(labels))
-        for factor, (scores, labels) in collected.items()
-        if scores
-    }
+    spacing, floor = FACTOR_SPACING[factor]
+    tr_bd, tr_bg = train["bdecay"][bucket], train["bg"][bucket]
+    ev_bd, ev_bg = eval_data["bdecay"][bucket], eval_data["bg"][bucket]
+
+    fb = tr_bd[factor][_all_factors_finite(tr_bd)]
+    fg = tr_bg[factor][_all_factors_finite(tr_bg)]
+    eb = ev_bd[factor][_all_factors_finite(ev_bd)]
+    eg = ev_bg[factor][_all_factors_finite(ev_bg)]
+    if min(fb.numel(), fg.numel(), eb.numel(), eg.numel()) == 0:
+        return None
+
+    n_bins = bins_from_counts(min(fb.numel(), fg.numel()), d=1, rho_floor=rho_floor, min_bins=5)
+    _, x_bins = build_density_matrix_1d(
+        torch.cat([fb, fg]), n_bins_x=n_bins, spacing_x=spacing, log_x_floor=floor
+    )
+    beta, _ = build_density_matrix_1d(fb, x_bins=x_bins, smoothing=smoothing)
+    bgm, _ = build_density_matrix_1d(fg, x_bins=x_bins, smoothing=smoothing)
+
+    values = torch.cat([eb, eg])
+    labels = torch.cat([torch.ones(eb.numel(), dtype=torch.bool), torch.zeros(eg.numel(), dtype=torch.bool)])
+    p_beta = lookup_density_values_1d(values, beta, x_bins)
+    p_bg = lookup_density_values_1d(values, bgm, x_bins)
+    return torch.log(p_beta + EPS) - torch.log(p_bg + EPS), labels
+
+
+def bucket_full_scores(trainer: Trainer, data: dict, bucket: int = 3) -> dict[str, float]:
+    """Best-F1 and AUC of the full model's pooled log-ratio on one bucket's events.
+
+    The reference our-model performance on the same population the factor bars use,
+    so the dashed line in the factor-contributions figure is comparable to them.
+
+    Args:
+        trainer: The fitted champion trainer.
+        data: The split to score.
+        bucket: Hit-multiplicity bucket (default 3, the >=3-hit population).
+
+    Returns:
+        ``{"f1": ..., "auc": ...}`` (NaN if the bucket is empty).
+    """
+    out = Evaluator(trainer).bucket_log_ratio(data, bucket, trainer.models[bucket])
+    if out is None:
+        return {"f1": float("nan"), "auc": float("nan")}
+    llr, ground_truths = out
+    return {"f1": best_f1_threshold(llr, ground_truths)[0], "auc": roc_auc(llr, ground_truths)}
 
 
 def term_llr_columns(evaluator: Evaluator, data: dict) -> tuple[torch.Tensor, torch.Tensor]:

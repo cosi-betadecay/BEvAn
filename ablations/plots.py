@@ -1,15 +1,3 @@
-"""Plot helpers for the ablation study, saved under ``ablations/figures``.
-
-Both figure types show the **average across datasets** (mean +/- std), with the
-per-dataset detail written to CSV by ``tables`` for table building. There are two:
-an our-model-vs-ablation metric comparison (F1, AUC, precision, recall) and the
-factor-contribution panel (F1 and AUC per physics factor). Both take plain dicts
-of floats, so this module stays free of the ROOT-backed pipeline packages.
-
-Display strings (titles, axis labels, legends) are sized and worded for the
-paper; the on-disk file stems stay machine-named so they match the CSVs.
-"""
-
 from pathlib import Path
 
 import matplotlib
@@ -197,6 +185,6 @@ def plot_factor_contributions(
         ax.set_title(label, fontsize=TITLE_SIZE)
         ax.tick_params(axis="both", labelsize=TICK_SIZE)
 
-    fig.suptitle("Factor contributions (averaged across datasets)", fontsize=SUPTITLE_SIZE)
+    fig.suptitle("Factor contributions on ≥3-hit events (averaged across datasets)", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
     return _save(fig, Path(save_dir) / "factor_contributions.png")

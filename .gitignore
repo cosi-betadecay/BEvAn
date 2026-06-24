@@ -21,8 +21,8 @@ results/
 
 # Ablation study outputs (generated): cached features, figures, and CSV tables
 ablations/cache/
-#ablations/figures/
-#ablations/tables/
+ablations/figures/
+ablations/tables/
 
 # environment variables
 .env
