@@ -1,55 +1,58 @@
-"""Ablation A9 — naive 511 keV cut (the bare energy-window baseline).
+"""Ablation A9 — straight 511 keV cut (the bare total-energy window baseline).
 
 What it is:
-    The simplest possible classifier: predict β⁺ iff the event has a subset within a
-    window of 511 keV, i.e. ``delta_E <= c``. No densities, no geometry, no Bayesian
-    model — just a threshold on the energy distance from the annihilation line. The
-    window ``c`` is calibrated on the training split (F1-optimal) and applied to eval,
-    over the *same events the full model scores* (apples-to-apples via
-    :func:`harness.pooled_feature`).
+    The dumbest possible classifier, exactly as one would do by hand: take the event's
+    total deposited energy (``E_total`` = sum of all hit energies) and predict β⁺ iff it
+    lies within a fixed window of 511 keV — by default ±3 keV, i.e. [508, 514] keV,
+    matching the ~3σ tolerance the ground truth itself uses. No subsets, no engineered
+    delta_E, no densities, no Bayesian model — just an energy window.
+
+    NOTE: this is deliberately *not* a cut on the model's ``delta_E`` feature.
+    ``delta_E = min|subset_energy − 511|`` is an engineered quantity built by enumerating
+    hit subsets to find the best match to 511 — it is essentially the model's strongest
+    feature, so cutting on it just reproduces the model. The straight cut uses the raw
+    total event energy, which is genuinely independent of that machinery.
 
 What it tries to prove:
-    How much the full physics pipeline actually buys over a bare energy cut. The
-    factor-contribution analysis already implies ΔE carries almost all the separating
-    power; this turns that into the head-to-head number a reviewer's first question
-    demands — "isn't this just a 511 keV window?" — answered explicitly rather than
-    by inference.
+    What the full physics pipeline buys over a hand-drawn energy window — the literal
+    answer to "isn't this just a 511 keV cut?". Because a partially-absorbed annihilation
+    photon deposits less than 511 keV total (the model's subset-based delta_E still
+    catches it, the total-energy window does not), the gap between this baseline and the
+    model is exactly the value of the subset reconstruction + likelihood machinery.
 
 Why it is important:
-    The ground truth is itself a photopeak criterion and ΔE is the energy distance to
-    511 keV, so the bare cut is the natural null model. The gap between it and the full
-    model is exactly what the interpretable machinery is worth — and owning that number
-    honestly (even if small) is what lets the paper pair "interpretable" with "and it
-    costs essentially nothing over a cut, while explaining itself".
+    The ground truth is a photopeak criterion, so a total-energy window is the natural
+    null model. Owning the gap honestly is what lets the paper pair "interpretable" with
+    "and it earns its place over a bare cut, while explaining itself".
 
 Produces:
-    A plot of F1, AUC, precision, and recall for the naive cut vs the full model across
-    all datasets, plus the deployed window half-width (``window_keV``) in the record.
+    A plot of F1, AUC, precision, and recall for the straight cut vs the full model
+    across all datasets; ``window_keV`` records the deployed half-width.
 """
 
 from harness import best_f1_threshold, metrics, pooled_feature, roc_auc
 
+ANNIHILATION_KEV = 511.0
+WINDOW_KEV = 3.0  # ±3 keV -> [508, 514], matching the ground-truth ~3σ tolerance
 
-def run(train: dict, eval_data: dict) -> dict:
-    """Calibrate a 511 keV energy window on train and score eval, on the model's population.
+
+def run(eval_data: dict, window_keV: float = WINDOW_KEV) -> dict:
+    """Classify eval events by a fixed total-energy window around 511 keV.
+
+    Evaluated on the same population the full model scores (via
+    :func:`harness.pooled_feature`), so the head-to-head is apples-to-apples.
 
     Args:
-        train: Nested per-class, per-bucket training feature dict.
         eval_data: The held-out evaluation split.
+        window_keV: Half-width of the energy window; ``|E_total - 511| <= window_keV``.
 
     Returns:
         The eval-split metric record (counts, precision/recall/F1, best_f1, AUC) plus
-        ``window_keV``, the deployed ``|ΔE| <= c`` half-width.
+        ``window_keV``. ``best_f1``/``auc`` use the threshold-free score ``-|E_total-511|``.
     """
-    dE_train, y_train = pooled_feature(train, "delta_E")
-    dE_eval, y_eval = pooled_feature(eval_data, "delta_E")
-    # Smaller ΔE is more signal-like, so score on -ΔE and predict signal at score >= cut.
-    score_train, score_eval = -dE_train, -dE_eval
-    _, threshold = best_f1_threshold(score_train, y_train)
-    if threshold != threshold:  # no positives on train -> degenerate; keep the window closed
-        threshold = 0.0
-
-    predictions = score_eval >= threshold
+    e_total, y_eval = pooled_feature(eval_data, "E_total")
+    deviation = (e_total - ANNIHILATION_KEV).abs()
+    predictions = deviation <= window_keV  # the [508, 514] keV window
     counts = {
         "tp": int((predictions & y_eval).sum()),
         "fp": int((predictions & ~y_eval).sum()),
@@ -57,10 +60,11 @@ def run(train: dict, eval_data: dict) -> dict:
         "tn": int((~predictions & ~y_eval).sum()),
         "excluded": 0,
     }
+    score = -deviation  # closer to 511 keV = more signal-like (threshold-free diagnostics)
     return {
         **counts,
         **metrics(counts),
-        "best_f1": best_f1_threshold(score_eval, y_eval)[0],
-        "auc": roc_auc(score_eval, y_eval),
-        "window_keV": -threshold,
+        "best_f1": best_f1_threshold(score, y_eval)[0],
+        "auc": roc_auc(score, y_eval),
+        "window_keV": window_keV,
     }

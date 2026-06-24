@@ -25,8 +25,11 @@ FACTOR_INDEX = {f: i for i, f in enumerate(FACTORS)}
 # Per-factor 1D-histogram spacing (matching how the pipeline bins each feature):
 # delta_E and arm are log-spaced with a small floor, anni is linear.
 FACTOR_SPACING = {"delta_E": ("log", 1e-3), "arm": ("log", 1e-3), "anni": ("linear", None)}
-# Feature-cache directory: ablations/cache.
+# Feature-cache directory: ablations/cache. The version is part of the cache filename
+# so a feature-layout change (e.g. adding the E_total side-car) invalidates old caches
+# and forces a fresh extraction instead of loading a stale, incompatible payload.
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
+CACHE_VERSION = 2
 
 # Pipeline symbols re-exported for the ablation modules and the driver, alongside
 # the helpers defined below (listed so the re-exports do not read as unused).
@@ -74,7 +77,7 @@ def extract_split(
         ``(train, eval)`` nested per-class, per-bucket feature dicts.
     """
     cache_dir = Path(cache_dir)
-    cache_path = cache_dir / f"{ds['name']}_{ordering}.pt"
+    cache_path = cache_dir / f"{ds['name']}_{ordering}_v{CACHE_VERSION}.pt"
     if cache_path.exists():
         payload = torch.load(cache_path, map_location="cpu", weights_only=False)
         return payload["train"], payload["eval"]

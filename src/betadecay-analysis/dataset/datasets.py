@@ -70,14 +70,19 @@ class Datasets:
         positions, and reduced to its delta_E, ARM, and annihilation-angle
         features. Events with no usable processing are parked in bucket 1 with
         NaN so they still count toward the class prior but are excluded downstream.
+        The raw total deposited energy (``E_total`` = sum of all hit energies) is
+        also stored per event; it is not a model feature (the model only reads
+        :data:`FEATURES`) — it is kept for energy-window baselines.
 
         Returns:
             Nested dict ``data[class][bucket][feature]`` of per-event float tensors.
         """
         # data[class][bucket][feature] -> list of per-event floats. The class and
         # bucket are decided together, per event, so the label and the bucket
-        # routing can never desync (they are co-located by construction).
-        data = {cls: {b: {f: [] for f in FEATURES} for b in BUCKETS} for cls in CLASSES}
+        # routing can never desync (they are co-located by construction). "E_total"
+        # rides along as a non-model side-car (sum of hit energies, for baselines).
+        stored = (*FEATURES, "E_total")
+        data = {cls: {b: {f: [] for f in stored} for b in BUCKETS} for cls in CLASSES}
 
         for event_sim in tqdm(
             iter(lambda: self.reader_sim.GetNextEvent(), None),
@@ -92,11 +97,16 @@ class Datasets:
 
             cls = "bdecay" if ground_truth_bdecay(event_sim) else "bg"
 
+            # Raw total deposited energy of the event (sum of all hit energies), for
+            # straight energy-window baselines; computed regardless of processing.
+            e_total = float(sum(event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)))
+
             energies, positions, sizes = event_data_processing(event_sim, ordering=self.ordering)
             if energies is None or positions is None or sizes is None:
                 # Invalid processing -> no usable feature; park in bucket 1 with
                 # NaN so it counts toward the class prior but is excluded from the
                 # confusion matrix (NaN ratio) downstream.
+                data[cls][1]["E_total"].append(e_total)
                 for f in FEATURES:
                     data[cls][1][f].append(float("nan"))
                 continue
@@ -109,15 +119,14 @@ class Datasets:
             data[cls][b]["delta_E"].append(_delta_E)
             data[cls][b]["arm"].append(_arm)
             data[cls][b]["anni"].append(_anni)
+            data[cls][b]["E_total"].append(e_total)
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        # Lists -> float32 tensors, same nested shape.
+        # Lists -> float32 tensors, same nested shape (including the E_total side-car).
         return {
-            cls: {
-                b: {f: torch.tensor(data[cls][b][f], dtype=torch.float32) for f in FEATURES} for b in BUCKETS
-            }
+            cls: {b: {f: torch.tensor(data[cls][b][f], dtype=torch.float32) for f in stored} for b in BUCKETS}
             for cls in CLASSES
         }
 
@@ -148,7 +157,7 @@ class Datasets:
                 perm = torch.randperm(n, generator=generator)
                 n_train = int(n * train_percentage)
                 train_idx, eval_idx = perm[:n_train], perm[n_train:]
-                for f in FEATURES:
+                for f in data[cls][b]:  # FEATURES plus the E_total side-car
                     train[cls][b][f] = data[cls][b][f][train_idx]
                     evaluate[cls][b][f] = data[cls][b][f][eval_idx]
 

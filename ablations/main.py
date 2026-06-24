@@ -24,11 +24,12 @@ COMPARISON_ABLATIONS = ("naive_511_cut", "no_calibration", "learned_weights", "n
 ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions")
 
 
-# Ablations that tune their own decision threshold for F1 (the cut, the learned
-# weights). For these the fair reference is our model at ITS best-F1 threshold too —
-# not the deployed count-prior point, which is not F1-optimized and would hand the
-# F1-tuned baseline an unfair edge despite equal ranking power (AUC).
-F1_TUNED_ABLATIONS = {"naive_511_cut", "learned_weights"}
+# Ablations that tune their own decision threshold for F1 (the learned weights). For
+# these the fair reference is our model at ITS best-F1 threshold too — not the deployed
+# count-prior point, which is not F1-optimized and would hand an F1-tuned baseline an
+# unfair edge despite equal ranking power (AUC). The straight 511 keV cut is NOT here:
+# it uses a fixed physical window (untuned), so it is fairly compared to the deployed model.
+F1_TUNED_ABLATIONS = {"learned_weights"}
 
 
 def run_comparison(
@@ -60,7 +61,7 @@ def run_comparison(
         ValueError: If ``name`` is not a known comparison ablation.
     """
     if name == "naive_511_cut":
-        ablation = naive_511_cut.run(train, eval_data)
+        ablation = naive_511_cut.run(eval_data)
     elif name == "no_calibration":
         ablation = no_calibration.run(train, eval_data, config)
     elif name == "learned_weights":
