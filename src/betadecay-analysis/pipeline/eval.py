@@ -43,6 +43,61 @@ def roc_auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
     return (r_pos - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
 
 
+def f1_at_threshold(scores: torch.Tensor, labels: torch.Tensor, threshold: float) -> float:
+    """F1 when predicting signal for every event with ``scores >= threshold``.
+
+    Args:
+        scores: Per-event separating scores.
+        labels: Per-event boolean truth labels (β⁺ = True).
+        threshold: Decision cut; ``scores >= threshold`` predicts signal.
+
+    Returns:
+        The F1 score, or NaN if there are no predicted-or-actual positives.
+    """
+    labels = labels.bool()
+    pred = scores >= threshold
+    tp = int((pred & labels).sum())
+    fp = int((pred & ~labels).sum())
+    fn = int((~pred & labels).sum())
+    denom = 2 * tp + fp + fn
+    return 2 * tp / denom if denom > 0 else float("nan")
+
+
+def best_f1_threshold(scores: torch.Tensor, labels: torch.Tensor) -> tuple[float, float]:
+    """Best F1 over all cuts, with the cut that achieves it (tie-aware).
+
+    Mirrors the threshold sweep behind ``best_f1`` but also returns the winning
+    cut, so a decision rule can be deployed at it. Cuts fall only between distinct
+    score values; the returned ``threshold`` is a score value such that predicting
+    ``scores >= threshold`` reproduces the reported F1.
+
+    Args:
+        scores: Per-event separating scores.
+        labels: Per-event boolean truth labels (β⁺ = True).
+
+    Returns:
+        ``(best_f1, threshold)``; ``(NaN, NaN)`` if there are no positives.
+    """
+    labels = labels.bool()
+    n_pos = int(labels.sum())
+    if n_pos == 0:
+        return float("nan"), float("nan")
+
+    order = torch.argsort(scores, descending=True)
+    s_sorted = scores[order]
+    y_sorted = labels[order].double()
+    tp_cum = torch.cumsum(y_sorted, 0)
+    k = torch.arange(1, s_sorted.numel() + 1, dtype=torch.double)
+    f1 = 2 * tp_cum / (k + n_pos)
+
+    # Valid cuts: the last element, or where the next score differs (tie-aware).
+    boundary = torch.ones(s_sorted.numel(), dtype=torch.bool)
+    boundary[:-1] = s_sorted[:-1] != s_sorted[1:]
+    f1_valid = torch.where(boundary, f1, torch.full_like(f1, -1.0))
+    best_idx = int(torch.argmax(f1_valid).item())
+    return float(f1[best_idx].item()), float(s_sorted[best_idx].item())
+
+
 class Evaluator:
     """Evaluate a trained per-bucket model on a feature dataset.
 
@@ -150,7 +205,9 @@ class Evaluator:
             return None
         terms, ground_truths, valid = prepared
 
-        counts = confusion_counts(ground_truths, terms, model["n_beta"], model["n_bg"])
+        counts = confusion_counts(
+            ground_truths, terms, model["n_beta"], model["n_bg"], log_threshold=model.get("log_threshold")
+        )
         # Count the features-not-finite events as excluded for transparency.
         counts["excluded"] += int((~valid).sum().item())
         return counts

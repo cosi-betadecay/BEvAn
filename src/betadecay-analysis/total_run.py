@@ -11,7 +11,7 @@ import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
-from pipeline.model_selection import flatten_config, search_hyperparams
+from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -175,13 +175,14 @@ def discover_datasets() -> list[dict[str, str]]:
     return datasets
 
 
-def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int) -> tuple[dict, dict]:
+def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -> tuple[dict, dict]:
     """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
 
     Args:
         ds (dict[str, str]): Dataset paths with name, geo_file, sim_file, tra_file.
         use_wandb (bool): Whether to use Weights & Biases for logging.
         n_iter (int): Number of champion-seeded search candidates per dataset.
+        calibrate (bool): Whether to calibrate the decision-threshold offset for F1.
 
     Returns:
         tuple[dict, dict]: (per-split confusion counts plus prior-free metrics,
@@ -216,10 +217,23 @@ def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int) -> tuple[dict, dic
         f"{info['confirm_best_mean']:.4f} vs seed {info['confirm_seed_mean']:.4f})"
     )
     selection = {**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]}
+
+    trainer = Trainer(**best_config).fit(train)
+
+    # Calibrate the global decision-threshold offset for F1 (guarded; 0 keeps the
+    # count-prior default and stays byte-identical), then deploy it.
+    if calibrate:
+        offset, cal_info = calibrate_global_offset(trainer, train, best_config)
+        apply_offset(trainer, offset)
+        print(f"  threshold offset c={offset:.4f} (accepted={cal_info['accepted']})")
+        selection["threshold_offset"] = offset
+        selection["threshold_moved"] = cal_info["accepted"]
+    else:
+        selection["threshold_offset"] = 0.0
+        selection["threshold_moved"] = False
     if use_wandb:
         wandb.log(selection)
 
-    trainer = Trainer(**best_config).fit(train)
     evaluator = Evaluator(trainer)
     results = {}
     for split_name, split_data in (("train", train), ("eval", eval_data)):
@@ -231,12 +245,13 @@ def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int) -> tuple[dict, dic
     return results, selection
 
 
-def main(use_wandb: bool, n_iter: int) -> None:
+def main(use_wandb: bool, n_iter: int, calibrate: bool) -> None:
     """Run annihilation detection extraction over every .sim/.tra/geometry triple.
 
     Args:
         use_wandb (bool): Whether to use Weights & Biases for logging.
         n_iter (int): Number of champion-seeded search candidates per dataset.
+        calibrate (bool): Whether to calibrate the decision-threshold offset for F1.
 
     Raises:
         FileNotFoundError: If the data directory does not exist.
@@ -254,7 +269,7 @@ def main(use_wandb: bool, n_iter: int) -> None:
         print(
             f"\n{'=' * 60}\nRunning {ds['name']}\n  geo: {ds['geo_file']}\n  sim: {ds['sim_file']}\n  tra: {ds['tra_file']}\n{'=' * 60}"
         )
-        totals, selection = run_one(ds, use_wandb, n_iter)
+        totals, selection = run_one(ds, use_wandb, n_iter, calibrate)
         for split, counts in totals.items():
             rows.append(
                 {
@@ -294,6 +309,11 @@ if __name__ == "__main__":
         default=1000,
         help="Champion-seeded search candidates per dataset (0 keeps the champion seed; cost scales with this x folds x datasets)",
     )
+    parser.add_argument(
+        "--no-calibrate",
+        action="store_true",
+        help="Skip the decision-threshold calibration (keep the raw count-prior operating point)",
+    )
     args = parser.parse_args()
 
     if args.wandb:
@@ -303,4 +323,4 @@ if __name__ == "__main__":
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
 
-    main(args.wandb, args.search_iters)
+    main(args.wandb, args.search_iters, not args.no_calibrate)

@@ -3,8 +3,13 @@ import math
 import torch
 
 from dataset.datasets import BUCKETS, CLASSES, FEATURES
-from pipeline.eval import Evaluator
+from pipeline.eval import Evaluator, best_f1_threshold, f1_at_threshold
 from pipeline.train import Trainer
+
+# Absolute floor (in F1) the calibrated threshold offset must beat, on top of the
+# 1-SE guard, before it is adopted. Keeps the champion's ~0.001 eval-overfit gap
+# from ever moving the operating point (so champion runs stay byte-identical).
+CALIB_FLOOR: float = 0.003
 
 # The hardcoded per-bucket bin budget that is the main-branch champion (best F1
 # on Max). The search is seeded to reproduce these bins on each dataset's own
@@ -277,3 +282,143 @@ def search_hyperparams(
         "chosen_config": chosen,
     }
     return chosen, info
+
+
+def _pooled_margins(
+    trainer: Trainer, data: dict[str, dict[int, dict[str, torch.Tensor]]]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-event decision margin ``LLR - log(n_bg/n_beta)`` pooled across buckets.
+
+    The default Bayesian rule predicts β⁺ exactly when this margin is ``>= 0``, so
+    a single global cut ``c`` on the pooled margin is the one knob that shifts every
+    bucket's operating point off the count-prior default while keeping each bucket's
+    own prevalence baked into its baseline. Buckets with an empty class (no finite
+    margin baseline) are skipped.
+
+    Args:
+        trainer: A fitted trainer providing per-bucket models and log-ratios.
+        data: Nested per-class, per-bucket feature dict for one split.
+
+    Returns:
+        ``(margins, labels)`` over all calibratable buckets (empty tensors if none).
+    """
+    evaluator = Evaluator(trainer)
+    margins, labels = [], []
+    for b in BUCKETS:
+        model = trainer.models[b]
+        if model["n_beta"] <= 0 or model["n_bg"] <= 0:
+            continue  # degenerate prior-only bucket: no count-prior baseline to shift
+        out = evaluator.bucket_log_ratio(data, b, model)
+        if out is None:
+            continue
+        llr, gt = out
+        tau = math.log(model["n_bg"] / model["n_beta"])
+        margins.append(llr - tau)
+        labels.append(gt)
+    if not margins:
+        return torch.empty(0), torch.empty(0, dtype=torch.bool)
+    return torch.cat(margins), torch.cat(labels)
+
+
+def calibrate_global_offset(
+    trainer: Trainer,
+    train: dict[str, dict[int, dict[str, torch.Tensor]]],
+    config: dict,
+    k: int = 5,
+    seed: int = 0,
+    floor: float = CALIB_FLOOR,
+) -> tuple[float, dict]:
+    """Find the global decision-threshold offset that maximizes pooled F1, guarded.
+
+    The deployed decision predicts β⁺ when the pooled margin ``>= c``; ``c = 0`` is
+    today's count-prior operating point. The F1-optimal ``c`` is read off the
+    *full-train* model (scale-correct for what ships) via :func:`best_f1_threshold`.
+    Whether to actually move there is then decided leak-free: across ``k`` folds the
+    held-out pooled F1 at the candidate ``c`` is compared to ``c = 0``, and the
+    offset is adopted only if the mean gain beats both one standard error and an
+    absolute ``floor``. The floor keeps the champion's ~0.001 eval-overfit gap from
+    moving anything, so champion configs stay byte-identical; a real miscalibration
+    (e.g. a heavily-smoothed config whose operating point drifted) clears it.
+
+    Args:
+        trainer: The deployed model, already fit on the full training split.
+        train: Nested per-class, per-bucket training feature dict.
+        config: The ``Trainer`` config used (re-fit per fold for the guard).
+        k: Number of CV folds for the guard.
+        seed: Seed for the reproducible fold permutation.
+        floor: Absolute F1 gain the offset must beat (on top of the 1-SE guard).
+
+    Returns:
+        ``(offset, info)``. ``offset`` is ``0.0`` when the default is kept; ``info``
+        records the candidate offset, acceptance, and the CV gain / SE behind it.
+    """
+    margins, labels = _pooled_margins(trainer, train)
+    if margins.numel() == 0 or int(labels.sum()) == 0:
+        return 0.0, {"accepted": False, "offset": 0.0, "reason": "no calibratable events"}
+
+    _, candidate = best_f1_threshold(margins, labels)  # margin cut maximizing in-sample F1
+    if candidate != candidate or candidate == 0.0:
+        return 0.0, {"accepted": False, "offset": 0.0, "candidate": candidate}
+
+    # Leak-free guard: does moving to `candidate` beat the default on held-out folds?
+    generator = torch.Generator().manual_seed(seed)
+    folds = {
+        cls: {b: fold_indices(train[cls][b]["delta_E"].numel(), k, generator) for b in BUCKETS}
+        for cls in CLASSES
+    }
+    gains = []
+    for f in range(k):
+        tr = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
+        va = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
+        for cls in CLASSES:
+            for b in BUCKETS:
+                n = train[cls][b]["delta_E"].numel()
+                val_idx = folds[cls][b][f]
+                keep = torch.ones(n, dtype=torch.bool)
+                keep[val_idx] = False
+                for feat in FEATURES:
+                    col = train[cls][b][feat]
+                    tr[cls][b][feat] = col[keep]
+                    va[cls][b][feat] = col[val_idx]
+        fold_trainer = Trainer(**config).fit(tr)
+        mv, lv = _pooled_margins(fold_trainer, va)
+        if mv.numel() == 0:
+            continue
+        f1_default = f1_at_threshold(mv, lv, 0.0)
+        f1_candidate = f1_at_threshold(mv, lv, candidate)
+        if f1_default == f1_default and f1_candidate == f1_candidate:
+            gains.append(f1_candidate - f1_default)
+
+    mean_gain, se = _mean_se(gains)
+    accepted = (mean_gain == mean_gain) and (mean_gain > max(se, floor))
+    offset = candidate if accepted else 0.0
+    info = {
+        "accepted": accepted,
+        "offset": offset,
+        "candidate": candidate,
+        "cv_mean_gain": mean_gain,
+        "cv_gain_se": se,
+        "floor": floor,
+    }
+    return offset, info
+
+
+def apply_offset(trainer: Trainer, offset: float) -> None:
+    """Write a global margin offset into a fitted trainer's per-bucket thresholds.
+
+    Sets each calibratable bucket's ``log_threshold`` to ``log(n_bg/n_beta) + offset``
+    so the deployed decision predicts β⁺ when ``LLR >= log(n_bg/n_beta) + offset``
+    (the pooled-margin ``>= offset`` rule). An ``offset`` of 0 is a no-op: the models
+    keep their default (``log_threshold`` absent -> count-prior posterior rule), so
+    the run stays byte-identical to the uncalibrated model.
+
+    Args:
+        trainer: A fitted trainer to annotate in place.
+        offset: The global margin offset from :func:`calibrate_global_offset`.
+    """
+    if offset == 0.0:
+        return
+    for b in BUCKETS:
+        model = trainer.models[b]
+        if model["n_beta"] > 0 and model["n_bg"] > 0:
+            model["log_threshold"] = math.log(model["n_bg"] / model["n_beta"]) + offset

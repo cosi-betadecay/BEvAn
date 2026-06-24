@@ -32,6 +32,7 @@ def confusion_counts(
     terms: list[tuple[torch.Tensor, torch.Tensor]],
     n_beta_decay: int,
     n_bg: int,
+    log_threshold: float | None = None,
 ) -> dict:
     """Classify events via the Bayesian posterior and tally a confusion matrix.
 
@@ -44,6 +45,8 @@ def confusion_counts(
         terms: Per-term ``(p_beta, p_bg)`` densities (empty -> ratio of 1).
         n_beta_decay: β⁺ event count for the class prior.
         n_bg: Background event count for the class prior.
+        log_threshold: Calibrated LLR cut for the decision; None uses the
+            count-prior posterior rule (the default operating point).
 
     Returns:
         Dict with ``tp``, ``fp``, ``fn``, ``tn``, and ``excluded`` counts.
@@ -51,7 +54,7 @@ def confusion_counts(
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
     ratio = R(terms) if terms else torch.ones(ground_truths.shape[0])
 
-    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference()
+    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference(log_threshold)
     valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
     excluded = int((~valid).sum().item())
     gt = ground_truths[valid]
