@@ -26,11 +26,12 @@ def train_and_save(
 ) -> None:
     """Fit the per-bucket model on a whole simulation and save it to a torch artifact.
 
-    Unlike :mod:`run`, this fits on every event in the simulation (no train/eval
-    split): held-out testing happens later on a separate simulation via
-    :mod:`inference`. The champion-seeded, overfit-guarded search and the guarded
-    threshold calibration are identical to the ``run.py`` selection, so the saved
-    model's operating point matches what ``run.py`` would deploy. The fitted
+    Unlike :mod:`analysis`, this fits on every event in the simulation (no
+    train/eval split): held-out testing happens later on a separate simulation
+    via :mod:`inference`. The champion-seeded, overfit-guarded search and the
+    guarded threshold calibration are identical to the ``analysis.py`` selection,
+    so the saved model's operating point matches what ``analysis.py`` would
+    deploy. The fitted
     densities — with the calibrated ``log_threshold`` baked in — are written to
     ``out_file`` for later inference.
 
@@ -77,7 +78,7 @@ def train_and_save(
 
     # Fit on the full simulation (no train/eval split): the held-out test set is a
     # separate simulation run through inference.py. The search is still leak-free
-    # k-fold on this data and overfit-guarded, matching the run.py selection.
+    # k-fold on this data and overfit-guarded, matching the analysis.py selection.
     best_config, info = search_hyperparams(data, n_iter=n_iter)
     flat = flatten_config(best_config)
     print(

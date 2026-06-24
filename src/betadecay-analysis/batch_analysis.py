@@ -20,7 +20,7 @@ RESULTS_DIR = Path("results")
 
 # Static dataset-name -> geometry setup map for the batch runner. Each simulation
 # in data/ was produced against a different geometry, so the batch runner cannot
-# take a single --geo-file flag; the per-dataset entry points (run.py,
+# take a single --geo-file flag; the per-dataset entry points (analysis.py,
 # train_model.py, inference.py) pass geometry explicitly instead.
 GEOMETRIES = {
     "SPILike": "$MEGALIB/resource/examples/geomega/special/SPILike.geo.setup",
@@ -64,7 +64,7 @@ def discover_datasets() -> list[dict[str, str]]:
 
 
 def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int, calibrate: bool) -> tuple[dict, dict]:
-    """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
+    """Run the exact analysis.py pipeline for a single (geo, sim, tra) dataset.
 
     Args:
         ds (dict[str, str]): Dataset paths with name, geo_file, sim_file, tra_file.

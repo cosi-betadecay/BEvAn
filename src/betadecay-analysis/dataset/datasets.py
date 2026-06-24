@@ -122,8 +122,8 @@ class Datasets:
         """Split each per-class, per-bucket feature tensor into train/eval partitions.
 
         Uses a fixed seed so the split is reproducible. Only the split-using
-        entry points (``run.py``, ``total_run.py``) call this; ``train_model.py``
-        fits on the full feature dict and never splits.
+        entry points (``analysis.py``, ``batch_analysis.py``) call this;
+        ``train_model.py`` fits on the full feature dict and never splits.
 
         Args:
             data: Nested feature dict from :meth:`compute_event_features`.

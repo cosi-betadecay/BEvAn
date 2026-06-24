@@ -51,10 +51,10 @@ WANDB_API_KEY=your_key_here
 Place MEGAlib simulation files in `data/` as matching `{name}.sim` / `{name}.tra`
 pairs (for example `data/SPILike.sim` and `data/SPILike.tra`). The detector
 geometry is passed explicitly via `--geo-file` to the per-dataset entry points
-(`run.py`, `train_model.py`, `inference.py`). The batch runner `total_run.py`
-takes no geometry flag — it looks each dataset's geometry up by name in the
-static `GEOMETRIES` map at the top of the file, so add an entry there for any new
-dataset.
+(`analysis.py`, `train_model.py`, `inference.py`). The batch runner
+`batch_analysis.py` takes no geometry flag — it looks each dataset's geometry up
+by name in the static `GEOMETRIES` map at the top of the file, so add an entry
+there for any new dataset.
 
 > **Geometry paths:** use the `$MEGALIB` environment variable form (e.g.
 > `$MEGALIB/resource/examples/geomega/special/Max.geo.setup`) — it works
@@ -65,21 +65,21 @@ dataset.
 
 ## Running
 
-Run a single dataset (train and evaluate in one pass):
+Analyze a single dataset (train and evaluate in one pass):
 
 ```bash
-python src/betadecay-analysis/run.py \
+python src/betadecay-analysis/analysis.py \
   --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
   --wandb            # optional
 ```
 
-Or run every `.sim`/`.tra` pair found in `data/` and write a per-dataset summary
-to `results/<timestamp>.csv`:
+Or analyze every `.sim`/`.tra` pair found in `data/` and write a per-dataset
+summary to `results/<timestamp>.csv`:
 
 ```bash
-python src/betadecay-analysis/total_run.py --wandb   # --wandb optional
+python src/betadecay-analysis/batch_analysis.py --wandb   # --wandb optional
 ```
 
 ### Train once, infer later
