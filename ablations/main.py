@@ -1,6 +1,7 @@
 import argparse
 import os
 from datetime import datetime
+from pathlib import Path
 
 import factor_contributions
 import harness
@@ -13,6 +14,9 @@ import wandb
 from dotenv import load_dotenv
 
 PROJECT = "cosi-betadecay"
+# One timestamped run folder per invocation, mirroring the pipeline's results/
+# convention: ablations/results/<timestamp>/{figures,tables}.
+RESULTS_DIR = Path(__file__).resolve().parent / "results"
 # Comparison ablations (champion-vs-ablation metric plots). factor_contributions is
 # handled separately: its output is a per-factor decomposition, not a comparison.
 COMPARISON_ABLATIONS = ("no_calibration", "learned_weights", "no_ckd_order")
@@ -104,11 +108,10 @@ def main(
             contributions[name] = factor_contributions.run(train, eval_data)
             full_model[name] = harness.bucket_full_scores(champion_trainer, eval_data)
 
-    # One timestamped run folder per invocation, mirroring the results/<timestamp>/
-    # convention: a run's figures and CSVs share the same stamp.
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    figures_dir = plots.FIGURES_DIR / timestamp
-    tables_dir = tables.TABLES_DIR / timestamp
+    # This run's folder: ablations/results/<timestamp>/{figures,tables}.
+    run_dir = RESULTS_DIR / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    figures_dir = run_dir / "figures"
+    tables_dir = run_dir / "tables"
 
     figures, summary_rows = [], []
     for ablation_name, per_dataset in comparison.items():
@@ -127,7 +130,7 @@ def main(
         for path in figures:
             wandb.log({path.stem: wandb.Image(str(path))})
         wandb.finish()
-    print(f"\nWrote {len(figures)} figure(s) to {figures_dir} and CSVs to {tables_dir}")
+    print(f"\nWrote {len(figures)} figure(s) and CSVs to {run_dir}")
 
 
 def parse_args() -> argparse.Namespace:
