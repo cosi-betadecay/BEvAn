@@ -56,13 +56,20 @@ takes no geometry flag — it looks each dataset's geometry up by name in the
 static `GEOMETRIES` map at the top of the file, so add an entry there for any new
 dataset.
 
+> **Geometry paths:** use the `$MEGALIB` environment variable form (e.g.
+> `$MEGALIB/resource/examples/geomega/special/Max.geo.setup`) — it works
+> unquoted, and the tools also expand it internally via `os.path.expandvars`.
+> Avoid the `$(MEGALIB)` form on the command line: the shell reads `$(...)` as
+> command substitution and blanks it out (it only works inside MEGAlib's own
+> config files, where ROOT expands it).
+
 ## Running
 
 Run a single dataset (train and evaluate in one pass):
 
 ```bash
 python src/betadecay-analysis/run.py \
-  --geo-file "$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup" \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
   --wandb            # optional
@@ -81,7 +88,7 @@ To fit a model on a whole simulation and save it to a torch artifact:
 
 ```bash
 python src/betadecay-analysis/train_model.py \
-  --geo-file "$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup" \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
   --out models/SPILike.pt        # default: models/<sim-stem>.pt
@@ -95,7 +102,7 @@ direction for the ARM feature):
 ```bash
 python src/betadecay-analysis/inference.py \
   --model models/SPILike.pt \
-  --geo-file "$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup" \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/Max.sim \
   --tra-file data/Max.tra \
   --out results/inference.csv    # optional CSV; otherwise prints only

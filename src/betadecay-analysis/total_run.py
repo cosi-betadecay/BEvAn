@@ -23,11 +23,11 @@ RESULTS_DIR = Path("results")
 # take a single --geo-file flag; the per-dataset entry points (run.py,
 # train_model.py, inference.py) pass geometry explicitly instead.
 GEOMETRIES = {
-    "SPILike": "$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup",
-    "NCT": "$(MEGALIB)/resource/examples/geomega/special/Simple_Ge_NCT_try1_040721.geo.setup",
-    "Max": "$(MEGALIB)/resource/examples/geomega/special/Max.geo.setup",
-    "GeACT": "$(MEGALIB)/resource/examples/geomega/special/GeACT.geo.setup",
-    "COSI_Balloon": "$(MEGALIB)/resource/examples/geomega/cosiballoon/COSIBalloon.12Detector.geo.setup",
+    "SPILike": "$MEGALIB/resource/examples/geomega/special/SPILike.geo.setup",
+    "NCT": "$MEGALIB/resource/examples/geomega/special/Simple_Ge_NCT_try1_040721.geo.setup",
+    "Max": "$MEGALIB/resource/examples/geomega/special/Max.geo.setup",
+    "GeACT": "$MEGALIB/resource/examples/geomega/special/GeACT.geo.setup",
+    "COSI_Balloon": "$MEGALIB/resource/examples/geomega/cosiballoon/COSIBalloon.12Detector.geo.setup",
 }
 
 
