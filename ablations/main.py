@@ -6,7 +6,6 @@ from pathlib import Path
 import factor_contributions
 import harness
 import learned_weights
-import naive_511_cut
 import no_calibration
 import no_ckd_order
 import plots
@@ -20,15 +19,14 @@ PROJECT = "cosi-betadecay"
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 # Comparison ablations (champion-vs-ablation metric plots). factor_contributions is
 # handled separately: its output is a per-factor decomposition, not a comparison.
-COMPARISON_ABLATIONS = ("naive_511_cut", "no_calibration", "learned_weights", "no_ckd_order")
+COMPARISON_ABLATIONS = ("no_calibration", "learned_weights", "no_ckd_order")
 ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions")
 
 
 # Ablations that tune their own decision threshold for F1 (the learned weights). For
 # these the fair reference is our model at ITS best-F1 threshold too — not the deployed
 # count-prior point, which is not F1-optimized and would hand an F1-tuned baseline an
-# unfair edge despite equal ranking power (AUC). The straight 511 keV cut is NOT here:
-# it uses a fixed physical window (untuned), so it is fairly compared to the deployed model.
+# unfair edge despite equal ranking power (AUC).
 F1_TUNED_ABLATIONS = {"learned_weights"}
 
 
@@ -60,9 +58,7 @@ def run_comparison(
     Raises:
         ValueError: If ``name`` is not a known comparison ablation.
     """
-    if name == "naive_511_cut":
-        ablation = naive_511_cut.run(eval_data)
-    elif name == "no_calibration":
+    if name == "no_calibration":
         ablation = no_calibration.run(train, eval_data, config)
     elif name == "learned_weights":
         ablation = learned_weights.run(train, eval_data, config)

@@ -26,7 +26,6 @@ FACTOR_LABELS = {"delta_E": "ΔE", "arm": "ARM", "anni": "Annihilation angle"}
 
 # Human-readable display names for the ablations (the file stems stay machine-named).
 ABLATION_TITLES = {
-    "naive_511_cut": "Naive 511 keV cut",
     "no_calibration": "No calibration",
     "learned_weights": "Learned weights",
     "no_ckd_order": "No CKD ordering",
