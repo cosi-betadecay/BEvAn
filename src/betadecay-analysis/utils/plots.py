@@ -1,3 +1,11 @@
+import matplotlib
+
+# Force the non-interactive Agg backend before pyplot is imported: these figures
+# are only ever saved to file or logged to W&B, never shown, and the analysis
+# pipeline runs headless (no display) on the production VM. Without this,
+# matplotlib may pick a GUI backend and crash on the first figure with a
+# "no display"/"couldn't connect to display" error.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
