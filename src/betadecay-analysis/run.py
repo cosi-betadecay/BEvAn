@@ -2,9 +2,9 @@ import argparse
 import os
 from pathlib import Path
 
+import wandb
 from dotenv import load_dotenv
 
-import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
@@ -15,9 +15,7 @@ from utils.reader_extraction import get_reader
 PROJECT = "cosi-betadecay"
 
 
-def main(
-    geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: int, calibrate: bool
-) -> None:
+def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: int, calibrate: bool) -> None:
     """Run the β⁺ annihilation detection pipeline on a given MEGAlib dataset.
 
     Args:

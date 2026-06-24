@@ -1,4 +1,5 @@
 import math
+from collections.abc import Iterator
 
 import torch
 from tqdm import tqdm
@@ -131,39 +132,29 @@ def _mean_se(scores: list[float]) -> tuple[float, float]:
     return mean, math.sqrt(var / n)
 
 
-def cv_fold_scores(
-    train: dict[str, dict[int, dict[str, torch.Tensor]]],
-    config: dict,
-    k: int = 5,
-    seed: int = 0,
-    reward: str = "auc",
-) -> list[float]:
-    """Held-out reward of ``config`` on each of ``k`` leak-free folds.
+def _kfold_splits(
+    train: dict[str, dict[int, dict[str, torch.Tensor]]], k: int, seed: int
+) -> Iterator[tuple[dict, dict]]:
+    """Yield ``(train_subset, val_subset)`` for each leak-free per-class, per-bucket fold.
 
-    Folds are taken per class and bucket, so class balance is preserved in every
-    split. For each fold a :class:`~pipeline.train.Trainer` built from ``config``
-    is fit on the other ``k - 1`` folds and scored on the held-out fold. The eval
-    split is never involved.
+    Folds are drawn per class and bucket so class balance is preserved in every
+    split, and the eval split is never involved. Both the search reward and the
+    threshold-calibration guard consume these splits, so the leak-free split logic
+    lives here once.
 
     Args:
         train: Nested per-class, per-bucket training feature dict.
-        config: ``Trainer`` kwargs (``rho_floor`` may be a per-bucket dict).
         k: Number of folds.
         seed: Seed for the reproducible fold permutation.
-        reward: ``"auc"`` for separating power (default) or ``"loglik"`` for the
-            held-out log-likelihood.
 
-    Returns:
-        The finite per-fold scores (NaN folds dropped).
+    Yields:
+        ``(tr, va)`` nested feature dicts for each of the ``k`` folds.
     """
     generator = torch.Generator().manual_seed(seed)
     folds = {
         cls: {b: fold_indices(train[cls][b]["delta_E"].numel(), k, generator) for b in BUCKETS}
         for cls in CLASSES
     }
-    metric = "held_out_auc" if reward == "auc" else "held_out_log_likelihood"
-
-    scores = []
     for f in range(k):
         tr = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
         va = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
@@ -177,9 +168,38 @@ def cv_fold_scores(
                     col = train[cls][b][feat]
                     tr[cls][b][feat] = col[keep]
                     va[cls][b][feat] = col[val_idx]
+        yield tr, va
+
+
+def cv_fold_scores(
+    train: dict[str, dict[int, dict[str, torch.Tensor]]],
+    config: dict,
+    k: int = 5,
+    seed: int = 0,
+    reward: str = "auc",
+) -> list[float]:
+    """Held-out reward of ``config`` on each of ``k`` leak-free folds.
+
+    For each fold a :class:`~pipeline.train.Trainer` built from ``config`` is fit on
+    the other ``k - 1`` folds and scored on the held-out fold. The eval split is
+    never involved.
+
+    Args:
+        train: Nested per-class, per-bucket training feature dict.
+        config: ``Trainer`` kwargs (``rho_floor`` may be a per-bucket dict).
+        k: Number of folds.
+        seed: Seed for the reproducible fold permutation.
+        reward: ``"auc"`` for separating power (default) or ``"loglik"`` for the
+            held-out log-likelihood.
+
+    Returns:
+        The finite per-fold scores (NaN folds dropped).
+    """
+    metric = "held_out_auc" if reward == "auc" else "held_out_log_likelihood"
+    scores = []
+    for tr, va in _kfold_splits(train, k, seed):
         trainer = Trainer(**config).fit(tr)
         scores.append(getattr(Evaluator(trainer), metric)(va))
-
     return [s for s in scores if s == s]  # drop NaN folds
 
 
@@ -382,25 +402,8 @@ def calibrate_global_offset(
         return 0.0, {"accepted": False, "offset": 0.0, "candidate": candidate}
 
     # Leak-free guard: does moving to `candidate` beat the default on held-out folds?
-    generator = torch.Generator().manual_seed(seed)
-    folds = {
-        cls: {b: fold_indices(train[cls][b]["delta_E"].numel(), k, generator) for b in BUCKETS}
-        for cls in CLASSES
-    }
     gains = []
-    for f in range(k):
-        tr = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
-        va = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
-        for cls in CLASSES:
-            for b in BUCKETS:
-                n = train[cls][b]["delta_E"].numel()
-                val_idx = folds[cls][b][f]
-                keep = torch.ones(n, dtype=torch.bool)
-                keep[val_idx] = False
-                for feat in FEATURES:
-                    col = train[cls][b][feat]
-                    tr[cls][b][feat] = col[keep]
-                    va[cls][b][feat] = col[val_idx]
+    for tr, va in _kfold_splits(train, k, seed):
         fold_trainer = Trainer(**config).fit(tr)
         mv, lv = _pooled_margins(fold_trainer, va)
         if mv.numel() == 0:

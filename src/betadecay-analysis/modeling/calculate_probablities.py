@@ -2,8 +2,8 @@ import math
 
 import matplotlib.pyplot as plt
 import torch
-
 import wandb
+
 from modeling.bayesian_annihilation import BayesianAnnihiliationModel
 from utils.plots import plot_confusion_matrix
 

@@ -5,12 +5,12 @@ from datetime import datetime
 from pathlib import Path
 
 import torch
+import wandb
 from dotenv import load_dotenv
 
-import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator
+from pipeline.eval import Evaluator, best_f1_threshold, roc_auc
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
@@ -39,68 +39,6 @@ def metrics(counts: dict) -> dict:
     return {"precision": precision, "recall": recall, "fpr": fpr, "f1_score": f1}
 
 
-def auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
-    """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
-
-    Invariant to any monotonic transform of ``scores`` (so the log-ratio gives
-    the same answer as the ratio).
-
-    Args:
-        scores (torch.Tensor): Per-event separating scores.
-        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
-
-    Returns:
-        float: The ROC AUC, or NaN if either class is empty.
-    """
-    labels = labels.bool()
-    n_pos = int(labels.sum())
-    n_neg = labels.numel() - n_pos
-    if n_pos == 0 or n_neg == 0:
-        return float("nan")
-
-    order = torch.argsort(scores)
-    s_sorted = scores[order]
-    _, inv, counts = torch.unique_consecutive(s_sorted, return_inverse=True, return_counts=True)
-    starts = torch.cumsum(counts, 0) - counts  # 0-based start index of each tie group
-    avg_rank_group = starts.double() + (counts.double() + 1) / 2  # 1-based average rank
-    ranks_sorted = avg_rank_group[inv]
-    ranks = torch.empty_like(ranks_sorted)
-    ranks[order] = ranks_sorted
-
-    r_pos = ranks[labels].sum().item()
-    return (r_pos - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
-
-
-def best_f1(scores: torch.Tensor, labels: torch.Tensor) -> float:
-    """Best F1 achievable by sweeping a threshold over the prior-free score.
-
-    Cuts are only allowed between distinct score values (tie-aware).
-
-    Args:
-        scores (torch.Tensor): Per-event separating scores.
-        labels (torch.Tensor): Per-event boolean truth labels (β⁺ = True).
-
-    Returns:
-        float: The best F1 over all thresholds, or NaN if there are no positives.
-    """
-    labels = labels.bool()
-    n_pos = int(labels.sum())
-    if n_pos == 0:
-        return float("nan")
-
-    order = torch.argsort(scores, descending=True)
-    s_sorted = scores[order]
-    y_sorted = labels[order].double()
-    tp_cum = torch.cumsum(y_sorted, 0)
-    k = torch.arange(1, s_sorted.numel() + 1, dtype=torch.double)
-    f1 = 2 * tp_cum / (k + n_pos)
-
-    # Valid threshold boundaries: last element, or where the next score differs.
-    boundary = torch.ones(s_sorted.numel(), dtype=torch.bool)
-    boundary[:-1] = s_sorted[:-1] != s_sorted[1:]
-    return float(f1[boundary].max().item())
-
-
 def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> dict:
     """Prior-free best-F1 and AUC over the pooled per-event likelihood ratio.
 
@@ -117,7 +55,7 @@ def prior_free_scores(evaluator: Evaluator, data: dict[str, dict[int, dict[str, 
     scores, labels = pooled
     finite = torch.isfinite(scores)
     scores, labels = scores[finite], labels[finite]
-    return {"best_f1": best_f1(scores, labels), "auc": auc(scores, labels)}
+    return {"best_f1": best_f1_threshold(scores, labels)[0], "auc": roc_auc(scores, labels)}
 
 
 def geo_from_header(sim_file: Path) -> str:
