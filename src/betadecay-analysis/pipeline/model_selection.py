@@ -1,6 +1,7 @@
 import math
 
 import torch
+from tqdm import tqdm
 
 from dataset.datasets import BUCKETS, CLASSES, FEATURES
 from pipeline.eval import Evaluator, best_f1_threshold, f1_at_threshold
@@ -255,11 +256,14 @@ def search_hyperparams(
     best_mean, _ = _mean_se(cv_fold_scores(train, seed_config, k, seed, reward))
     if best_mean != best_mean:
         raise ValueError("Champion seed produced no finite CV fold; cannot search.")
-    for _ in range(n_iter):
+    pbar = tqdm(range(n_iter), desc="hyperparam search", unit="cfg")
+    pbar.set_postfix(best_auc=f"{best_mean:.4f}")
+    for _ in pbar:
         candidate = _sample_config(seed_config, generator, rho_factor, joint_range, marginal_range)
         mean, _ = _mean_se(cv_fold_scores(train, candidate, k, seed, reward))
         if mean == mean and mean > best_mean:
             best_config, best_mean = candidate, mean
+            pbar.set_postfix(best_auc=f"{best_mean:.4f}")
 
     # --- Confirmation split: only leave the champion on >1 pooled-SE evidence. ---
     c_seed_mean, c_seed_se = _mean_se(cv_fold_scores(train, seed_config, k, seed + 1, reward))
