@@ -11,6 +11,11 @@ from pipeline.train import Trainer
 # 1-SE guard, before it is adopted. Keeps the champion's ~0.001 eval-overfit gap
 # from ever moving the operating point (so champion runs stay byte-identical).
 CALIB_FLOOR: float = 0.003
+# Absolute floor (in AUC) a searched config's confirmation-split gain must beat,
+# on top of the extreme-value-scaled SE bar, before it displaces the champion seed.
+# AUC is saturated (~0.99) on these geometries, so sub-floor "gains" are fold noise:
+# a 1000-iter run without this floor adopted a noise-winner that cost Max 0.025 F1.
+SEARCH_FLOOR: float = 0.002
 
 # The hardcoded per-bucket bin budget that is the main-branch champion (best F1
 # on Max). The search is seeded to reproduce these bins on each dataset's own
@@ -207,6 +212,7 @@ def search_hyperparams(
     k: int = 5,
     seed: int = 0,
     reward: str = "auc",
+    floor: float = SEARCH_FLOOR,
     n_bins: dict[int, int] | None = None,
     joint_smoothing: float = 0.5,
     marginal_smoothing: float = 0.0,
@@ -221,11 +227,13 @@ def search_hyperparams(
     scored by leak-free k-fold held-out **AUC** — separating power, the quantity F1
     tracks, not the misaligned log-likelihood. The best-scoring candidate on the
     search split is then re-scored on an *independent* fold split (``seed + 1``)
-    against the seed; it is only adopted if it still beats the champion by more
-    than one pooled standard error. Otherwise the champion seed is returned. This
-    one-SE-over-seed gate makes the search safe at large ``n_iter``: fold noise and
-    the winner's-curse cannot clear the bar, so the model never drifts off the
-    champion without reproducible evidence. The eval split is never touched.
+    against the seed; it is only adopted if its margin beats both an extreme-value
+    bar ``z * pooled_SE`` with ``z = sqrt(2 ln n_iter)`` (the multiple-comparisons
+    correction for the winner's curse over ``n_iter`` draws) and an absolute
+    ``floor``. Otherwise the champion seed is returned. A plain one-SE gate proved
+    too weak: at ``n_iter=1000`` it adopted a 0.001-AUC noise-winner that cost the
+    Max champion 0.025 F1; the scaled bar plus floor keeps the champion frozen
+    unless a gain is large and real. The eval split is never touched.
 
     Args:
         train: Nested per-class, per-bucket training feature dict.
@@ -233,6 +241,7 @@ def search_hyperparams(
         k: Number of CV folds.
         seed: Base seed; the search split uses it, the confirmation split ``seed + 1``.
         reward: ``"auc"`` (default) or ``"loglik"``.
+        floor: Absolute AUC gain the winner must beat (on top of the scaled-SE bar).
         n_bins: Champion bin budget to seed from; defaults to :data:`CHAMPION_BINS`.
         joint_smoothing: Seed joint smoothing.
         marginal_smoothing: Seed marginal smoothing.
@@ -265,12 +274,19 @@ def search_hyperparams(
             best_config, best_mean = candidate, mean
             pbar.set_postfix(best_auc=f"{best_mean:.4f}")
 
-    # --- Confirmation split: only leave the champion on >1 pooled-SE evidence. ---
+    # --- Confirmation split: adopt the winner only on convincing, real evidence. ---
+    # With n_iter draws the search-split argmax is winner's-curse inflated, and AUC
+    # here is saturated (~0.99) so sub-floor "gains" are fold noise. Require the
+    # confirmation-split margin to beat BOTH an extreme-value-scaled SE bar
+    # (z ~ sqrt(2 ln n_iter), the expected max of n_iter noise draws) and an
+    # absolute floor, so the champion is frozen unless a gain is large and real.
     c_seed_mean, c_seed_se = _mean_se(cv_fold_scores(train, seed_config, k, seed + 1, reward))
     c_best_mean, c_best_se = _mean_se(cv_fold_scores(train, best_config, k, seed + 1, reward))
     margin = c_best_mean - c_seed_mean
     pooled_se = math.sqrt(c_best_se**2 + c_seed_se**2)
-    accepted = (best_config is not seed_config) and (margin == margin) and (margin > pooled_se)
+    z = max(1.0, math.sqrt(2.0 * math.log(max(n_iter, 2))))
+    bar = max(z * pooled_se, floor)
+    accepted = (best_config is not seed_config) and (margin == margin) and (margin > bar)
     chosen = best_config if accepted else seed_config
 
     info = {
@@ -282,6 +298,7 @@ def search_hyperparams(
         "confirm_best_mean": c_best_mean,
         "confirm_margin": margin,
         "confirm_pooled_se": pooled_se,
+        "accept_bar": bar,
         "seed_config": seed_config,
         "chosen_config": chosen,
     }
