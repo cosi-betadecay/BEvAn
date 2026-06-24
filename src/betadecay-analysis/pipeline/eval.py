@@ -158,3 +158,35 @@ class Evaluator:
         if not log_rs:
             return None
         return torch.cat(log_rs), torch.cat(gts)
+
+    def held_out_log_likelihood(self, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> float:
+        """Mean per-event ``log P(D | true class)`` over all buckets.
+
+        Each finite-feature event contributes its own class's density (signal ->
+        β term, background -> bg term) summed across that bucket's terms; the
+        sum is averaged over events. Prior-free, so it scores density fit alone —
+        the cross-validation reward for the bin-size rule. Over-fine bins drop
+        this score as held-out events land in noise-dominated cells, so larger is
+        better. ``O(N)`` time and space; NaN if no event scores.
+
+        Args:
+            data: Nested per-class, per-bucket feature dict for one split.
+
+        Returns:
+            The mean per-event held-out log-likelihood.
+        """
+        eps = 1e-8
+        total_ll, total_n = 0.0, 0
+        for b in BUCKETS:
+            prepared = self.prepare_terms(data, b, self.trainer.models[b])
+            if prepared is None:
+                continue
+            terms, ground_truths = prepared[:2]
+            if not terms or ground_truths.numel() == 0:
+                continue
+            ll = torch.zeros(ground_truths.shape[0])
+            for pb, pg in terms:
+                ll = ll + torch.where(ground_truths, torch.log(pb + eps), torch.log(pg + eps))
+            total_ll += float(ll.sum().item())
+            total_n += int(ground_truths.numel())
+        return total_ll / total_n if total_n else float("nan")

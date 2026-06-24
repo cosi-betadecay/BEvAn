@@ -8,6 +8,7 @@ import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
+from pipeline.model_selection import select_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -58,7 +59,15 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
     data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
-    trainer = Trainer().fit(train)
+    # Select bin resolution and smoothing by leak-free k-fold CV on the training
+    # split, then refit on the full training set at the winning config.
+    best_config, cv_scores = select_hyperparams(train)
+    print(f"Selected {best_config} (CV held-out log-likelihoods: {cv_scores})")
+    if use_wandb:
+        best_key = (best_config["rho_floor"], best_config["joint_smoothing"], best_config["marginal_smoothing"])
+        wandb.log({**best_config, "cv_log_likelihood": cv_scores[best_key]})
+
+    trainer = Trainer(**best_config).fit(train)
     Evaluator(trainer).evaluate(eval_data, split_name="eval")
 
     if use_wandb:
