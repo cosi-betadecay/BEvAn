@@ -10,6 +10,39 @@ if TYPE_CHECKING:
     from pipeline.train import Trainer
 
 
+def roc_auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
+    """Prior-free ROC AUC via the tie-aware Mann-Whitney rank statistic.
+
+    Invariant to any monotonic transform of ``scores`` (so the log-ratio gives
+    the same answer as the ratio). Equals ``P(score(pos) > score(neg))`` with ties
+    counted as half.
+
+    Args:
+        scores: Per-event separating scores (e.g. the pooled log-ratio).
+        labels: Per-event boolean truth labels (β⁺ = True).
+
+    Returns:
+        The ROC AUC, or NaN if either class is empty.
+    """
+    labels = labels.bool()
+    n_pos = int(labels.sum())
+    n_neg = labels.numel() - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+
+    order = torch.argsort(scores)
+    s_sorted = scores[order]
+    _, inv, counts = torch.unique_consecutive(s_sorted, return_inverse=True, return_counts=True)
+    starts = torch.cumsum(counts, 0) - counts  # 0-based start index of each tie group
+    avg_rank_group = starts.double() + (counts.double() + 1) / 2  # 1-based average rank
+    ranks_sorted = avg_rank_group[inv]
+    ranks = torch.empty_like(ranks_sorted)
+    ranks[order] = ranks_sorted
+
+    r_pos = ranks[labels].sum().item()
+    return (r_pos - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+
+
 class Evaluator:
     """Evaluate a trained per-bucket model on a feature dataset.
 
@@ -190,3 +223,29 @@ class Evaluator:
             total_ll += float(ll.sum().item())
             total_n += int(ground_truths.numel())
         return total_ll / total_n if total_n else float("nan")
+
+    def held_out_auc(self, data: dict[str, dict[int, dict[str, torch.Tensor]]]) -> float:
+        """Prior-free ROC AUC of the pooled per-event log-ratio over all buckets.
+
+        Unlike :meth:`held_out_log_likelihood` (which rewards calibrated density
+        fit and can favour coarse, well-populated bins that separate the classes
+        poorly), this scores *separating power* directly — the same quantity F1
+        tracks — so it is the cross-validation reward aligned with the detection
+        objective. Threshold- and prior-independent. NaN if a split has only one
+        class or no events.
+
+        Args:
+            data: Nested per-class, per-bucket feature dict for one split.
+
+        Returns:
+            The pooled ROC AUC, or NaN if it is undefined for this split.
+        """
+        pooled = self.pooled_log_ratio(data)
+        if pooled is None:
+            return float("nan")
+        scores, labels = pooled
+        finite = torch.isfinite(scores)
+        scores, labels = scores[finite], labels[finite]
+        if scores.numel() == 0:
+            return float("nan")
+        return roc_auc(scores, labels)

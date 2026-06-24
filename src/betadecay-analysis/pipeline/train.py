@@ -17,7 +17,7 @@ class Trainer:
 
     def __init__(
         self,
-        rho_floor: float = 10.0,
+        rho_floor: float | dict[int, float] = 10.0,
         joint_smoothing: float = 0.5,
         marginal_smoothing: float = 0.0,
     ) -> None:
@@ -27,7 +27,10 @@ class Trainer:
             rho_floor: Target events per histogram cell. Each density term sizes
                 its bins-per-axis to the scarcer class via :func:`bins_from_counts`,
                 so cells stay populated regardless of how many events a simulation
-                yields; smaller ``rho_floor`` -> finer bins -> higher variance.
+                yields; smaller ``rho_floor`` -> finer bins -> higher variance. A
+                scalar applies to every bucket; a ``{bucket: rho_floor}`` dict sets
+                each hit-multiplicity bucket independently (so the resolution can
+                match a per-bucket bin budget like the hardcoded ``{1:25, 2:8, 3:35}``).
             joint_smoothing: Laplace pseudo-counts for the 2D joint densities.
             marginal_smoothing: Laplace pseudo-counts for the 1D delta_E marginal.
         """
@@ -77,13 +80,14 @@ class Trainer:
         if n_beta == 0 or n_bg == 0:
             return model  # prior-only: cannot estimate class-conditional densities
 
+        rho = self.rho_floor[bucket] if isinstance(self.rho_floor, dict) else self.rho_floor
         if bucket == 1:
-            self.add_1d(model, bd, bg, "delta_E")
+            self.add_1d(model, bd, bg, "delta_E", rho)
         elif bucket == 2:
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
         else:  # bucket 3
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3)
-            self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
+            self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None, rho)
         return model
 
     def add_1d(
@@ -92,6 +96,7 @@ class Trainer:
         bd: dict[str, torch.Tensor],
         bg: dict[str, torch.Tensor],
         feat: str,
+        rho_floor: float,
     ) -> None:
         """Append a 1D density term over ``feat`` to ``model`` (in place).
 
@@ -105,12 +110,13 @@ class Trainer:
             bd: β-decay per-feature tensors.
             bg: Background per-feature tensors.
             feat: Feature name to histogram.
+            rho_floor: Target events per cell for this bucket's bin rule.
         """
         fb = bd[feat][self.finite(bd[feat])]
         fg = bg[feat][self.finite(bg[feat])]
         if fb.numel() == 0 or fg.numel() == 0:
             return  # need both class densities -> prior-only
-        n_bins = bins_from_counts(min(fb.numel(), fg.numel()), d=1, rho_floor=self.rho_floor, min_bins=5)
+        n_bins = bins_from_counts(min(fb.numel(), fg.numel()), d=1, rho_floor=rho_floor, min_bins=5)
         _, x_bins = build_density_matrix_1d(
             torch.cat([fb, fg]), n_bins_x=n_bins, spacing_x="log", log_x_floor=1e-3
         )
@@ -127,6 +133,7 @@ class Trainer:
         yfeat: str,
         spacing_y: str,
         floor_y: float | None,
+        rho_floor: float,
     ) -> None:
         """Append a 2D density term over ``(xfeat, yfeat)`` to ``model`` (in place).
 
@@ -143,13 +150,14 @@ class Trainer:
             yfeat: Second (y-axis) feature name.
             spacing_y: Y-axis bin spacing, ``"log"`` or ``"linear"``.
             floor_y: Log-floor for the y-axis (ignored when linear).
+            rho_floor: Target events per cell for this bucket's bin rule.
         """
         mb = self.finite(bd[xfeat], bd[yfeat])
         mg = self.finite(bg[xfeat], bg[yfeat])
         n_beta, n_bg = int(mb.sum()), int(mg.sum())
         if n_beta == 0 or n_bg == 0:
             return  # need both class densities -> prior-only
-        n_bins = bins_from_counts(min(n_beta, n_bg), d=2, rho_floor=self.rho_floor, min_bins=4)
+        n_bins = bins_from_counts(min(n_beta, n_bg), d=2, rho_floor=rho_floor, min_bins=4)
         _, x_bins, y_bins = build_density_matrix(
             torch.cat([bd[xfeat][mb], bg[xfeat][mg]]),
             torch.cat([bd[yfeat][mb], bg[yfeat][mg]]),

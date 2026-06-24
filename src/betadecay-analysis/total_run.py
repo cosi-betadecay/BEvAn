@@ -11,7 +11,7 @@ import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
-from pipeline.model_selection import select_hyperparams
+from pipeline.model_selection import flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -175,15 +175,17 @@ def discover_datasets() -> list[dict[str, str]]:
     return datasets
 
 
-def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
+def run_one(ds: dict[str, str], use_wandb: bool, n_iter: int) -> tuple[dict, dict]:
     """Run the exact run.py pipeline for a single (geo, sim, tra) dataset.
 
     Args:
         ds (dict[str, str]): Dataset paths with name, geo_file, sim_file, tra_file.
         use_wandb (bool): Whether to use Weights & Biases for logging.
+        n_iter (int): Number of champion-seeded search candidates per dataset.
 
     Returns:
-        dict: Pooled confusion counts plus prior-free metrics, keyed by split name.
+        tuple[dict, dict]: (per-split confusion counts plus prior-free metrics,
+            the flattened chosen config plus selection diagnostics).
     """
     if use_wandb:
         wandb.init(project=PROJECT, name=ds["name"], reinit=True)
@@ -204,12 +206,18 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
     data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
-    # Select bins + smoothing per dataset (geometries differ wildly in event
-    # counts), leak-free on the training split, then refit on the full train set.
-    best_config, cv_scores = select_hyperparams(train)
-    print(f"  selected {best_config} (CV log-likelihood {cv_scores[(best_config['rho_floor'], best_config['joint_smoothing'], best_config['marginal_smoothing'])]:.4f})")
+    # Champion-seeded, AUC-rewarded search per dataset (geometries differ wildly
+    # in event counts), leak-free on the training split and overfit-guarded (keeps
+    # the champion unless beaten by >1 SE), then refit on the full train set.
+    best_config, info = search_hyperparams(train, n_iter=n_iter)
+    flat = flatten_config(best_config)
+    print(
+        f"  selected {flat} (accepted={info['accepted']}; confirm AUC "
+        f"{info['confirm_best_mean']:.4f} vs seed {info['confirm_seed_mean']:.4f})"
+    )
+    selection = {**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]}
     if use_wandb:
-        wandb.log(best_config)
+        wandb.log(selection)
 
     trainer = Trainer(**best_config).fit(train)
     evaluator = Evaluator(trainer)
@@ -220,14 +228,15 @@ def run_one(ds: dict[str, str], use_wandb: bool) -> dict:
 
     if use_wandb:
         wandb.finish()
-    return results
+    return results, selection
 
 
-def main(use_wandb: bool) -> None:
+def main(use_wandb: bool, n_iter: int) -> None:
     """Run annihilation detection extraction over every .sim/.tra/geometry triple.
 
     Args:
         use_wandb (bool): Whether to use Weights & Biases for logging.
+        n_iter (int): Number of champion-seeded search candidates per dataset.
 
     Raises:
         FileNotFoundError: If the data directory does not exist.
@@ -245,7 +254,7 @@ def main(use_wandb: bool) -> None:
         print(
             f"\n{'=' * 60}\nRunning {ds['name']}\n  geo: {ds['geo_file']}\n  sim: {ds['sim_file']}\n  tra: {ds['tra_file']}\n{'=' * 60}"
         )
-        totals = run_one(ds, use_wandb)
+        totals, selection = run_one(ds, use_wandb, n_iter)
         for split, counts in totals.items():
             rows.append(
                 {
@@ -261,6 +270,8 @@ def main(use_wandb: bool) -> None:
                     # auc is the ROC AUC of the per-event likelihood ratio.
                     "best_f1": counts["best_f1"],
                     "auc": counts["auc"],
+                    # The per-dataset config the search chose, for traceability.
+                    **selection,
                 }
             )
 
@@ -277,6 +288,12 @@ def main(use_wandb: bool) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run β⁺ detection over every .sim/.tra pair found in data/.")
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument(
+        "--search-iters",
+        type=int,
+        default=1000,
+        help="Champion-seeded search candidates per dataset (0 keeps the champion seed; cost scales with this x folds x datasets)",
+    )
     args = parser.parse_args()
 
     if args.wandb:
@@ -286,4 +303,4 @@ if __name__ == "__main__":
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
 
-    main(args.wandb)
+    main(args.wandb, args.search_iters)

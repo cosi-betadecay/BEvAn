@@ -8,7 +8,7 @@ import wandb
 from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator
-from pipeline.model_selection import select_hyperparams
+from pipeline.model_selection import flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
@@ -59,13 +59,17 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool) -> None:
     data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
-    # Select bin resolution and smoothing by leak-free k-fold CV on the training
-    # split, then refit on the full training set at the winning config.
-    best_config, cv_scores = select_hyperparams(train)
-    print(f"Selected {best_config} (CV held-out log-likelihoods: {cv_scores})")
+    # Champion-seeded, AUC-rewarded search for bins + smoothing on the training
+    # split (overfit-guarded: keeps the champion unless beaten by >1 SE), then
+    # refit on the full training set at the chosen config.
+    best_config, info = search_hyperparams(train)
+    flat = flatten_config(best_config)
+    print(
+        f"Selected {flat} (accepted={info['accepted']}; confirm AUC "
+        f"{info['confirm_best_mean']:.4f} vs seed {info['confirm_seed_mean']:.4f})"
+    )
     if use_wandb:
-        best_key = (best_config["rho_floor"], best_config["joint_smoothing"], best_config["marginal_smoothing"])
-        wandb.log({**best_config, "cv_log_likelihood": cv_scores[best_key]})
+        wandb.log({**flat, "selection_accepted": info["accepted"], "cv_auc": info["confirm_best_mean"]})
 
     trainer = Trainer(**best_config).fit(train)
     Evaluator(trainer).evaluate(eval_data, split_name="eval")
