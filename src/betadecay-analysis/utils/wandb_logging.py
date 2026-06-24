@@ -4,7 +4,13 @@ import matplotlib.pyplot as plt
 import wandb
 from matplotlib.figure import Figure
 
-from utils.plots import plot_confusion_matrix, plot_density_matrix, plot_pr_curve, plot_roc_curve
+from utils.plots import (
+    density_term_features,
+    plot_confusion_matrix,
+    plot_density_matrix,
+    plot_pr_curve,
+    plot_roc_curve,
+)
 
 if TYPE_CHECKING:
     from pipeline.eval import Evaluator
@@ -91,7 +97,7 @@ def log_density_matrix(term: dict, split_name: str = "model", bucket: int | None
     """
     if wandb.run is None:
         return
-    feats = term["xfeat"] if term.get("kind") == "1d" else f"{term['xfeat']}_{term['yfeat']}"
+    feats = density_term_features(term)
     scope = f"{split_name}/density" + (f"/n{bucket}" if bucket is not None else "")
     _log_figure(f"{scope}/{feats}", plot_density_matrix(term))
 

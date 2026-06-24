@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from utils.plots import plot_confusion_matrix, plot_density_matrix, plot_pr_curve, plot_roc_curve
+from utils.plots import (
+    density_term_features,
+    plot_confusion_matrix,
+    plot_density_matrix,
+    plot_pr_curve,
+    plot_roc_curve,
+)
 
 if TYPE_CHECKING:
     from pipeline.eval import Evaluator
@@ -73,7 +79,7 @@ def save_density_terms(trainer: "Trainer", out_dir: Path) -> None:
     out = Path(out_dir)
     for bucket, model in trainer.models.items():
         for term in model.get("terms", []):
-            feats = term["xfeat"] if term.get("kind") == "1d" else f"{term['xfeat']}_{term['yfeat']}"
+            feats = density_term_features(term)
             _save_figure(plot_density_matrix(term), out / f"density_n{bucket}_{feats}.png")
 
 

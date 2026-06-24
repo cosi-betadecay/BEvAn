@@ -60,6 +60,21 @@ def _axis_meta(feat: str) -> dict[str, str]:
     return FEATURE_AXES.get(feat, {"label": feat, "name": feat, "scale": "linear"})
 
 
+def density_term_features(term: dict) -> str:
+    """Feature slug for a density term, shared by its W&B key and saved filename.
+
+    Single source of truth so the W&B key (``model/density/n<bucket>/<slug>``) and
+    the on-disk filename (``density_n<bucket>_<slug>.png``) can never drift apart.
+
+    Args:
+        term: A 1D or 2D density term dict.
+
+    Returns:
+        str: ``xfeat`` for a 1D term, or ``"<xfeat>_<yfeat>"`` for a 2D term.
+    """
+    return term["xfeat"] if term.get("kind") == "1d" else f"{term['xfeat']}_{term['yfeat']}"
+
+
 def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> Figure:
     """Plot and save a confusion matrix heatmap.
 
