@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "betadec
 import torch
 from batch_analysis import discover_datasets
 
-from dataset.datasets import BUCKETS, Datasets
+from dataset.datasets import BUCKETS, FEATURES, Datasets
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix_1d, lookup_density_values_1d
 from physics.compton_cone_reconstruction import FarFieldImager
 from pipeline.eval import Evaluator, best_f1_threshold, metrics, prior_free_scores, roc_auc
@@ -46,6 +46,7 @@ __all__ = [
     "fit_logistic",
     "metric_record",
     "metrics",
+    "pooled_feature",
     "prior_free_scores",
     "roc_auc",
     "term_factor",
@@ -143,6 +144,35 @@ def metric_record(trainer: Trainer, data: dict) -> dict:
     evaluator = Evaluator(trainer)
     counts = _pooled_counts(evaluator, data)
     return {**counts, **metrics(counts), **prior_free_scores(evaluator, data)}
+
+
+def pooled_feature(data: dict, feature: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-event ``(values, labels)`` for one feature over the full-model-scored population.
+
+    Mirrors :meth:`Evaluator.prepare_terms`: within each bucket, keeps the events whose
+    bucket-relevant features (``FEATURES[:bucket]``) are all finite — exactly the events
+    the full model classifies — so a baseline built on these values is compared on the
+    same population (apples-to-apples), not on the wider set of merely-finite events.
+
+    Args:
+        data: Nested per-class, per-bucket feature dict for one split.
+        feature: Feature name to pool (e.g. ``"delta_E"``).
+
+    Returns:
+        ``(values, labels)`` with boolean ``labels`` (β⁺ = True), pooled across buckets.
+    """
+    values, labels = [], []
+    for b in BUCKETS:
+        used = FEATURES[:b]  # bucket b scores on these features (1: delta_E, 2: +arm, 3: +anni)
+        for cls, is_signal in (("bdecay", True), ("bg", False)):
+            cols = data[cls][b]
+            mask = torch.ones(cols[feature].shape[0], dtype=torch.bool)
+            for f in used:
+                mask = mask & torch.isfinite(cols[f])
+            v = cols[feature][mask]
+            values.append(v)
+            labels.append(torch.full((v.numel(),), is_signal, dtype=torch.bool))
+    return torch.cat(values), torch.cat(labels)
 
 
 def term_factor(spec: dict) -> str:

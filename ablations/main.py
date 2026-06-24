@@ -6,6 +6,7 @@ from pathlib import Path
 import factor_contributions
 import harness
 import learned_weights
+import naive_511_cut
 import no_calibration
 import no_ckd_order
 import plots
@@ -19,7 +20,7 @@ PROJECT = "cosi-betadecay"
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 # Comparison ablations (champion-vs-ablation metric plots). factor_contributions is
 # handled separately: its output is a per-factor decomposition, not a comparison.
-COMPARISON_ABLATIONS = ("no_calibration", "learned_weights", "no_ckd_order")
+COMPARISON_ABLATIONS = ("naive_511_cut", "no_calibration", "learned_weights", "no_ckd_order")
 ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions")
 
 
@@ -42,7 +43,9 @@ def run_comparison(
     Raises:
         ValueError: If ``name`` is not a known comparison ablation.
     """
-    if name == "no_calibration":
+    if name == "naive_511_cut":
+        ablation = naive_511_cut.run(train, eval_data)
+    elif name == "no_calibration":
         ablation = no_calibration.run(train, eval_data, config)
     elif name == "learned_weights":
         ablation = learned_weights.run(train, eval_data, config)
