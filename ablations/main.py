@@ -33,7 +33,7 @@ def run_comparison(
         champion_eval: The champion's eval metric record (the comparison baseline).
 
     Returns:
-        ``{"champion": champion_eval, "ablation": <ablation record>}``.
+        ``{"our_model": champion_eval, "ablation": <ablation record>}``.
 
     Raises:
         ValueError: If ``name`` is not a known comparison ablation.
@@ -47,7 +47,7 @@ def run_comparison(
         ablation = no_ckd_order.run(train_energy, eval_energy, config)
     else:
         raise ValueError(f"Unknown comparison ablation: {name}")
-    return {"champion": champion_eval, "ablation": ablation}
+    return {"our_model": champion_eval, "ablation": ablation}
 
 
 def main(
@@ -56,6 +56,7 @@ def main(
     calibrate: bool,
     dataset_filter: list[str] | None,
     ablation_filter: list[str] | None,
+    exclude_avg: tuple[str, ...],
 ) -> None:
     """Run the selected ablations over every dataset and write figures + CSVs.
 
@@ -65,6 +66,8 @@ def main(
         calibrate: Whether the champion calibrates its threshold offset.
         dataset_filter: Restrict to these dataset names (None = all discovered).
         ablation_filter: Restrict to these ablations (None = all of :data:`ALL_ABLATIONS`).
+        exclude_avg: Dataset names dropped from the averaged plots and CSV means
+            (e.g. the out-of-domain balloon); they remain as per-dataset CSV rows.
 
     Raises:
         RuntimeError: If no datasets match the filter.
@@ -111,14 +114,14 @@ def main(
     for ablation_name, per_dataset in comparison.items():
         if not per_dataset:
             continue
-        tables.save_comparison_csv(ablation_name, per_dataset, tables_dir)
-        figures.append(plots.plot_metric_comparison(ablation_name, per_dataset, figures_dir))
-        summary_rows.append(tables.summary_row(ablation_name, per_dataset))
+        tables.save_comparison_csv(ablation_name, per_dataset, tables_dir, exclude_avg)
+        figures.append(plots.plot_metric_comparison(ablation_name, per_dataset, figures_dir, exclude_avg))
+        summary_rows.append(tables.summary_row(ablation_name, per_dataset, exclude_avg))
     if summary_rows:
         tables.save_summary_csv(summary_rows, tables_dir)
     if contributions:
         tables.save_factor_contributions_csv(contributions, full_model, tables_dir)
-        figures.append(plots.plot_factor_contributions(contributions, full_model, figures_dir))
+        figures.append(plots.plot_factor_contributions(contributions, full_model, figures_dir, exclude_avg))
 
     if use_wandb:
         for path in figures:
@@ -154,6 +157,12 @@ def parse_args() -> argparse.Namespace:
         choices=ALL_ABLATIONS,
         help="Restrict to these ablations (default: all)",
     )
+    parser.add_argument(
+        "--exclude-avg",
+        nargs="+",
+        default=["COSI_Balloon"],
+        help="Datasets excluded from the averaged plots and CSV means (still written as per-dataset rows)",
+    )
     return parser.parse_args()
 
 
@@ -165,4 +174,11 @@ if __name__ == "__main__":
         if wandb_api_key is None:
             raise RuntimeError("WANDB_API_KEY not found in .env")
         wandb.login(key=wandb_api_key)
-    main(args.wandb, args.search_iters, not args.no_calibrate, args.datasets, args.ablations)
+    main(
+        args.wandb,
+        args.search_iters,
+        not args.no_calibrate,
+        args.datasets,
+        args.ablations,
+        tuple(args.exclude_avg),
+    )

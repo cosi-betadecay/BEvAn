@@ -18,16 +18,19 @@ def save_comparison_csv(
     ablation_name: str,
     per_dataset: dict[str, dict[str, dict[str, float]]],
     save_dir: Path = TABLES_DIR,
+    exclude: tuple[str, ...] = (),
 ) -> Path:
     """Write one comparison ablation's per-dataset metrics, with a trailing mean row.
 
-    Columns are ``dataset`` then ``champion_<m>`` / ``ablation_<m>`` for each metric
-    in :data:`METRICS`.
+    Columns are ``dataset`` then ``our_model_<m>`` / ``ablation_<m>`` for each metric
+    in :data:`METRICS`. Every dataset gets a row; only the trailing mean excludes
+    ``exclude`` (so the mean matches the averaged plot while the detail stays whole).
 
     Args:
         ablation_name: Ablation label and output filename stem.
-        per_dataset: ``{dataset: {"champion": record, "ablation": record}}``.
+        per_dataset: ``{dataset: {"our_model": record, "ablation": record}}``.
         save_dir: Directory to write the CSV into.
+        exclude: Dataset names dropped from the mean row only (kept as detail rows).
 
     Returns:
         Path: The written ``<ablation_name>.csv``.
@@ -35,7 +38,7 @@ def save_comparison_csv(
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     path = save_dir / f"{ablation_name}.csv"
-    fieldnames = ["dataset"] + [f"{side}_{m}" for m in METRICS for side in ("champion", "ablation")]
+    fieldnames = ["dataset"] + [f"{side}_{m}" for m in METRICS for side in ("our_model", "ablation")]
 
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -43,17 +46,14 @@ def save_comparison_csv(
         for dataset, rec in per_dataset.items():
             row = {"dataset": dataset}
             for m in METRICS:
-                row[f"champion_{m}"] = rec["champion"].get(m, float("nan"))
+                row[f"our_model_{m}"] = rec["our_model"].get(m, float("nan"))
                 row[f"ablation_{m}"] = rec["ablation"].get(m, float("nan"))
             writer.writerow(row)
-        mean_row = {"dataset": "mean"}
+        included = [r for k, r in per_dataset.items() if k not in exclude]
+        mean_row = {"dataset": f"mean (excl. {', '.join(exclude)})" if exclude else "mean"}
         for m in METRICS:
-            mean_row[f"champion_{m}"] = _mean(
-                [r["champion"].get(m, float("nan")) for r in per_dataset.values()]
-            )
-            mean_row[f"ablation_{m}"] = _mean(
-                [r["ablation"].get(m, float("nan")) for r in per_dataset.values()]
-            )
+            mean_row[f"our_model_{m}"] = _mean([r["our_model"].get(m, float("nan")) for r in included])
+            mean_row[f"ablation_{m}"] = _mean([r["ablation"].get(m, float("nan")) for r in included])
         writer.writerow(mean_row)
     return path
 
@@ -100,24 +100,29 @@ def save_factor_contributions_csv(
     return path
 
 
-def summary_row(ablation_name: str, per_dataset: dict[str, dict[str, dict[str, float]]]) -> dict[str, float]:
-    """Cross-dataset mean champion/ablation metrics and their delta for one ablation.
+def summary_row(
+    ablation_name: str,
+    per_dataset: dict[str, dict[str, dict[str, float]]],
+    exclude: tuple[str, ...] = (),
+) -> dict[str, float]:
+    """Cross-dataset mean our-model/ablation metrics and their delta for one ablation.
 
     Args:
         ablation_name: Ablation label (the row key).
-        per_dataset: ``{dataset: {"champion": record, "ablation": record}}``.
+        per_dataset: ``{dataset: {"our_model": record, "ablation": record}}``.
+        exclude: Dataset names dropped from the means (matching the averaged plots).
 
     Returns:
-        A flat row with ``champion_<m>``, ``ablation_<m>``, ``delta_<m>`` per metric.
+        A flat row with ``our_model_<m>``, ``ablation_<m>``, ``delta_<m>`` per metric.
     """
     row: dict[str, float] = {"ablation": ablation_name}
-    records = list(per_dataset.values())
+    records = [v for k, v in per_dataset.items() if k not in exclude]
     for m in METRICS:
-        champion = _mean([r["champion"].get(m, float("nan")) for r in records])
+        our_model = _mean([r["our_model"].get(m, float("nan")) for r in records])
         ablation = _mean([r["ablation"].get(m, float("nan")) for r in records])
-        row[f"champion_{m}"] = champion
+        row[f"our_model_{m}"] = our_model
         row[f"ablation_{m}"] = ablation
-        row[f"delta_{m}"] = ablation - champion
+        row[f"delta_{m}"] = ablation - our_model
     return row
 
 
@@ -134,7 +139,9 @@ def save_summary_csv(rows: list[dict[str, float]], save_dir: Path = TABLES_DIR) 
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     path = save_dir / "summary.csv"
-    fieldnames = ["ablation"] + [f"{side}_{m}" for m in METRICS for side in ("champion", "ablation", "delta")]
+    fieldnames = ["ablation"] + [
+        f"{side}_{m}" for m in METRICS for side in ("our_model", "ablation", "delta")
+    ]
 
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)

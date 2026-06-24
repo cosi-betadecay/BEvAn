@@ -1,3 +1,15 @@
+"""Plot helpers for the ablation study, saved under ``ablations/figures``.
+
+Both figure types show the **average across datasets** (mean +/- std), with the
+per-dataset detail written to CSV by ``tables`` for table building. There are two:
+an our-model-vs-ablation metric comparison (F1, AUC, precision, recall) and the
+factor-contribution panel (F1 and AUC per physics factor). Both take plain dicts
+of floats, so this module stays free of the ROOT-backed pipeline packages.
+
+Display strings (titles, axis labels, legends) are sized and worded for the
+paper; the on-disk file stems stay machine-named so they match the CSVs.
+"""
+
 from pathlib import Path
 
 import matplotlib
@@ -13,7 +25,7 @@ from matplotlib.figure import Figure
 FIGURES_DIR = Path(__file__).resolve().parent / "figures"
 
 # Palette reused from utils.plots so the ablation figures share the project look.
-COLOR_CHAMPION = "#3b6e8c"  # champion bars (mako teal)
+COLOR_MODEL = "#3b6e8c"  # our-model bars (mako teal)
 COLOR_ABLATION = "#e8843c"  # ablation bars (amber)
 COLOR_REFERENCE = "#9aa0a6"  # dashed reference lines (neutral grey)
 
@@ -22,7 +34,28 @@ COMPARISON_METRICS = (("f1_score", "F1"), ("auc", "AUC"), ("precision", "Precisi
 
 # Factor display order and labels for the contribution panel.
 FACTOR_ORDER = ("delta_E", "arm", "anni")
-FACTOR_LABELS = {"delta_E": "ΔE", "arm": "ARM", "anni": "anni"}
+FACTOR_LABELS = {"delta_E": "ΔE", "arm": "ARM", "anni": "Annihilation angle"}
+
+# Human-readable display names for the ablations (the file stems stay machine-named).
+ABLATION_TITLES = {
+    "no_calibration": "No calibration",
+    "learned_weights": "Learned weights",
+    "no_ckd_order": "No CKD ordering",
+    "factor_contributions": "Factor contributions",
+}
+
+# Font sizes tuned for figures embedded in the paper (well above the matplotlib
+# defaults so titles, axes, and legends stay legible at print size).
+SUPTITLE_SIZE = 18
+TITLE_SIZE = 17
+LABEL_SIZE = 15
+TICK_SIZE = 13
+LEGEND_SIZE = 13
+
+
+def _pretty(name: str) -> str:
+    """Human-readable display name for an ablation (underscores spaced, capitalized)."""
+    return ABLATION_TITLES.get(name, name.replace("_", " ").capitalize())
 
 
 def _mean_std(values: list[float]) -> tuple[float, float]:
@@ -34,7 +67,7 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
 
 
 def _save(fig: Figure, path: Path) -> Path:
-    """Save ``fig`` to ``path`` (creating parents), close it, and return the path.
+    """Save ``fig`` to ``path`` at print resolution (creating parents), close it, return it.
 
     Args:
         fig: The matplotlib figure to write.
@@ -44,7 +77,7 @@ def _save(fig: Figure, path: Path) -> Path:
         Path: The written path.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, bbox_inches="tight")
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return path
 
@@ -53,42 +86,46 @@ def plot_metric_comparison(
     ablation_name: str,
     per_dataset: dict[str, dict[str, dict[str, float]]],
     save_dir: Path = FIGURES_DIR,
+    exclude: tuple[str, ...] = (),
 ) -> Path:
-    """Plot an ablation against the champion, averaged across datasets.
+    """Plot an ablation against our model, averaged across datasets.
 
-    One grouped bar pair (champion vs ablation) per metric, with error bars giving
+    One grouped bar pair (our model vs ablation) per metric, with error bars giving
     the std across datasets, so a regressing ablation reads as the amber bar
     dropping below the teal one.
 
     Args:
-        ablation_name: Label for the ablation series and the output filename.
-        per_dataset: ``{dataset: {"champion": record, "ablation": record}}`` where
+        ablation_name: Ablation key; humanized for the title/legend, kept as the
+            output filename stem.
+        per_dataset: ``{dataset: {"our_model": record, "ablation": record}}`` where
             each record carries the :data:`COMPARISON_METRICS` keys.
         save_dir: Directory to write the figure into.
+        exclude: Dataset names to drop from the average (e.g. the out-of-domain
+            balloon); they stay in the per-dataset CSV but are not pooled here.
 
     Returns:
         Path: The written ``<ablation_name>.png``.
     """
-    records = list(per_dataset.values())
+    records = [v for k, v in per_dataset.items() if k not in exclude]
     x = np.arange(len(COMPARISON_METRICS))
     width = 0.38
 
-    champion = [
-        _mean_std([r["champion"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
+    our_model = [
+        _mean_std([r["our_model"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
     ]
     ablation = [
         _mean_std([r["ablation"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
     ]
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.bar(
         x - width / 2,
-        [m for m, _ in champion],
+        [m for m, _ in our_model],
         width,
-        yerr=[s for _, s in champion],
+        yerr=[s for _, s in our_model],
         capsize=4,
-        label="champion",
-        color=COLOR_CHAMPION,
+        label="Our model",
+        color=COLOR_MODEL,
     )
     ax.bar(
         x + width / 2,
@@ -96,15 +133,17 @@ def plot_metric_comparison(
         width,
         yerr=[s for _, s in ablation],
         capsize=4,
-        label=ablation_name,
+        label=_pretty(ablation_name),
         color=COLOR_ABLATION,
     )
     ax.set_xticks(x)
     ax.set_xticklabels([label for _, label in COMPARISON_METRICS])
     ax.set_ylim(0, 1)
-    ax.set_ylabel("score (mean ± std across datasets)")
-    ax.set_title(f"{ablation_name} vs champion (avg across datasets)")
-    ax.legend(loc="lower right", fontsize="small")
+    ax.set_xlabel("Metric", fontsize=LABEL_SIZE)
+    ax.set_ylabel("Score (mean ± std across datasets)", fontsize=LABEL_SIZE)
+    ax.set_title(f"{_pretty(ablation_name)} vs. our model", fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
     fig.tight_layout()
     return _save(fig, Path(save_dir) / f"{ablation_name}.png")
 
@@ -113,45 +152,51 @@ def plot_factor_contributions(
     contributions_by_dataset: dict[str, dict[str, dict[str, float]]],
     full_model_by_dataset: dict[str, dict[str, float]] | None = None,
     save_dir: Path = FIGURES_DIR,
+    exclude: tuple[str, ...] = (),
 ) -> Path:
     """Plot each factor's standalone F1 and AUC, averaged across datasets.
 
     Two panels (F1 left, AUC right); within each, one bar per factor (mean across
     datasets, std as error bars). With ``full_model_by_dataset`` a dashed line marks
-    the mean full-model metric, so a factor reaching the line carries most of the
+    our model's mean metric, so a factor reaching the line carries most of the
     separating power.
 
     Args:
         contributions_by_dataset: ``{dataset: {factor: {"f1": ..., "auc": ...}}}``.
-        full_model_by_dataset: Optional ``{dataset: {"f1": ..., "auc": ...}}``
-            full-model references, averaged for the dashed line.
+        full_model_by_dataset: Optional ``{dataset: {"f1": ..., "auc": ...}}`` for our
+            model, averaged for the dashed reference line.
         save_dir: Directory to write the figure into.
+        exclude: Dataset names to drop from the average (e.g. the out-of-domain
+            balloon); they stay in the per-dataset CSV but are not pooled here.
 
     Returns:
         Path: The written ``factor_contributions.png``.
     """
+    contributions_by_dataset = {k: v for k, v in contributions_by_dataset.items() if k not in exclude}
+    if full_model_by_dataset:
+        full_model_by_dataset = {k: v for k, v in full_model_by_dataset.items() if k not in exclude}
     factors = [f for f in FACTOR_ORDER if any(f in contrib for contrib in contributions_by_dataset.values())]
     x = np.arange(len(factors))
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     for ax, (key, label) in zip(axes, (("f1", "F1"), ("auc", "AUC")), strict=True):
         stats = [
             _mean_std([c[f][key] for c in contributions_by_dataset.values() if f in c and key in c[f]])
             for f in factors
         ]
-        ax.bar(
-            x, [m for m, _ in stats], width=0.6, yerr=[s for _, s in stats], capsize=4, color=COLOR_CHAMPION
-        )
+        ax.bar(x, [m for m, _ in stats], width=0.6, yerr=[s for _, s in stats], capsize=4, color=COLOR_MODEL)
         if full_model_by_dataset:
             full_mean, _ = _mean_std([fm.get(key, float("nan")) for fm in full_model_by_dataset.values()])
-            ax.axhline(full_mean, ls="--", lw=1, color=COLOR_REFERENCE, label="full model (avg)")
-            ax.legend(loc="lower right", fontsize="small")
+            ax.axhline(full_mean, ls="--", lw=1.5, color=COLOR_REFERENCE, label="Our model (average)")
+            ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
         ax.set_xticks(x)
         ax.set_xticklabels([FACTOR_LABELS[f] for f in factors])
         ax.set_ylim(0, 1)
-        ax.set_ylabel(label)
-        ax.set_title(label)
+        ax.set_xlabel("Factor", fontsize=LABEL_SIZE)
+        ax.set_ylabel("Score", fontsize=LABEL_SIZE)
+        ax.set_title(label, fontsize=TITLE_SIZE)
+        ax.tick_params(axis="both", labelsize=TICK_SIZE)
 
-    fig.suptitle("Factor contributions (avg across datasets)")
+    fig.suptitle("Factor contributions (averaged across datasets)", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
     return _save(fig, Path(save_dir) / "factor_contributions.png")
