@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run β⁺ annihilation detection on one .sim/.tra dataset.")
     parser.add_argument(
         "--geo-file",
-        default="$(MEGALIB)/resource/examples/geomega/special/SPILike.geo.setup",
+        default="$MEGALIB/resource/examples/geomega/special/SPILike.geo.setup",
         help="MEGAlib geometry setup file",
     )
     parser.add_argument("--sim-file", default="data/SPILike.sim", help="MEGAlib .sim file (simulated events)")

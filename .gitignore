@@ -13,6 +13,9 @@ wheels/
 *.sim
 *.tra
 
+# Saved model artifacts
+models/
+
 # environment variables
 .env
 .env.*

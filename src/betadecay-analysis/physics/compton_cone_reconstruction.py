@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -117,9 +118,12 @@ class FarFieldImager:
         self.phi_range = phi_range
         self.theta_range = theta_range
 
-        # Geometry (required by the reader; optional for imaging itself)
+        # Geometry (required by the reader; optional for imaging itself).
+        # Expand $MEGALIB / ${MEGALIB} here so the path resolves no matter how it
+        # was quoted on the command line ($(MEGALIB) is left for ROOT to expand).
+        geometry_file = os.path.expandvars(str(geometry_file))
         self.geometry = M.MDGeometryQuest()
-        if not self.geometry.ScanSetupFile(M.MString(str(geometry_file))):
+        if not self.geometry.ScanSetupFile(M.MString(geometry_file)):
             raise RuntimeError(f"Failed to load geometry from {geometry_file}")
 
         # Coordinate system

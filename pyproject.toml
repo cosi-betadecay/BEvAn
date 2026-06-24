@@ -24,6 +24,12 @@ dependencies = [
 # Ruff configuration lives in the standalone ruff.toml (it takes precedence
 # over any [tool.ruff] block here, so keeping it there avoids a silent override).
 
+[tool.pytest.ini_options]
+# src/betadecay-analysis/ (not "src") is what lands on sys.path when the entry
+# scripts run, so the test suite imports the top-level packages from there too.
+pythonpath = ["src/betadecay-analysis"]
+testpaths = ["tests"]
+
 [tool.setuptools]
 package-dir = { "" = "." }
 

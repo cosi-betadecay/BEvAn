@@ -1,3 +1,5 @@
+import os
+
 import ROOT as M
 
 from utils.megalib_types import MFileEventsSim
@@ -21,6 +23,9 @@ def get_reader(geometry_file: str, sim_file: str) -> MFileEventsSim:
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
     G = M.MGlobal()
     G.Initialize()
+
+    # Expand $MEGALIB / ${MEGALIB} so the path resolves regardless of CLI quoting.
+    geometry_file = os.path.expandvars(geometry_file)
 
     Geometry = M.MDGeometryQuest()
     if not Geometry.ScanSetupFile(M.MString(geometry_file)):

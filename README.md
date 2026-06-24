@@ -50,23 +50,60 @@ WANDB_API_KEY=your_key_here
 
 Place MEGAlib simulation files in `data/` as matching `{name}.sim` / `{name}.tra`
 pairs (for example `data/SPILike.sim` and `data/SPILike.tra`). The detector
-geometry is read automatically from each file's header, so no separate geometry
-path is required for the batch runner.
+geometry is passed explicitly via `--geo-file` to the per-dataset entry points
+(`analysis.py`, `train_model.py`, `inference.py`). The batch runner
+`batch_analysis.py` takes no geometry flag — it looks each dataset's geometry up
+by name in the static `GEOMETRIES` map at the top of the file, so add an entry
+there for any new dataset.
+
+> **Geometry paths:** use the `$MEGALIB` environment variable form (e.g.
+> `$MEGALIB/resource/examples/geomega/special/Max.geo.setup`) — it works
+> unquoted, and the tools also expand it internally via `os.path.expandvars`.
+> Avoid the `$(MEGALIB)` form on the command line: the shell reads `$(...)` as
+> command substitution and blanks it out (it only works inside MEGAlib's own
+> config files, where ROOT expands it).
 
 ## Running
 
-Run a single dataset:
+Analyze a single dataset (train and evaluate in one pass):
 
 ```bash
-python src/betadecay-analysis/run.py \
+python src/betadecay-analysis/analysis.py \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
   --wandb            # optional
 ```
 
-Or run every `.sim`/`.tra` pair found in `data/` and write a per-dataset summary
-to `results/<timestamp>.csv`:
+Or analyze every `.sim`/`.tra` pair found in `data/` and write a per-dataset
+summary to `results/<timestamp>.csv`:
 
 ```bash
-python src/betadecay-analysis/total_run.py --wandb   # --wandb optional
+python src/betadecay-analysis/batch_analysis.py --wandb   # --wandb optional
+```
+
+### Train once, infer later
+
+To fit a model on a whole simulation and save it to a torch artifact:
+
+```bash
+python src/betadecay-analysis/train_model.py \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
+  --sim-file data/SPILike.sim \
+  --tra-file data/SPILike.tra \
+  --out models/SPILike.pt        # default: models/<sim-stem>.pt
+```
+
+Then run real inference with that saved model on any other `.sim`/`.tra`
+dataset (the model carries the fitted densities and calibrated operating point;
+the `.tra` is still back-projected to reconstruct this dataset's source
+direction for the ARM feature):
+
+```bash
+python src/betadecay-analysis/inference.py \
+  --model models/SPILike.pt \
+  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
+  --sim-file data/Max.sim \
+  --tra-file data/Max.tra \
+  --out results/inference.csv    # optional CSV; otherwise prints only
 ```
