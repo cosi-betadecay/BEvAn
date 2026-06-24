@@ -37,6 +37,7 @@ __all__ = [
     "FACTORS",
     "Evaluator",
     "Trainer",
+    "best_f1_record",
     "best_f1_threshold",
     "bucket_full_scores",
     "champion",
@@ -144,6 +145,57 @@ def metric_record(trainer: Trainer, data: dict) -> dict:
     evaluator = Evaluator(trainer)
     counts = _pooled_counts(evaluator, data)
     return {**counts, **metrics(counts), **prior_free_scores(evaluator, data)}
+
+
+def best_f1_record(trainer: Trainer, train: dict, eval_data: dict) -> dict:
+    """Full-model metric record at its best-F1 (train-calibrated) operating point.
+
+    The fair reference for a baseline that *also* tunes its threshold for F1 (the naive
+    cut, learned weights): both then sit at their best-F1 cut on the same pooled
+    population, so the comparison isolates model quality from the operating point — not
+    the deployed count-prior point, which is not F1-optimized and would hand a
+    F1-tuned baseline an unfair edge.
+
+    Args:
+        trainer: The fitted champion trainer.
+        train: Nested per-class, per-bucket training feature dict.
+        eval_data: The held-out evaluation split.
+
+    Returns:
+        The eval-split record (counts, precision/recall/F1, best_f1, AUC) at the
+        train-calibrated best-F1 threshold on the pooled per-event log-ratio.
+    """
+    evaluator = Evaluator(trainer)
+    train_pool = evaluator.pooled_log_ratio(train)
+    eval_pool = evaluator.pooled_log_ratio(eval_data)
+    if train_pool is None or eval_pool is None:
+        counts = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
+        return {**counts, **metrics(counts), "best_f1": float("nan"), "auc": float("nan")}
+
+    llr_train, y_train = train_pool
+    llr_eval, y_eval = eval_pool
+    ft = torch.isfinite(llr_train)
+    fe = torch.isfinite(llr_eval)
+    llr_train, y_train = llr_train[ft], y_train[ft]
+    llr_eval, y_eval = llr_eval[fe], y_eval[fe].bool()
+
+    _, threshold = best_f1_threshold(llr_train, y_train)
+    if threshold != threshold:  # no positives on train -> keep the default 0 cut
+        threshold = 0.0
+    predictions = llr_eval >= threshold
+    counts = {
+        "tp": int((predictions & y_eval).sum()),
+        "fp": int((predictions & ~y_eval).sum()),
+        "fn": int((~predictions & y_eval).sum()),
+        "tn": int((~predictions & ~y_eval).sum()),
+        "excluded": 0,
+    }
+    return {
+        **counts,
+        **metrics(counts),
+        "best_f1": best_f1_threshold(llr_eval, y_eval)[0],
+        "auc": roc_auc(llr_eval, y_eval),
+    }
 
 
 def pooled_feature(data: dict, feature: str) -> tuple[torch.Tensor, torch.Tensor]:

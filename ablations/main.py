@@ -24,10 +24,23 @@ COMPARISON_ABLATIONS = ("naive_511_cut", "no_calibration", "learned_weights", "n
 ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions")
 
 
+# Ablations that tune their own decision threshold for F1 (the cut, the learned
+# weights). For these the fair reference is our model at ITS best-F1 threshold too —
+# not the deployed count-prior point, which is not F1-optimized and would hand the
+# F1-tuned baseline an unfair edge despite equal ranking power (AUC).
+F1_TUNED_ABLATIONS = {"naive_511_cut", "learned_weights"}
+
+
 def run_comparison(
-    name: str, ds: dict[str, str], train: dict, eval_data: dict, config: dict, champion_eval: dict
+    name: str,
+    ds: dict[str, str],
+    train: dict,
+    eval_data: dict,
+    config: dict,
+    champion_eval: dict,
+    champion_trainer: object,
 ) -> dict[str, dict]:
-    """Dispatch one comparison ablation and pair it with the champion record.
+    """Dispatch one comparison ablation and pair it with the right our-model reference.
 
     Args:
         name: Comparison ablation name (one of :data:`COMPARISON_ABLATIONS`).
@@ -35,10 +48,13 @@ def run_comparison(
         train: Champion (CKD) training features.
         eval_data: Champion (CKD) eval features.
         config: The champion ``Trainer`` config, reused so only the ablation differs.
-        champion_eval: The champion's eval metric record (the comparison baseline).
+        champion_eval: The champion's deployed eval record (reference for deployed-point
+            ablations like no_calibration / no_ckd_order).
+        champion_trainer: The fitted champion, used to build the best-F1 reference for
+            the F1-tuned ablations (so the threshold basis matches).
 
     Returns:
-        ``{"our_model": champion_eval, "ablation": <ablation record>}``.
+        ``{"our_model": <reference record>, "ablation": <ablation record>}``.
 
     Raises:
         ValueError: If ``name`` is not a known comparison ablation.
@@ -54,7 +70,14 @@ def run_comparison(
         ablation = no_ckd_order.run(train_energy, eval_energy, config)
     else:
         raise ValueError(f"Unknown comparison ablation: {name}")
-    return {"our_model": champion_eval, "ablation": ablation}
+    # Match the operating-point basis: best-F1 vs best-F1 for F1-tuned ablations,
+    # deployed vs deployed otherwise.
+    our_model = (
+        harness.best_f1_record(champion_trainer, train, eval_data)
+        if name in F1_TUNED_ABLATIONS
+        else champion_eval
+    )
+    return {"our_model": our_model, "ablation": ablation}
 
 
 def main(
@@ -103,7 +126,7 @@ def main(
         for ablation_name in comparison:
             print(f"  ablation: {ablation_name}")
             comparison[ablation_name][name] = run_comparison(
-                ablation_name, ds, train, eval_data, config, champion_eval
+                ablation_name, ds, train, eval_data, config, champion_eval, champion_trainer
             )
 
         if "factor_contributions" in selected:
