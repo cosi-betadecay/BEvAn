@@ -1,0 +1,43 @@
+{
+  "dataset": "NCT",
+  "geo_file": "$MEGALIB/resource/examples/geomega/special/Simple_Ge_NCT_try1_040721.geo.setup",
+  "sim_file": "data/NCT.sim",
+  "tra_file": "data/NCT.tra",
+  "selection": {
+    "rho_floor_1": 6.999999993,
+    "rho_floor_2": 22.5624999774375,
+    "rho_floor_3": 7.369795910997552,
+    "joint_smoothing": 0.5,
+    "marginal_smoothing": 0.0,
+    "selection_accepted": false,
+    "cv_auc": 0.9891995127310329,
+    "threshold_offset": 0.0,
+    "threshold_moved": false
+  },
+  "train": {
+    "tp": 10159,
+    "fp": 2313,
+    "fn": 488,
+    "tn": 79401,
+    "excluded": 0,
+    "precision": 0.814544579858884,
+    "recall": 0.9541654926270311,
+    "fpr": 0.028306043028122476,
+    "f1_score": 0.878844240667849,
+    "best_f1": 0.8778947368421053,
+    "auc": 0.9913117946309697
+  },
+  "eval": {
+    "tp": 2553,
+    "fp": 594,
+    "fn": 110,
+    "tn": 19836,
+    "excluded": 0,
+    "precision": 0.8112488083889419,
+    "recall": 0.9586932031543373,
+    "fpr": 0.02907488986784141,
+    "f1_score": 0.8788296041308089,
+    "best_f1": 0.8760330578512396,
+    "auc": 0.9890453815994055
+  }
+}

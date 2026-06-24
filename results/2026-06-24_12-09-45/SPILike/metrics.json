@@ -1,0 +1,43 @@
+{
+  "dataset": "SPILike",
+  "geo_file": "$MEGALIB/resource/examples/geomega/special/SPILike.geo.setup",
+  "sim_file": "data/SPILike.sim",
+  "tra_file": "data/SPILike.tra",
+  "selection": {
+    "rho_floor_1": 39.31999996068,
+    "rho_floor_2": 5.53124999446875,
+    "rho_floor_3": 0.03755102037061225,
+    "joint_smoothing": 0.5,
+    "marginal_smoothing": 0.0,
+    "selection_accepted": false,
+    "cv_auc": 0.9973998136033165,
+    "threshold_offset": 0.0,
+    "threshold_moved": false
+  },
+  "train": {
+    "tp": 1224,
+    "fp": 180,
+    "fn": 159,
+    "tn": 45224,
+    "excluded": 0,
+    "precision": 0.8717948717948718,
+    "recall": 0.8850325379609545,
+    "fpr": 0.0039644084221654476,
+    "f1_score": 0.8783638320775027,
+    "best_f1": 0.8824580207216863,
+    "auc": 0.9976797843453548
+  },
+  "eval": {
+    "tp": 298,
+    "fp": 42,
+    "fn": 49,
+    "tn": 11311,
+    "excluded": 0,
+    "precision": 0.8764705882352941,
+    "recall": 0.8587896253602305,
+    "fpr": 0.003699462697084471,
+    "f1_score": 0.8675400291120815,
+    "best_f1": 0.8764367816091954,
+    "auc": 0.9978150730640075
+  }
+}
