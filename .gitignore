@@ -16,6 +16,9 @@ wheels/
 # Saved model artifacts
 models/
 
+# Run outputs (per-run plots, metrics.json, summary.csv) — generated, not tracked
+results/
+
 # environment variables
 .env
 .env.*

@@ -5,6 +5,7 @@ import torch
 from dataset.datasets import BUCKETS, FEATURES
 from modeling.calculate_probablities import confusion_counts, log_confusion
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
+from utils.wandb_logging import log_score_curves
 
 if TYPE_CHECKING:
     from pipeline.train import Trainer
@@ -161,6 +162,10 @@ class Evaluator:
             log_confusion(counts, split_name=f"{split_name}/n{b}", log_image=False)
 
         log_confusion(total, split_name=split_name)
+        # Same wandb treatment as the confusion matrix, for this split's pooled
+        # score: the threshold-free ROC and precision-recall curves (no-op when no
+        # run is active).
+        log_score_curves(self, data, split_name)
 
         return total
 
