@@ -1,6 +1,16 @@
+import math
+
 import torch
 
 from mathematics.geometry import theta_geo, theta_kin
+
+# 3σ photopeak window (keV), mirroring ``ground_truth_bdecay``'s tolerance:
+# FWHM 2.25 keV -> σ = FWHM / 2.355, times 3. Single source so the ARM
+# 511-consistency deadzone and the label can never drift apart.
+E_TOLERANCE = 3.0 * (2.25 / 2.355)
+# Energy miss (keV) past the tolerance that saturates the 511-consistency push
+# to the ±1 rail. One electron-mass worth of error is full scale.
+E_SPREAD_SCALE = 511.0
 
 ############################################
 # Annihilation Angle
@@ -25,7 +35,7 @@ def per_subset_back_to_back(
     Returns:
         ``(B,)`` scores; ``+inf`` where no vertex passes the gate or ``n < 3``.
     """
-    B2B_E_FLOOR = 511.0 - 3.0 * (2.25 / 2.355)  # ~508 keV: a single Compton photon
+    B2B_E_FLOOR = 511.0 - E_TOLERANCE  # ~508 keV: a single Compton photon
     B2B_E_TARGET = 1022.0  # two fully-absorbed 511 keV photons
     B2B_SIGMA_E = 250.0  # deficit-tolerant energy scale (partial deposits dominate)
     B2B_LAMBDA = 0.3  # energy-penalty strength, in cosine units
@@ -102,21 +112,31 @@ def arm_fixed_size(
     positions: torch.Tensor,
     reconstructed_unit_vector: torch.Tensor,
 ) -> torch.Tensor:
-    """ARM for one fixed-size subset batch: signed ``theta_geo - theta_kin`` of
-    the subset that minimizes ``|theta_geo - theta_kin|``.
+    """511-aware ARM for one fixed-size subset batch.
 
-    The subset is selected by smallest absolute discrepancy (best 511-keV
-    consistency, peaks at 0), but the *signed* difference for that subset is
-    returned so the sign carries which way the geometric angle deviates.
+    Per subset, the feature fuses the angular and energy 511-consistency tests:
+
+        a    = (theta_geo - theta_kin) / pi          # angular residual, ~0 = agree
+        dE   = sum(E) - 511                           # signed energy deviation (keV)
+        push = sign(dE) * max(|dE| - E_TOLERANCE, 0) / E_SPREAD_SCALE
+        feature = clamp(a + push, -1, +1)
+
+    Inside the 511 +- ``E_TOLERANCE`` window ``push`` is zero, so a true β⁺
+    photon with agreeing geometry sits at ~0. Outside it, the feature is shoved
+    toward +-1 in the direction of the energy miss and in proportion to it. The
+    subset minimizing ``|feature|`` is selected (must satisfy *both* tests on the
+    same photon) and its signed feature returned.
     """
     n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
-    diff = theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)
-    arm_value = diff[torch.argmin(torch.abs(diff))]
+    a = (theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)) / math.pi
+    dE = energies.sum(dim=1) - 511.0
+    push = torch.sign(dE) * (dE.abs() - E_TOLERANCE).clamp(min=0.0) / E_SPREAD_SCALE
+    feature = (a + push).clamp(-1.0, 1.0)
 
-    return arm_value.reshape(1)
+    return feature[torch.argmin(torch.abs(feature))].reshape(1)
 
 
 def arm(
@@ -125,12 +145,12 @@ def arm(
     reconstructed_unit_vector: torch.Tensor,
     sizes: torch.Tensor,
 ) -> torch.Tensor:
-    """Per-event Angular Resolution Measure, pooled over the subset sizes.
+    """Per-event 511-aware ARM, pooled over the subset sizes.
 
     Groups subsets by size, takes each size's best subset (smallest
-    ``|theta_geo - theta_kin|`` via :func:`arm_fixed_size`), and returns the
-    signed difference of whichever of those is closest to zero across all sizes
-    ``>= 2``, or NaN when none qualify.
+    ``|feature|`` via :func:`arm_fixed_size`, the energy-modulated angular
+    residual in ``[-1, 1]``), and returns the signed feature of whichever of
+    those is closest to zero across all sizes ``>= 2``, or NaN when none qualify.
 
     Args:
         energies: ``(B, N)`` padded per-hit energies.
