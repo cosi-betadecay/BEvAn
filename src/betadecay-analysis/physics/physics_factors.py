@@ -1,45 +1,6 @@
-import os
-
 import torch
 
 from mathematics.geometry import theta_geo, theta_kin
-from physics.ground_truths import calculate_tolerance
-
-# 511-anchored geometry. ARM and the back-to-back score normally take the best subset
-# regardless of its energy; this biases them toward the subset whose deposited energy is
-# consistent with annihilation, so they measure the *511 candidate's* geometry. Each
-# subset gets an additive penalty ``k * (1 - G(E))`` with ``G`` a Gaussian on the subset
-# energy: an on-line subset (E ~ mu) is unpenalised and keeps its raw target (ARM -> 0,
-# anni -> -1), an off-line one is pushed away from signal by up to ``k``. ARM uses a
-# single 511 keV photon; anni the two-photon 1022 keV pair (mu and sigma doubled).
-# Strength k = 0 disables it (champion, byte-identical); set via BETADECAY_511_ANCHOR.
-ANCHOR_511_K = float(os.getenv("BETADECAY_511_ANCHOR", "0.0"))
-_SIGMA = calculate_tolerance(n_std=1)  # bare sigma from the detector FWHM
-ARM_MU, ARM_SIGMA = 511.0, _SIGMA
-ANNI_MU, ANNI_SIGMA = 1022.0, 2.0 * _SIGMA
-
-
-def _energy_penalty(subset_energy: torch.Tensor, mu: float, sigma: float) -> torch.Tensor:
-    """Additive 511-anchor penalty ``k * (1 - G(E))`` per subset (0 when disabled).
-
-    ``G`` is a Gaussian on the subset's total deposited energy, centred at ``mu`` with
-    width ``sigma``: a subset on the annihilation line is unpenalised, one off it is
-    pushed away from the signal target by up to ``ANCHOR_511_K``. Returns zeros when the
-    anchor is off, so the features stay byte-identical to the champion.
-
-    Args:
-        subset_energy: Per-subset total deposited energy, any shape.
-        mu: Gaussian centre — the annihilation energy (511 for ARM, 1022 for anni).
-        sigma: Gaussian width (the detector resolution sigma).
-
-    Returns:
-        The per-subset additive penalty, same shape as ``subset_energy``.
-    """
-    if ANCHOR_511_K == 0.0:
-        return torch.zeros_like(subset_energy)
-    gaussian = torch.exp(-((subset_energy - mu) ** 2) / (2.0 * sigma**2))
-    return ANCHOR_511_K * (1.0 - gaussian)
-
 
 ############################################
 # Annihilation Angle
@@ -88,8 +49,7 @@ def per_subset_back_to_back(
         e_term = B2B_LAMBDA * (1.0 - torch.exp(-(deficit**2) / (2.0 * B2B_SIGMA_E**2)))
         score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + e_term, inf)
         best = torch.minimum(best, score)
-    # 511-anchor: bias toward subsets whose total deposit is the 1022 keV two-photon pair.
-    return best + _energy_penalty(total_E, ANNI_MU, ANNI_SIGMA)
+    return best
 
 
 def annihilation_angle(
@@ -147,10 +107,7 @@ def arm_fixed_size(
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
-    per_subset = torch.abs(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies))
-    # 511-anchor: bias toward subsets whose total deposit is a single 511 keV photon.
-    subset_energy = energies.sum(dim=-1)
-    arm_value = torch.min(per_subset + _energy_penalty(subset_energy, ARM_MU, ARM_SIGMA))
+    arm_value = torch.min(torch.abs(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)))
 
     return arm_value.reshape(1)
 
