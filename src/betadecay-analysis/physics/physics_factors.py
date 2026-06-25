@@ -107,7 +107,7 @@ def arm_fixed_size(
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
-    arm_value = torch.min(torch.abs(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)))
+    arm_value = torch.min(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies))
 
     return arm_value.reshape(1)
 

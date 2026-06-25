@@ -179,9 +179,9 @@ class Trainer:
         if bucket == 1:
             self.add_1d(model, bd, bg, "delta_E", rho)
         elif bucket == 2:
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "linear", None, rho)
         else:  # bucket 3
-            self.add_2d(model, bd, bg, "delta_E", "arm", "log", 1e-3, rho)
+            self.add_2d(model, bd, bg, "delta_E", "arm", "linear", None, rho)
             self.add_2d(model, bd, bg, "delta_E", "anni", "linear", None, rho)
         return model
 
