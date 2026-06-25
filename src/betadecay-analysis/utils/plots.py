@@ -42,7 +42,7 @@ ANNOT_SIZE = 16
 # anni is linear). Unknown features fall back to a linear axis labelled by name.
 FEATURE_AXES = {
     "delta_E": {"label": "ΔE [keV]", "name": "ΔE", "scale": "log"},
-    "arm": {"label": "ARM [rad]", "name": "ARM", "scale": "log"},
+    "arm": {"label": "ARM [rad]", "name": "ARM", "scale": "linear"},
     "anni": {"label": "Annihilation score", "name": "Annih.", "scale": "linear"},
 }
 
