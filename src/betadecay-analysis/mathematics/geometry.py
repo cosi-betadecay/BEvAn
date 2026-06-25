@@ -54,7 +54,7 @@ def theta_kin(energies: torch.Tensor) -> torch.Tensor:
     # background photons at other energies should produce kinematic angles
     # inconsistent with the geometric reconstruction.
     electron_mass_energy = 511.0  # keV
-    E_1 = electron_mass_energy
+    E_1 = energies[0:].sum() if energies.ndim == 1 else energies[:, 0:].sum(dim=1)
     E_2 = energies[1:].sum() if energies.ndim == 1 else energies[:, 1:].sum(dim=1)
 
     cos_theta_kin = 1 - electron_mass_energy * (1 / E_2 - 1 / E_1)
