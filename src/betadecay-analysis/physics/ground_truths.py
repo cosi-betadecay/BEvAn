@@ -2,6 +2,29 @@ import ROOT as M
 
 from utils.megalib_types import MSimEvent
 
+# Detector energy resolution at the 511 keV line, as a full width at half maximum (keV).
+# Single source for both the ground-truth tolerance and the 511-anchored geometry
+# Gaussian, so the two can never drift apart.
+ANNIHILATION_FWHM_KEV = 2.25
+
+
+def calculate_tolerance(n_std: int = 3) -> float:
+    """Energy tolerance for 511 keV detection: ``n_std`` standard deviations.
+
+    Converts the detector resolution (FWHM, :data:`ANNIHILATION_FWHM_KEV`) to a Gaussian
+    sigma via ``FWHM = 2.355 * sigma`` (the FWHM/sigma relation for the Gaussian photopeak
+    of a high-purity germanium detector) and scales it by ``n_std``. Pass ``n_std=1`` to
+    get the bare sigma — e.g. as the width of a 511 keV Gaussian.
+
+    Args:
+        n_std: Number of standard deviations the tolerance spans (default 3).
+
+    Returns:
+        float: The energy tolerance in keV (``n_std * sigma``).
+    """
+    sigma = ANNIHILATION_FWHM_KEV / 2.355
+    return n_std * sigma
+
 
 def ground_truth_bdecay(event: MSimEvent) -> bool:
     """Count annihilation events matching 511 keV within a resolution-based tolerance.
@@ -12,27 +35,6 @@ def ground_truth_bdecay(event: MSimEvent) -> bool:
     Returns:
         bool: True if any event matches the annihilation criteria, else False.
     """
-
-    def calculate_tolerance(n_std: int = 3) -> float:
-        """Calculate the physically motivated energy tolerance for 511 keV detection.
-
-        This function converts the detector's energy resolution, given as a full width
-        at half maximum (FWHM), into a standard deviation sigma. For Gaussian-shaped
-        peaks (as in High-Purity Germanium detectors), the relationship between FWHM
-        and sigma is:
-
-            FWHM = 2.355 * sigma
-
-        Therefore, sigma = FWHM / 2.355.
-
-        Returns:
-            float: The energy tolerance in keV (1σ = default).
-        """
-        fwhm = 2.25
-        sigma = fwhm / 2.355
-        tolerance = n_std * sigma
-        return tolerance
-
     tolerance = calculate_tolerance()
     number_good_events = 0
 

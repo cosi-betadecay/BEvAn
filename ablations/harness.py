@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -73,7 +74,11 @@ def extract_split(
         ``(train, eval)`` nested per-class, per-bucket feature dicts.
     """
     cache_dir = Path(cache_dir)
-    cache_path = cache_dir / f"{ds['name']}_{ordering}.pt"
+    # The 511-anchor strength changes the features, so it is part of the cache key.
+    # An off anchor ("0") keeps the champion's existing suffix-free key (no re-extraction).
+    anchor = os.getenv("BETADECAY_511_ANCHOR", "0")
+    suffix = "" if float(anchor) == 0.0 else f"_a{anchor}"
+    cache_path = cache_dir / f"{ds['name']}_{ordering}{suffix}.pt"
     if cache_path.exists():
         payload = torch.load(cache_path, map_location="cpu", weights_only=False)
         return payload["train"], payload["eval"]
