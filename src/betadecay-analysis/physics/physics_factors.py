@@ -102,12 +102,19 @@ def arm_fixed_size(
     positions: torch.Tensor,
     reconstructed_unit_vector: torch.Tensor,
 ) -> torch.Tensor:
-    """ARM for one fixed-size subset batch: min |theta_geo - theta_kin|."""
+    """ARM for one fixed-size subset batch: signed ``theta_geo - theta_kin`` of
+    the subset that minimizes ``|theta_geo - theta_kin|``.
+
+    The subset is selected by smallest absolute discrepancy (best 511-keV
+    consistency, peaks at 0), but the *signed* difference for that subset is
+    returned so the sign carries which way the geometric angle deviates.
+    """
     n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
-    arm_value = torch.min(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies))
+    diff = theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)
+    arm_value = diff[torch.argmin(torch.abs(diff))]
 
     return arm_value.reshape(1)
 
@@ -120,9 +127,10 @@ def arm(
 ) -> torch.Tensor:
     """Per-event Angular Resolution Measure, pooled over the subset sizes.
 
-    Groups subsets by size and returns the smallest ``|theta_geo - theta_kin|``
-    (via :func:`arm_fixed_size`) across all sizes ``>= 2``, or NaN when none
-    qualify.
+    Groups subsets by size, takes each size's best subset (smallest
+    ``|theta_geo - theta_kin|`` via :func:`arm_fixed_size`), and returns the
+    signed difference of whichever of those is closest to zero across all sizes
+    ``>= 2``, or NaN when none qualify.
 
     Args:
         energies: ``(B, N)`` padded per-hit energies.
@@ -152,7 +160,7 @@ def arm(
     finite = stacked[torch.isfinite(stacked)]
     if finite.numel() == 0:
         return positions.new_tensor(float("nan")).reshape(1)
-    return finite.amin().reshape(1)
+    return finite[torch.argmin(torch.abs(finite))].reshape(1)
 
 
 ############################################
