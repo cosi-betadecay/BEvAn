@@ -1,6 +1,7 @@
 import torch
 
 from mathematics.geometry import theta_geo, theta_kin
+from physics.ground_truths import calculate_tolerance
 
 ############################################
 # Annihilation Angle
@@ -49,7 +50,11 @@ def per_subset_back_to_back(
         e_term = B2B_LAMBDA * (1.0 - torch.exp(-(deficit**2) / (2.0 * B2B_SIGMA_E**2)))
         score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + e_term, inf)
         best = torch.minimum(best, score)
-    return best
+    # 511-anchor: a subset whose total deposit is not the 1022 keV two-photon pair gets a
+    # flat +1.0, pushing it away from the back-to-back (anni=-1) signal target. total_E is
+    # the per-subset deposit (padding-free here). Window doubled for the 1022 keV pair.
+    off_line = (total_E - 1022.0).abs() > 2.0 * calculate_tolerance()
+    return best + off_line.to(best.dtype)
 
 
 def annihilation_angle(
@@ -107,7 +112,12 @@ def arm_fixed_size(
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
-    arm_value = torch.min(torch.abs(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)))
+    per_subset = torch.abs(theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies))
+    # 511-anchor: a subset whose total deposit is not consistent with a single 511 keV
+    # photon gets a flat +1.0, pushing it away from the ARM=0 signal target so the min
+    # prefers an on-line subset. energies is already sliced to the subset width (no padding).
+    off_line = (energies.sum(dim=-1) - 511.0).abs() > calculate_tolerance()
+    arm_value = torch.min(per_subset + off_line.to(per_subset.dtype))
 
     return arm_value.reshape(1)
 
