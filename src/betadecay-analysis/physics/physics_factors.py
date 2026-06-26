@@ -24,8 +24,17 @@ def per_subset_back_to_back(
 
     For each hit taken as the annihilation vertex, scores how anti-parallel the
     two most-opposed arms are (cosine ~ -1 for a real pair), gated on the
-    two-arm energy clearing a single-photon floor and penalized toward the
+    two-arm energy clearing a single-photon floor and pushed toward the
     1022 keV two-photon target. The subset's score is the best (lowest) vertex.
+
+    The energy push mirrors the 511-aware ARM construction at the two-photon
+    target: inside 1022 +- ``2 * E_TOLERANCE`` it is zero (a clean pair sits at
+    pure ``cos_bb``); outside, either miss direction penalizes (excess from a
+    summed-in background hit as much as a deficit), nudging the score off the
+    signal rail in proportion to ``|e_arms - 1022|``. ``E_TOLERANCE`` is the
+    single shared photopeak window, so this deadzone can never drift from the
+    label. (The push enters as a positive penalty rather than a signed term
+    because the subset score is selected by its minimum, not by ``|score|``.)
 
     Args:
         positions: ``(B, n, 3)`` hit positions for B subsets of size n.
@@ -37,8 +46,7 @@ def per_subset_back_to_back(
     """
     B2B_E_FLOOR = 511.0 - E_TOLERANCE  # ~508 keV: a single Compton photon
     B2B_E_TARGET = 1022.0  # two fully-absorbed 511 keV photons
-    B2B_SIGMA_E = 250.0  # deficit-tolerant energy scale (partial deposits dominate)
-    B2B_LAMBDA = 0.3  # energy-penalty strength, in cosine units
+    B2B_LAMBDA = 0.3  # energy-push strength, in cosine units
 
     B, n, _ = positions.shape
     if n < 3:
@@ -55,9 +63,9 @@ def per_subset_back_to_back(
         eye = torch.eye(m, dtype=torch.bool, device=positions.device).unsqueeze(0)
         cos_bb = C.masked_fill(eye, float("inf")).amin(dim=(1, 2))  # most anti-parallel
         e_arms = total_E - energies[:, v]  # two-arm energy (vertex excluded)
-        deficit = (B2B_E_TARGET - e_arms).clamp_min(0.0)
-        e_term = B2B_LAMBDA * (1.0 - torch.exp(-(deficit**2) / (2.0 * B2B_SIGMA_E**2)))
-        score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + e_term, inf)
+        dE2 = e_arms - B2B_E_TARGET  # miss from the two-photon target
+        push = (dE2.abs() - 2.0 * E_TOLERANCE).clamp(min=0.0) / E_SPREAD_SCALE
+        score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + B2B_LAMBDA * push, inf)
         best = torch.minimum(best, score)
     return best
 
