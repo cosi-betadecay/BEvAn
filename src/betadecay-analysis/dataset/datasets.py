@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 
 from physics.event_processing import event_data_processing
-from physics.ground_truths import ground_truth_bdecay
+from physics.ground_truths import bdecay_label_score, calculate_tolerance, ground_truth_bdecay
 from physics.physics_factors import annihilation_angle, arm, delta_E
 from utils.megalib_types import MFileEventsSim
 
@@ -36,7 +36,6 @@ class Datasets:
         reader_sim: MFileEventsSim,
         reconstructed_unit_vector: torch.Tensor,
         ordering: str = "ckd",
-        gt_n_std: int = 3,
     ) -> None:
         """Bind the dataset builder to a simulation reader and source direction.
 
@@ -47,14 +46,10 @@ class Datasets:
             ordering: Hit-subset ordering passed to event processing — ``"ckd"``
                 (the default Compton-kinematic-discrepancy ordering) or ``"energy"``
                 (plain energy sort), the latter used by the no-CKD-order ablation.
-            gt_n_std: Number of resolution sigmas defining the 511 keV photopeak
-                window used to label events (see :func:`ground_truth_bdecay`). The
-                deployed value is ``3``; the ``gt_tolerance`` ablation sweeps it.
         """
         self.reader_sim = reader_sim
         self.reconstructed_unit_vector = reconstructed_unit_vector
         self.ordering = ordering
-        self.gt_n_std = gt_n_std
 
     def feature_bucket(self, d_arm: float, d_anni: float) -> int:
         """Route an event to its feature bucket from which features are finite.
@@ -95,7 +90,7 @@ class Datasets:
             if n_hits == 0:
                 continue
 
-            cls = "bdecay" if ground_truth_bdecay(event_sim, self.gt_n_std) else "bg"
+            cls = "bdecay" if ground_truth_bdecay(event_sim) else "bg"
 
             energies, positions, sizes = event_data_processing(event_sim, ordering=self.ordering)
             if energies is None or positions is None or sizes is None:
@@ -126,14 +121,76 @@ class Datasets:
             for cls in CLASSES
         }
 
+    def compute_event_pool(self) -> dict[str, torch.Tensor]:
+        """Stream every event once into a flat, relabel-able per-event pool.
+
+        Mirrors :meth:`compute_event_features` event-for-event, but instead of applying
+        the n_std-dependent label it stores each event's raw label score (see
+        :func:`bdecay_label_score`) next to its features and feature bucket. Bucket and
+        features do not depend on the label, so :func:`pool_to_features` can rebuild the
+        labeled, bucketed dict for any window without re-streaming — the basis of the
+        cheap ``gt_tolerance`` sweep. The score is taken before processing, matching the
+        label-then-processing order in :meth:`compute_event_features` so a relabel at
+        ``n_std = 3`` reproduces that method exactly.
+
+        Returns:
+            Flat pool with ``bucket`` (long), ``delta_E``/``arm``/``anni`` (float32), and
+            ``label_score`` (float64) tensors, one entry per non-empty event.
+        """
+        buckets: list[int] = []
+        feats: dict[str, list[float]] = {f: [] for f in FEATURES}
+        scores: list[float] = []
+
+        for event_sim in tqdm(
+            iter(lambda: self.reader_sim.GetNextEvent(), None),
+            desc="Pooling events",
+            unit=" events",
+        ):
+            M.SetOwnership(event_sim, True)
+            if event_sim.GetNHTs() == 0:
+                continue
+
+            # Score before processing, mirroring compute_event_features (which labels
+            # before processing) so the relabeled pool matches it event-for-event.
+            score = bdecay_label_score(event_sim)
+            energies, positions, sizes = event_data_processing(event_sim, ordering=self.ordering)
+            if energies is None or positions is None or sizes is None:
+                # Invalid processing -> bucket 1 with NaN features (excluded downstream
+                # by the NaN ratio) but still carrying its label score for the prior.
+                buckets.append(1)
+                for f in FEATURES:
+                    feats[f].append(float("nan"))
+                scores.append(score)
+                continue
+
+            _delta_E = float(delta_E(energies, sizes=sizes))
+            _anni = float(annihilation_angle(positions, sizes=sizes, energies=energies))
+            _arm = float(arm(energies, positions, self.reconstructed_unit_vector, sizes=sizes))
+
+            buckets.append(self.feature_bucket(_arm, _anni))
+            feats["delta_E"].append(_delta_E)
+            feats["arm"].append(_arm)
+            feats["anni"].append(_anni)
+            scores.append(score)
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        return {
+            "bucket": torch.tensor(buckets, dtype=torch.long),
+            **{f: torch.tensor(feats[f], dtype=torch.float32) for f in FEATURES},
+            "label_score": torch.tensor(scores, dtype=torch.float64),
+        }
+
     def split_dataset(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], train_percentage: float = 0.8
     ) -> tuple[dict, dict]:
         """Split each per-class, per-bucket feature tensor into train/eval partitions.
 
-        Uses a fixed seed so the split is reproducible. Only the split-using
-        entry points (``analysis.py``, ``batch_analysis.py``) call this;
-        ``train_model.py`` fits on the full feature dict and never splits.
+        Thin instance-method wrapper over :func:`split_features` (the actual logic),
+        kept so the split-using entry points (``analysis.py``, ``batch_analysis.py``)
+        call it unchanged; ``train_model.py`` fits on the full feature dict and never
+        splits.
 
         Args:
             data: Nested feature dict from :meth:`compute_event_features`.
@@ -143,18 +200,67 @@ class Datasets:
         Returns:
             ``(train, evaluate)``, each mirroring the nested structure of ``data``.
         """
-        generator = torch.Generator().manual_seed(42)
-        train = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
-        evaluate = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
+        return split_features(data, train_percentage)
 
-        for cls in CLASSES:
-            for b in BUCKETS:
-                n = data[cls][b]["delta_E"].shape[0]
-                perm = torch.randperm(n, generator=generator)
-                n_train = int(n * train_percentage)
-                train_idx, eval_idx = perm[:n_train], perm[n_train:]
-                for f in FEATURES:
-                    train[cls][b][f] = data[cls][b][f][train_idx]
-                    evaluate[cls][b][f] = data[cls][b][f][eval_idx]
 
-        return train, evaluate
+def pool_to_features(
+    pool: dict[str, torch.Tensor], n_std: int
+) -> dict[str, dict[int, dict[str, torch.Tensor]]]:
+    """Relabel a flat event pool at one photopeak window into the nested feature dict.
+
+    Thresholds each event's cached label score at ``calculate_tolerance(n_std)`` to
+    assign β⁺/background, then groups by the (label-independent) feature bucket. The
+    result is identical to a fresh :meth:`Datasets.compute_event_features` whose ground
+    truth used ``n_std`` — same features, same routing, same per-bucket event order — so
+    the downstream :func:`split_features` and fit are unchanged, but no ``.sim`` is
+    re-read. This is what lets the ``gt_tolerance`` sweep cost one extraction, not one
+    per window.
+
+    Args:
+        pool: Flat per-event pool from :meth:`Datasets.compute_event_pool`.
+        n_std: Resolution-sigma window for the label.
+
+    Returns:
+        Nested ``data[class][bucket][feature]`` dict, ready for :func:`split_features`.
+    """
+    tolerance = calculate_tolerance(n_std)
+    is_beta = pool["label_score"] < tolerance
+    masks = {"bdecay": is_beta, "bg": ~is_beta}
+    return {
+        cls: {b: {f: pool[f][masks[cls] & (pool["bucket"] == b)] for f in FEATURES} for b in BUCKETS}
+        for cls in CLASSES
+    }
+
+
+def split_features(
+    data: dict[str, dict[int, dict[str, torch.Tensor]]], train_percentage: float = 0.8
+) -> tuple[dict, dict]:
+    """Split each per-class, per-bucket feature tensor into reproducible train/eval partitions.
+
+    Fixed-seed shuffle per ``(class, bucket)``, so the partition is deterministic given
+    the class membership — relabeling then splitting (the ``gt_tolerance`` path) lands on
+    exactly the partition a fresh extraction at that label would.
+
+    Args:
+        data: Nested per-class, per-bucket feature dict.
+        train_percentage: Fraction of each class/bucket assigned to the train partition;
+            the remainder is the eval partition.
+
+    Returns:
+        ``(train, evaluate)``, each mirroring the nested structure of ``data``.
+    """
+    generator = torch.Generator().manual_seed(42)
+    train = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
+    evaluate = {cls: {b: {} for b in BUCKETS} for cls in CLASSES}
+
+    for cls in CLASSES:
+        for b in BUCKETS:
+            n = data[cls][b]["delta_E"].shape[0]
+            perm = torch.randperm(n, generator=generator)
+            n_train = int(n * train_percentage)
+            train_idx, eval_idx = perm[:n_train], perm[n_train:]
+            for f in FEATURES:
+                train[cls][b][f] = data[cls][b][f][train_idx]
+                evaluate[cls][b][f] = data[cls][b][f][eval_idx]
+
+    return train, evaluate

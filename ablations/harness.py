@@ -55,34 +55,25 @@ __all__ = [
 
 
 def extract_split(
-    ds: dict[str, str], ordering: str = "ckd", gt_n_std: int = 3, cache_dir: Path = CACHE_DIR
+    ds: dict[str, str], ordering: str = "ckd", cache_dir: Path = CACHE_DIR
 ) -> tuple[dict, dict]:
     """Extract (and cache) one dataset's train/eval feature split.
 
     Back-projects the ``.tra`` for the source direction, streams the ``.sim`` through
-    the feature builder at the requested subset ``ordering``, labels each event with
-    the ``gt_n_std``-sigma 511 keV window, and splits. The result is cached so repeat
-    calls (and every model-level ablation) skip the MEGAlib-bound extraction.
-
-    The cache key carries the label window only when it differs from the deployed
-    ``3``: ``gt_n_std == 3`` reuses ``cache_dir/<name>_<ordering>.pt`` (the champion's
-    own cache, since that is the window it was built at), while any other value writes
-    ``cache_dir/<name>_<ordering>_gt<n>.pt``. So the ``gt_tolerance`` sweep shares the
-    champion extraction at its anchor point and only pays for the off-anchor windows.
+    the feature builder at the requested subset ``ordering``, and splits. The result
+    is cached to ``cache_dir/<name>_<ordering>.pt`` so repeat calls (and every
+    model-level ablation) skip the MEGAlib-bound extraction.
 
     Args:
         ds: Dataset paths with ``name``/``geo_file``/``sim_file``/``tra_file`` keys.
         ordering: Subset ordering for the feature builder (``"ckd"`` or ``"energy"``).
-        gt_n_std: Resolution-sigma count for the 511 keV labeling window (default 3,
-            the deployed label); the ``gt_tolerance`` ablation sweeps it.
         cache_dir: Directory for the cached ``.pt`` feature splits.
 
     Returns:
         ``(train, eval)`` nested per-class, per-bucket feature dicts.
     """
     cache_dir = Path(cache_dir)
-    suffix = "" if gt_n_std == 3 else f"_gt{gt_n_std}"
-    cache_path = cache_dir / f"{ds['name']}_{ordering}{suffix}.pt"
+    cache_path = cache_dir / f"{ds['name']}_{ordering}.pt"
     if cache_path.exists():
         payload = torch.load(cache_path, map_location="cpu", weights_only=False)
         return payload["train"], payload["eval"]
@@ -92,12 +83,46 @@ def extract_split(
     unit_vector = imager.peak_direction_cartesian()
 
     reader_sim = get_reader(ds["geo_file"], ds["sim_file"])
-    datasets = Datasets(reader_sim, unit_vector, ordering=ordering, gt_n_std=gt_n_std)
+    datasets = Datasets(reader_sim, unit_vector, ordering=ordering)
     train, eval_data = datasets.split_dataset(datasets.compute_event_features())
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     torch.save({"train": train, "eval": eval_data}, cache_path)
     return train, eval_data
+
+
+def extract_pool(ds: dict[str, str], ordering: str = "ckd", cache_dir: Path = CACHE_DIR) -> dict:
+    """Extract (and cache) one dataset's flat, relabel-able event pool.
+
+    Streams the ``.sim`` exactly once into the label-free pool (per-event features,
+    feature bucket, and the n_std-free label score) so the ``gt_tolerance`` sweep can
+    relabel for every window in memory instead of re-extracting per value. The ``.tra``
+    is still back-projected once for the ARM source direction. Cached to
+    ``cache_dir/<name>_<ordering>_pool.pt``.
+
+    Args:
+        ds: Dataset paths with ``name``/``geo_file``/``sim_file``/``tra_file`` keys.
+        ordering: Subset ordering for the feature builder (``"ckd"`` or ``"energy"``).
+        cache_dir: Directory for the cached ``.pt`` pool.
+
+    Returns:
+        The flat per-event pool dict from :meth:`Datasets.compute_event_pool`.
+    """
+    cache_dir = Path(cache_dir)
+    cache_path = cache_dir / f"{ds['name']}_{ordering}_pool.pt"
+    if cache_path.exists():
+        return torch.load(cache_path, map_location="cpu", weights_only=False)["pool"]
+
+    imager = FarFieldImager(geometry_file=ds["geo_file"], n_phi=360, n_theta=180, coordinate_system="spheric")
+    imager.backproject_file(ds["tra_file"])
+    unit_vector = imager.peak_direction_cartesian()
+
+    reader_sim = get_reader(ds["geo_file"], ds["sim_file"])
+    pool = Datasets(reader_sim, unit_vector, ordering=ordering).compute_event_pool()
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    torch.save({"pool": pool}, cache_path)
+    return pool
 
 
 def champion(train: dict, n_iter: int = 50, calibrate: bool = True) -> tuple[Trainer, dict]:

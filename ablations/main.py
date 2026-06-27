@@ -135,7 +135,7 @@ def main(
             full_model[name] = harness.bucket_full_scores(champion_trainer, eval_data)
 
         if "gt_tolerance" in selected:
-            print("  ablation: gt_tolerance (re-extracts per n_std — the most expensive)")
+            print("  ablation: gt_tolerance (one pool extraction, relabeled per n_std)")
             gt_tolerance_results[name] = gt_tolerance.run(ds, n_iter=n_iter, calibrate=calibrate)
 
     # This run's folder: ablations/results/<timestamp>/{figures,tables}.
