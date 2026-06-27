@@ -26,8 +26,48 @@ Why it is important:
     of the physics, not of a particular cut value.
 
 Produces:
-    A plot of F1, AUC, precision, and recall versus ``n_std`` (e.g. {1, 2, 3}), averaged
+    A plot of F1, AUC, precision, and recall versus ``n_std`` (1..10 by default), averaged
     across the Ge geometries — roughly flat curves mean the conclusions are robust to the
     window. Per-dataset detail goes to CSV. One re-extraction per ``n_std`` value (the
-    labels change), so it is the most expensive ablation to run.
+    labels change), so it is the most expensive ablation to run. ``n_std = 3`` reuses the
+    champion's own feature cache, so that anchor point reproduces the champion exactly.
 """
+
+import harness
+
+# Resolution-sigma windows swept for the label. 3 is the deployed champion value and
+# is included so the curve passes through (and reproduces) the champion at its anchor.
+N_STD_VALUES = tuple(range(1, 11))
+
+
+def run(
+    ds: dict[str, str],
+    n_std_values: tuple[int, ...] = N_STD_VALUES,
+    n_iter: int = 50,
+    calibrate: bool = True,
+) -> dict[int, dict]:
+    """Sweep the ground-truth label window for one dataset, refitting at each value.
+
+    For every ``n_std`` the label is recomputed, which forces a fresh feature
+    extraction (signal/background membership changes, so the cache cannot be reused
+    except at the champion anchor ``n_std = 3``), then the champion config is refit
+    and evaluated. Only the label window varies — the feature deadzone
+    (``physics_factors.E_TOLERANCE``) is held at its deployed 3σ value, so this
+    isolates the label and leaves the model fixed.
+
+    Args:
+        ds: Dataset paths with ``name``/``geo_file``/``sim_file``/``tra_file`` keys.
+        n_std_values: Resolution-sigma windows to sweep (default 1..10).
+        n_iter: Champion-seeded search candidates per fit (forwarded to the champion).
+        calibrate: Whether the refit champion calibrates its threshold offset.
+
+    Returns:
+        ``{n_std: metric_record}`` — the eval-split record (counts,
+        precision/recall/F1, best_f1, AUC) at each label window.
+    """
+    results: dict[int, dict] = {}
+    for n_std in n_std_values:
+        train, eval_data = harness.extract_split(ds, ordering="ckd", gt_n_std=n_std)
+        trainer, _ = harness.champion(train, n_iter=n_iter, calibrate=calibrate)
+        results[n_std] = harness.metric_record(trainer, eval_data)
+    return results

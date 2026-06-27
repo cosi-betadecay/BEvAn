@@ -30,7 +30,12 @@ ABLATION_TITLES = {
     "learned_weights": "Learned weights",
     "no_ckd_order": "No CKD ordering",
     "factor_contributions": "Factor contributions",
+    "gt_tolerance": "Ground-truth tolerance",
 }
+
+# The deployed label window (resolution sigmas); marked on the sweep so the champion
+# anchor is visible against the rest of the curve.
+DEPLOYED_N_STD = 3
 
 # Font sizes tuned for figures embedded in the paper (well above the matplotlib
 # defaults so titles, axes, and legends stay legible at print size).
@@ -134,6 +139,59 @@ def plot_metric_comparison(
     ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
     fig.tight_layout()
     return _save(fig, Path(save_dir) / f"{ablation_name}.png")
+
+
+def plot_gt_tolerance(
+    results_by_dataset: dict[str, dict[int, dict[str, float]]],
+    save_dir: Path = FIGURES_DIR,
+    exclude: tuple[str, ...] = (),
+) -> Path:
+    """Plot each metric versus the label window ``n_std``, averaged across datasets.
+
+    A 2x2 grid (F1, AUC, precision, recall); within each panel the line is the mean
+    across the non-``exclude`` datasets with a ±std band, and a dashed vertical marks
+    the deployed window (:data:`DEPLOYED_N_STD`). Roughly flat curves in the same band
+    as the marked point are the robustness claim: the study does not hinge on the cut.
+
+    Args:
+        results_by_dataset: ``{dataset: {n_std: metric_record}}``.
+        save_dir: Directory to write the figure into.
+        exclude: Dataset names dropped from the average (e.g. the out-of-domain
+            balloon); they stay in the per-dataset CSV but are not pooled here.
+
+    Returns:
+        Path: The written ``gt_tolerance.png``.
+    """
+    included = {k: v for k, v in results_by_dataset.items() if k not in exclude}
+    n_std_values = sorted({n for per_n in included.values() for n in per_n})
+    x = np.array(n_std_values, dtype=float)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+    for ax, (key, label) in zip(axes.flat, COMPARISON_METRICS, strict=True):
+        means, stds = [], []
+        for n_std in n_std_values:
+            mean, std = _mean_std(
+                [per_n[n_std].get(key, float("nan")) for per_n in included.values() if n_std in per_n]
+            )
+            means.append(mean)
+            stds.append(std)
+        means_arr, stds_arr = np.array(means), np.array(stds)
+        ax.plot(x, means_arr, marker="o", color=COLOR_MODEL, label="Mean across datasets")
+        ax.fill_between(x, means_arr - stds_arr, means_arr + stds_arr, color=COLOR_MODEL, alpha=0.2)
+        ax.axvline(
+            DEPLOYED_N_STD, ls="--", lw=1.5, color=COLOR_REFERENCE, label=f"Deployed ({DEPLOYED_N_STD}σ)"
+        )
+        ax.set_ylim(0, 1)
+        ax.set_xticks(n_std_values)
+        ax.set_xlabel("Label window n_std (σ)", fontsize=LABEL_SIZE)
+        ax.set_ylabel(label, fontsize=LABEL_SIZE)
+        ax.set_title(label, fontsize=TITLE_SIZE)
+        ax.tick_params(axis="both", labelsize=TICK_SIZE)
+        ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
+
+    fig.suptitle("Robustness to the 511 keV label window (averaged across datasets)", fontsize=SUPTITLE_SIZE)
+    fig.tight_layout()
+    return _save(fig, Path(save_dir) / "gt_tolerance.png")
 
 
 def plot_factor_contributions(

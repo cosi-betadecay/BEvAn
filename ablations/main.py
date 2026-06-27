@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import factor_contributions
+import gt_tolerance
 import harness
 import learned_weights
 import no_calibration
@@ -17,10 +18,11 @@ PROJECT = "cosi-betadecay"
 # One timestamped run folder per invocation, mirroring the pipeline's results/
 # convention: ablations/results/<timestamp>/{figures,tables}.
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
-# Comparison ablations (champion-vs-ablation metric plots). factor_contributions is
-# handled separately: its output is a per-factor decomposition, not a comparison.
+# Comparison ablations (champion-vs-ablation metric plots). factor_contributions and
+# gt_tolerance are handled separately: a per-factor decomposition and a label-window
+# sweep respectively, neither a single champion-vs-ablation comparison.
 COMPARISON_ABLATIONS = ("no_calibration", "learned_weights", "no_ckd_order")
-ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions")
+ALL_ABLATIONS = (*COMPARISON_ABLATIONS, "factor_contributions", "gt_tolerance")
 
 
 # Ablations that tune their own decision threshold for F1 (the learned weights). For
@@ -112,6 +114,7 @@ def main(
     comparison = {name: {} for name in COMPARISON_ABLATIONS if name in selected}
     contributions: dict[str, dict] = {}
     full_model: dict[str, dict] = {}
+    gt_tolerance_results: dict[str, dict] = {}
 
     for ds in datasets:
         name = ds["name"]
@@ -131,6 +134,10 @@ def main(
             contributions[name] = factor_contributions.run(train, eval_data)
             full_model[name] = harness.bucket_full_scores(champion_trainer, eval_data)
 
+        if "gt_tolerance" in selected:
+            print("  ablation: gt_tolerance (re-extracts per n_std — the most expensive)")
+            gt_tolerance_results[name] = gt_tolerance.run(ds, n_iter=n_iter, calibrate=calibrate)
+
     # This run's folder: ablations/results/<timestamp>/{figures,tables}.
     run_dir = RESULTS_DIR / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     figures_dir = run_dir / "figures"
@@ -148,6 +155,9 @@ def main(
     if contributions:
         tables.save_factor_contributions_csv(contributions, full_model, tables_dir)
         figures.append(plots.plot_factor_contributions(contributions, full_model, figures_dir, exclude_avg))
+    if gt_tolerance_results:
+        tables.save_gt_tolerance_csv(gt_tolerance_results, tables_dir, exclude_avg)
+        figures.append(plots.plot_gt_tolerance(gt_tolerance_results, figures_dir, exclude_avg))
 
     if use_wandb:
         for path in figures:

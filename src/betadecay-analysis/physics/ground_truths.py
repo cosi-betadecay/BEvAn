@@ -3,37 +3,40 @@ import ROOT as M
 from utils.megalib_types import MSimEvent
 
 
-def ground_truth_bdecay(event: MSimEvent) -> bool:
+def calculate_tolerance(n_std: int = 3) -> float:
+    """Calculate the physically motivated energy tolerance for 511 keV detection.
+
+    This function converts the detector's energy resolution, given as a full width
+    at half maximum (FWHM), into a standard deviation sigma. For Gaussian-shaped
+    peaks (as in High-Purity Germanium detectors), the relationship between FWHM
+    and sigma is:
+
+        FWHM = 2.355 * sigma
+
+    Therefore, sigma = FWHM / 2.355.
+
+    Returns:
+        float: The energy tolerance in keV (1σ = default).
+    """
+    fwhm = 2.25
+    sigma = fwhm / 2.355
+    tolerance = n_std * sigma
+    return tolerance
+
+
+def ground_truth_bdecay(event: MSimEvent, n_std: int = 3) -> bool:
     """Count annihilation events matching 511 keV within a resolution-based tolerance.
 
     Args:
         event (MSimEvent): MEGAlib event object containing interactions and hits.
+        n_std (int): Number of resolution sigmas defining the 511 keV photopeak
+            window. The deployed label uses ``3``; the ``gt_tolerance`` ablation
+            sweeps it to show the study's conclusions do not hinge on the cut.
 
     Returns:
         bool: True if any event matches the annihilation criteria, else False.
     """
-
-    def calculate_tolerance(n_std: int = 3) -> float:
-        """Calculate the physically motivated energy tolerance for 511 keV detection.
-
-        This function converts the detector's energy resolution, given as a full width
-        at half maximum (FWHM), into a standard deviation sigma. For Gaussian-shaped
-        peaks (as in High-Purity Germanium detectors), the relationship between FWHM
-        and sigma is:
-
-            FWHM = 2.355 * sigma
-
-        Therefore, sigma = FWHM / 2.355.
-
-        Returns:
-            float: The energy tolerance in keV (1σ = default).
-        """
-        fwhm = 2.25
-        sigma = fwhm / 2.355
-        tolerance = n_std * sigma
-        return tolerance
-
-    tolerance = calculate_tolerance()
+    tolerance = calculate_tolerance(n_std)
     number_good_events = 0
 
     for i in range(event.GetNIAs()):

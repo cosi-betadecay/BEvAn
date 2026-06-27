@@ -36,6 +36,7 @@ class Datasets:
         reader_sim: MFileEventsSim,
         reconstructed_unit_vector: torch.Tensor,
         ordering: str = "ckd",
+        gt_n_std: int = 3,
     ) -> None:
         """Bind the dataset builder to a simulation reader and source direction.
 
@@ -46,10 +47,14 @@ class Datasets:
             ordering: Hit-subset ordering passed to event processing — ``"ckd"``
                 (the default Compton-kinematic-discrepancy ordering) or ``"energy"``
                 (plain energy sort), the latter used by the no-CKD-order ablation.
+            gt_n_std: Number of resolution sigmas defining the 511 keV photopeak
+                window used to label events (see :func:`ground_truth_bdecay`). The
+                deployed value is ``3``; the ``gt_tolerance`` ablation sweeps it.
         """
         self.reader_sim = reader_sim
         self.reconstructed_unit_vector = reconstructed_unit_vector
         self.ordering = ordering
+        self.gt_n_std = gt_n_std
 
     def feature_bucket(self, d_arm: float, d_anni: float) -> int:
         """Route an event to its feature bucket from which features are finite.
@@ -90,7 +95,7 @@ class Datasets:
             if n_hits == 0:
                 continue
 
-            cls = "bdecay" if ground_truth_bdecay(event_sim) else "bg"
+            cls = "bdecay" if ground_truth_bdecay(event_sim, self.gt_n_std) else "bg"
 
             energies, positions, sizes = event_data_processing(event_sim, ordering=self.ordering)
             if energies is None or positions is None or sizes is None:

@@ -100,6 +100,57 @@ def save_factor_contributions_csv(
     return path
 
 
+def save_gt_tolerance_csv(
+    results_by_dataset: dict[str, dict[int, dict[str, float]]],
+    save_dir: Path = TABLES_DIR,
+    exclude: tuple[str, ...] = (),
+) -> Path:
+    """Write the label-window sweep in long format: one row per (dataset, n_std).
+
+    Columns are ``dataset``, ``n_std``, then the :data:`METRICS`. Per-dataset rows
+    keep every dataset; trailing ``mean`` rows (one per swept ``n_std``) average the
+    non-``exclude`` datasets, matching the averaged plot.
+
+    Args:
+        results_by_dataset: ``{dataset: {n_std: metric_record}}``.
+        save_dir: Directory to write the CSV into.
+        exclude: Dataset names dropped from the mean rows only (kept as detail rows).
+
+    Returns:
+        Path: The written ``gt_tolerance.csv``.
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    path = save_dir / "gt_tolerance.csv"
+    n_std_values = sorted({n for per_n in results_by_dataset.values() for n in per_n})
+
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["dataset", "n_std", *METRICS])
+        writer.writeheader()
+        for dataset, per_n in results_by_dataset.items():
+            for n_std in sorted(per_n):
+                writer.writerow(
+                    {
+                        "dataset": dataset,
+                        "n_std": n_std,
+                        **{m: per_n[n_std].get(m, float("nan")) for m in METRICS},
+                    }
+                )
+        label = f"mean (excl. {', '.join(exclude)})" if exclude else "mean"
+        for n_std in n_std_values:
+            included = [
+                per_n[n_std] for k, per_n in results_by_dataset.items() if k not in exclude and n_std in per_n
+            ]
+            writer.writerow(
+                {
+                    "dataset": label,
+                    "n_std": n_std,
+                    **{m: _mean([r.get(m, float("nan")) for r in included]) for m in METRICS},
+                }
+            )
+    return path
+
+
 def summary_row(
     ablation_name: str,
     per_dataset: dict[str, dict[str, dict[str, float]]],

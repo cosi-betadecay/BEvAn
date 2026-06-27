@@ -3,14 +3,7 @@ import math
 import torch
 
 from mathematics.geometry import theta_geo, theta_kin
-
-# 3σ photopeak window (keV), mirroring ``ground_truth_bdecay``'s tolerance:
-# FWHM 2.25 keV -> σ = FWHM / 2.355, times 3. Single source so the ARM
-# 511-consistency deadzone and the label can never drift apart.
-E_TOLERANCE = 3.0 * (2.25 / 2.355)
-# Energy miss (keV) past the tolerance that saturates the 511-consistency push
-# to the ±1 rail. One electron-mass worth of error is full scale.
-E_SPREAD_SCALE = 511.0
+from physics.ground_truths import calculate_tolerance
 
 ############################################
 # Annihilation Angle
@@ -28,10 +21,10 @@ def per_subset_back_to_back(
     1022 keV two-photon target. The subset's score is the best (lowest) vertex.
 
     The energy push mirrors the 511-aware ARM construction at the two-photon
-    target: inside 1022 +- ``2 * E_TOLERANCE`` it is zero (a clean pair sits at
+    target: inside 1022 +- ``2 * calculate_tolerance()`` it is zero (a clean pair sits at
     pure ``cos_bb``); outside, either miss direction penalizes (excess from a
     summed-in background hit as much as a deficit), nudging the score off the
-    signal rail in proportion to ``|e_arms - 1022|``. ``E_TOLERANCE`` is the
+    signal rail in proportion to ``|e_arms - 1022|``. ``calculate_tolerance()`` is the
     single shared photopeak window, so this deadzone can never drift from the
     label. (The push enters as a positive penalty rather than a signed term
     because the subset score is selected by its minimum, not by ``|score|``.)
@@ -44,7 +37,7 @@ def per_subset_back_to_back(
     Returns:
         ``(B,)`` scores; ``+inf`` where no vertex passes the gate or ``n < 3``.
     """
-    B2B_E_FLOOR = 511.0 - E_TOLERANCE  # ~508 keV: a single Compton photon
+    B2B_E_FLOOR = 511.0 - calculate_tolerance()  # ~508 keV: a single Compton photon
     B2B_E_TARGET = 1022.0  # two fully-absorbed 511 keV photons
     B2B_LAMBDA = 0.3  # energy-push strength, in cosine units
 
@@ -64,7 +57,7 @@ def per_subset_back_to_back(
         cos_bb = C.masked_fill(eye, float("inf")).amin(dim=(1, 2))  # most anti-parallel
         e_arms = total_E - energies[:, v]  # two-arm energy (vertex excluded)
         dE2 = e_arms - B2B_E_TARGET  # miss from the two-photon target
-        push = (dE2.abs() - 2.0 * E_TOLERANCE).clamp(min=0.0) / E_SPREAD_SCALE
+        push = (dE2.abs() - 2.0 * calculate_tolerance()).clamp(min=0.0) / 511.0
         score = torch.where(e_arms > B2B_E_FLOOR, cos_bb + B2B_LAMBDA * push, inf)
         best = torch.minimum(best, score)
     return best
@@ -126,10 +119,10 @@ def arm_fixed_size(
 
         a    = (theta_geo - theta_kin) / pi          # angular residual, ~0 = agree
         dE   = sum(E) - 511                           # signed energy deviation (keV)
-        push = sign(dE) * max(|dE| - E_TOLERANCE, 0) / E_SPREAD_SCALE
+        push = sign(dE) * max(|dE| - calculate_tolerance(), 0) / 511.0
         feature = clamp(a + push, -1, +1)
 
-    Inside the 511 +- ``E_TOLERANCE`` window ``push`` is zero, so a true β⁺
+    Inside the 511 +- ``calculate_tolerance()`` window ``push`` is zero, so a true β⁺
     photon with agreeing geometry sits at ~0. Outside it, the feature is shoved
     toward +-1 in the direction of the energy miss and in proportion to it. The
     subset minimizing ``|feature|`` is selected (must satisfy *both* tests on the
@@ -141,7 +134,7 @@ def arm_fixed_size(
 
     a = (theta_geo(positions, reconstructed_unit_vector) - theta_kin(energies)) / math.pi
     dE = energies.sum(dim=1) - 511.0
-    push = torch.sign(dE) * (dE.abs() - E_TOLERANCE).clamp(min=0.0) / E_SPREAD_SCALE
+    push = torch.sign(dE) * (dE.abs() - calculate_tolerance()).clamp(min=0.0) / 511.0
     feature = (a + push).clamp(-1.0, 1.0)
 
     return feature[torch.argmin(torch.abs(feature))].reshape(1)
