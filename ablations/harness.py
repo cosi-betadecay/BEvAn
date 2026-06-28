@@ -1,3 +1,4 @@
+import math
 import sys
 from pathlib import Path
 
@@ -214,7 +215,7 @@ def best_f1_record(trainer: Trainer, train: dict, eval_data: dict) -> dict:
     llr_eval, y_eval = llr_eval[fe], y_eval[fe].bool()
 
     _, threshold = best_f1_threshold(llr_train, y_train)
-    if threshold != threshold:  # no positives on train -> keep the default 0 cut
+    if math.isnan(threshold):  # no positives on train -> keep the default 0 cut
         threshold = 0.0
     predictions = llr_eval >= threshold
     counts = {
