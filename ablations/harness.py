@@ -23,8 +23,9 @@ EPS = 1e-8
 FACTORS = ("delta_E", "arm", "anni")
 FACTOR_INDEX = {f: i for i, f in enumerate(FACTORS)}
 # Per-factor 1D-histogram spacing (matching how the pipeline bins each feature):
-# delta_E and arm are log-spaced with a small floor, anni is linear.
-FACTOR_SPACING = {"delta_E": ("log", 1e-3), "arm": ("log", 1e-3), "anni": ("linear", None)}
+# delta_E is log-spaced with a small floor; arm is now a signed score in [-1, 1]
+# (511-aware ARM), so it is linear-binned to match the pipeline; anni is linear.
+FACTOR_SPACING = {"delta_E": ("log", 1e-3), "arm": ("linear", None), "anni": ("linear", None)}
 # Feature-cache directory: ablations/cache.
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
 

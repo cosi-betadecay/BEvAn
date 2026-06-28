@@ -16,8 +16,8 @@ def run(
     Streams the ``.sim`` once into a label-free pool, then for every ``n_std`` relabels
     that pool in memory (:func:`pool_to_features`), splits, refits the champion config,
     and evaluates. Only the label window varies — the feature deadzone
-    (``physics_factors.E_TOLERANCE``) is held at its deployed 3σ value, so this isolates
-    the label and leaves the model fixed.
+    (``physics_factors.calculate_tolerance()``, default ``n_std=3``) is held at its
+    deployed 3σ value, so this isolates the label and leaves the model fixed.
 
     Args:
         ds: Dataset paths with ``name``/``geo_file``/``sim_file``/``tra_file`` keys.

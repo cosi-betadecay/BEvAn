@@ -36,11 +36,16 @@ def theta_geo(
 
 
 def theta_kin(energies: torch.Tensor) -> torch.Tensor:
-    """Kinematic Compton scatter angle under the 511 keV hypothesis, in radians.
+    """Kinematic Compton scatter angle, in radians.
 
-    Inverts the Compton formula with the incoming photon fixed at the electron
-    rest mass (511 keV) and ``E_2`` the energy deposited after the first hit.
-    Disagreement with :func:`theta_geo` flags non-511 keV (background) photons.
+    Standard Compton kinematics: the incoming photon energy ``E_1`` is the total
+    measured deposit and ``E_2`` is the energy remaining after the first hit.
+    Disagreement with :func:`theta_geo` is the angular residual that ARM scores.
+
+    The 511 keV constant below is the electron rest-mass energy ``m_e c²`` that
+    appears in the Compton formula itself — *not* a hypothesis on the incoming
+    photon energy. The 511-keV β⁺ consistency test lives in the energy ``push``
+    term of :func:`physics.physics_factors.arm_fixed_size`, not here.
 
     Args:
         energies: ``(B, n)`` per-hit energies (or ``(n,)`` for one subset).
@@ -48,13 +53,8 @@ def theta_kin(energies: torch.Tensor) -> torch.Tensor:
     Returns:
         Scatter angle in radians, shape ``(B,)``.
     """
-    # β⁺ hypothesis: the incoming photon is a 511 keV annihilation photon, so
-    # E_1 is fixed at the electron rest mass rather than reconstructed from the
-    # measured total deposit. This turns ARM into a 511-keV consistency test:
-    # background photons at other energies should produce kinematic angles
-    # inconsistent with the geometric reconstruction.
-    electron_mass_energy = 511.0  # keV
-    E_1 = energies[0:].sum() if energies.ndim == 1 else energies[:, 0:].sum(dim=1)
+    electron_mass_energy = 511.0  # keV (m_e c², the Compton-formula constant)
+    E_1 = energies.sum() if energies.ndim == 1 else energies.sum(dim=1)
     E_2 = energies[1:].sum() if energies.ndim == 1 else energies[:, 1:].sum(dim=1)
 
     cos_theta_kin = 1 - electron_mass_energy * (1 / E_2 - 1 / E_1)
