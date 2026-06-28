@@ -1,3 +1,5 @@
+import math
+
 from harness import (
     FACTORS,
     Evaluator,
@@ -39,7 +41,7 @@ def run(train: dict, eval_data: dict, config: dict) -> dict:
     # AUC/best_f1 (threshold-free) are unaffected either way.
     train_logits = (x_train.double() @ weights + bias).float()
     _, threshold = best_f1_threshold(train_logits, y_train.bool())
-    if threshold != threshold:  # no positives on train -> fall back to the logistic boundary
+    if math.isnan(threshold):  # no positives on train -> fall back to the logistic boundary
         threshold = 0.0
 
     x_eval, y_eval = term_llr_columns(evaluator, eval_data)
