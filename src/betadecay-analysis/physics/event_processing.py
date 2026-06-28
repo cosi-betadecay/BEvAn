@@ -7,6 +7,7 @@ from utils.megalib_types import MSimEvent
 
 def event_data_processing(
     event_sim: MSimEvent,
+    ordering: str = "ckd",
 ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
     """Expand one simulated event into per-hit-subset energy and position tensors.
 
@@ -16,6 +17,9 @@ def event_data_processing(
 
     Args:
         event_sim: A MEGAlib simulated event with measured hits.
+        ordering: Hit-subset ordering — ``"ckd"`` (default; keep CKD-consistent
+            orderings) or ``"energy"`` (a single energy-sorted ordering per subset,
+            the no-CKD-order ablation).
 
     Returns:
         ``(energies, positions, sizes)`` shaped ``(n_combo, max_r)``,
@@ -97,11 +101,15 @@ def event_data_processing(
         Size-2 subsets return the energy-ordered (E_1 >= E_2) pair; size 3-4
         keep orderings whose mean CKD residual is within ``CKD_ORDER_MAX`` (or
         the single most-consistent one if none qualify); larger subsets return
-        the input plus its energy-sorted ordering.
+        the input plus its energy-sorted ordering. With ``ordering == "energy"``
+        the CKD logic is bypassed and every subset returns its single energy-sorted
+        ordering (the no-CKD-order ablation).
         """
         r = len(c)
         if r < 2:
             return [c]
+        if ordering == "energy":
+            return [tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))]
         if r <= 4:
             cset = set(c)
             cand = []

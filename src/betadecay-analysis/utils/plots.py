@@ -26,6 +26,15 @@ COLOR_ROC = "#4c6ef5"  # ROC curve (indigo)
 COLOR_PR = "#e8843c"  # precision-recall curve (amber)
 COLOR_REFERENCE = "#9aa0a6"  # all dashed baselines / chance lines (neutral grey)
 
+# Font sizes for paper-quality figures (kept in sync with ablations/plots.py, well
+# above the matplotlib defaults so titles, axes, and legends stay legible in print).
+SUPTITLE_SIZE = 18
+TITLE_SIZE = 17
+LABEL_SIZE = 15
+TICK_SIZE = 13
+LEGEND_SIZE = 13
+ANNOT_SIZE = 16
+
 # Display metadata for the model features, keyed by the feature names used in
 # dataset.datasets.FEATURES. ``label`` is the axis label (with unit), ``name``
 # the short symbol for titles, and ``scale`` the axis scaling that matches how
@@ -33,8 +42,8 @@ COLOR_REFERENCE = "#9aa0a6"  # all dashed baselines / chance lines (neutral grey
 # anni is linear). Unknown features fall back to a linear axis labelled by name.
 FEATURE_AXES = {
     "delta_E": {"label": "ΔE [keV]", "name": "ΔE", "scale": "log"},
-    "arm": {"label": "ARM [rad]", "name": "ARM", "scale": "log"},
-    "anni": {"label": "annihilation score", "name": "anni", "scale": "linear"},
+    "arm": {"label": "ARM [rad]", "name": "ARM", "scale": "linear"},
+    "anni": {"label": "Annihilation score", "name": "Annih.", "scale": "linear"},
 }
 
 
@@ -92,9 +101,21 @@ def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> Figure:
 
     fig, ax = plt.subplots()
     sns.heatmap(
-        cm, annot=True, fmt="d", cmap=CMAP_SIGNAL, xticklabels=labels, yticklabels=labels, cbar=False, ax=ax
+        cm,
+        annot=True,
+        fmt="d",
+        cmap=CMAP_SIGNAL,
+        xticklabels=labels,
+        yticklabels=labels,
+        cbar=False,
+        annot_kws={"size": ANNOT_SIZE},
+        ax=ax,
     )
-    ax.set_title("Confusion Matrix")
+    ax.set_xlabel("Predicted", fontsize=LABEL_SIZE)
+    ax.set_ylabel("Actual", fontsize=LABEL_SIZE)
+    ax.set_title("Confusion matrix", fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    fig.tight_layout()
     return fig
 
 
@@ -181,15 +202,16 @@ def plot_roc_curve(scores: object, labels: object, title: str = "ROC curve") -> 
     """
     fpr, tpr, auc = roc_curve(scores, labels)
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot(fpr, tpr, color=COLOR_ROC, lw=2, label=f"AUC = {auc:.4f}")
-    ax.plot([0, 1], [0, 1], color=COLOR_REFERENCE, lw=1, ls="--", label="chance")
+    ax.plot([0, 1], [0, 1], color=COLOR_REFERENCE, lw=1, ls="--", label="Chance")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    ax.set_xlabel("False positive rate")
-    ax.set_ylabel("True positive rate")
-    ax.set_title(title)
-    ax.legend(loc="lower right")
+    ax.set_xlabel("False positive rate", fontsize=LABEL_SIZE)
+    ax.set_ylabel("True positive rate", fontsize=LABEL_SIZE)
+    ax.set_title(title, fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
     fig.tight_layout()
     return fig
 
@@ -209,15 +231,16 @@ def plot_pr_curve(scores: object, labels: object, title: str = "Precision-recall
     labels_np = _to_numpy(labels).ravel() > 0.5
     prevalence = float(labels_np.mean()) if labels_np.size else float("nan")
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot(recall, precision, color=COLOR_PR, lw=2, label=f"AP = {ap:.4f}")
-    ax.axhline(prevalence, color=COLOR_REFERENCE, lw=1, ls="--", label=f"baseline = {prevalence:.4f}")
+    ax.axhline(prevalence, color=COLOR_REFERENCE, lw=1, ls="--", label=f"Baseline = {prevalence:.4f}")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.set_title(title)
-    ax.legend(loc="upper right")
+    ax.set_xlabel("Recall", fontsize=LABEL_SIZE)
+    ax.set_ylabel("Precision", fontsize=LABEL_SIZE)
+    ax.set_title(title, fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    ax.legend(loc="upper right", fontsize=LEGEND_SIZE)
     fig.tight_layout()
     return fig
 
@@ -259,10 +282,13 @@ def _draw_density_panel(
     mesh = ax.pcolormesh(x_bins, y_bins, grid, cmap=cmap, norm=norm)
     ax.set_xscale(x_meta["scale"])
     ax.set_yscale(y_meta["scale"])
-    ax.set_xlabel(x_meta["label"])
-    ax.set_ylabel(y_meta["label"])
-    ax.set_title(title, color=title_color)
-    ax.figure.colorbar(mesh, ax=ax, label="Probability")
+    ax.set_xlabel(x_meta["label"], fontsize=LABEL_SIZE)
+    ax.set_ylabel(y_meta["label"], fontsize=LABEL_SIZE)
+    ax.set_title(title, color=title_color, fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    cbar = ax.figure.colorbar(mesh, ax=ax)
+    cbar.set_label("Probability", fontsize=LABEL_SIZE)
+    cbar.ax.tick_params(labelsize=TICK_SIZE)
 
 
 def _draw_density_1d_panel(
@@ -299,11 +325,14 @@ def _draw_density_1d_panel(
 
     ax.bar(x_bins[:-1], values, width=np.diff(x_bins), align="edge", color=colors)
     ax.set_xscale(x_meta["scale"])
-    ax.set_xlabel(x_meta["label"])
-    ax.set_ylabel("Probability")
-    ax.set_title(title, color=title_color)
+    ax.set_xlabel(x_meta["label"], fontsize=LABEL_SIZE)
+    ax.set_ylabel("Probability", fontsize=LABEL_SIZE)
+    ax.set_title(title, color=title_color, fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
     if norm is not None:
-        ax.figure.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=colormap), ax=ax, label="Probability")
+        cbar = ax.figure.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=colormap), ax=ax)
+        cbar.set_label("Probability", fontsize=LABEL_SIZE)
+        cbar.ax.tick_params(labelsize=TICK_SIZE)
 
 
 def _plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
@@ -329,7 +358,7 @@ def _plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     _draw_density_1d_panel(ax_beta, beta, x_bins, x_meta, f"β-decay: {joint}", signal_cmap, COLOR_SIGNAL)
     _draw_density_1d_panel(ax_bg, bg, x_bins, x_meta, f"Background: {joint}", bg_cmap, COLOR_BACKGROUND)
 
-    fig.suptitle(f"{joint}  (n_bins={beta.shape[0]})")
+    fig.suptitle(f"{joint}  (n_bins={beta.shape[0]})", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
     return fig
 
@@ -362,7 +391,7 @@ def _plot_density_2d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     # independently), collapsing to a single number only when the grid is square.
     n_x, n_y = beta.shape
     n_bins = f"{n_x}" if n_x == n_y else f"{n_x}×{n_y}"
-    fig.suptitle(f"{joint}  (n_bins={n_bins})")
+    fig.suptitle(f"{joint}  (n_bins={n_bins})", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
     return fig
 

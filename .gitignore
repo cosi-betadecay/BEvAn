@@ -19,6 +19,11 @@ models/
 # Run outputs (per-run plots, metrics.json, summary.csv) — generated, not tracked
 results/
 
+# Ablation study outputs (generated): cached features and per-run results
+# (results/<timestamp>/{figures,tables}). figures/ and tables/ cover earlier runs.
+ablations/cache/
+#ablations/results/
+
 # environment variables
 .env
 .env.*
