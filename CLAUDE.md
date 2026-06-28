@@ -44,15 +44,15 @@ Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitl
 
 - `src/betadecay-analysis/dataset/`    — streams the MEGAlib reader into per-event,
   per-class, per-bucket feature tensors; train/eval split
-- `src/betadecay-analysis/physics/`    — features (`physics_factors.py`: delta_E,
-  511-aware ARM, annihilation angle), `event_processing`, Compton-cone
-  reconstruction, and `ground_truths` (the 511 keV label)
+- `src/betadecay-analysis/physics/`    — features (`physics_factors.py`: the Compton
+  geometry primitives `theta_geo`/`theta_kin`, delta_E, 511-aware ARM, annihilation
+  angle), `event_processing`, Compton-cone reconstruction, and `ground_truths` (the
+  511 keV label)
 - `src/betadecay-analysis/modeling/`   — histogram density estimation
   (`matrix_calculations.py`), the likelihood ratio (`calculate_probablities.py`),
   Bayesian decision (`bayesian_annihilation.py`)
 - `src/betadecay-analysis/pipeline/`   — `train`, `eval` (metrics, thresholds),
   `model_selection` (bin-size search + threshold calibration)
-- `src/betadecay-analysis/mathematics/`— Compton geometry (`theta_geo`, `theta_kin`)
 - `src/betadecay-analysis/utils/`      — readers, plots, W&B, local CSV results
 - `ablations/`                         — the ablation study (its own driver + harness)
 - `data/`                              — `{name}.sim` / `{name}.tra` pairs + cosima sources
