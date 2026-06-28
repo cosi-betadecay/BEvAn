@@ -1,4 +1,5 @@
 import csv
+import math
 from pathlib import Path
 
 # Default output directory: ablations/tables (created on first write).
@@ -10,7 +11,7 @@ METRICS = ("f1_score", "auc", "precision", "recall")
 
 def _mean(values: list[float]) -> float:
     """Mean of the finite entries (NaN if there are none)."""
-    finite = [v for v in values if v == v]
+    finite = [v for v in values if not math.isnan(v)]
     return sum(finite) / len(finite) if finite else float("nan")
 
 
