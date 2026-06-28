@@ -126,6 +126,27 @@ finding contract (Severity · file:line · What · Why · Fix) so the orchestrat
 merge them. The orchestrator falls back to running the three passes itself if its
 environment forbids nested subagents.
 
+## Project memory (`.claude/memory/`)
+
+Auto-loaded assistant memory, version-controlled in this repo so it syncs across
+machines (this Mac ↔ the Linux MEGAlib VM). `MEMORY.md` is the index — one line per
+entry; each entry is its own `<slug>.md` file (anchor state, champion, how-to-work
+feedback, don't-retry guardrails). Curated deliberately: keep only load-bearing
+facts, fold rather than fragment, prune stale entries.
+
+The harness reads this from `~/.claude/projects/<slug>/memory/`, which is a
+**symlink** to `.claude/memory/` here — that's what makes it auto-load each session.
+One-time setup per machine (the slug differs because it's derived from the repo's
+absolute path):
+
+```bash
+# find <slug> with: ls ~/.claude/projects/
+ln -s "$(pwd)/.claude/memory" ~/.claude/projects/<slug>/memory
+```
+
+After that it travels with normal `git pull` / `push`; new memories appear as
+untracked changes under `.claude/memory/`.
+
 ## Conventions
 
 - Results are written to timestamped folders: `results/<timestamp>.csv` (batch) and

@@ -128,7 +128,7 @@ def arm_fixed_size(
     subset minimizing ``|feature|`` is selected (must satisfy *both* tests on the
     same photon) and its signed feature returned.
     """
-    n_pos = positions.shape[0] if positions.ndim == 2 else positions.shape[1]
+    n_pos = positions.shape[1]
     if n_pos < 2:
         return positions.new_tensor(float("nan")).reshape(1)
 
