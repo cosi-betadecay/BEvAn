@@ -18,6 +18,46 @@ in `skills-lock.json` (all from the `wentorai/research-plugins` GitHub source).
   `ruff.toml` silently overrides `pyproject.toml [tool.ruff]`), import/style
   conventions, pytest, and the discipline of never regressing the champion
   F1 (0.8935) during cleanups. Use before committing or when reviewing a diff.
+- **compton-physics** (`.claude/skills/compton-physics/SKILL.md`) — the physics
+  reference behind the classifier, sourced entirely from Kierans, Takahashi &
+  Kanbach 2022 ("Compton Telescopes for Gamma-ray Astrophysics",
+  arXiv:2208.07819): Compton kinematics, Klein-Nishina, CKD/Compton sequencing,
+  the Compton Data Space + ARM, SPD/electron tracking, Doppler broadening,
+  sensitivity, polarimetry, MeV backgrounds, and the COSI instrument. Maps each
+  equation to the repo's `delta_E` / `arm` / `annihilation_angle` features and
+  `theta_geo`/`theta_kin`/CKD ordering. Deep material in
+  `.claude/skills/compton-physics/references/`. Use when reasoning about why a
+  feature is physically motivated or what the 511 keV / 1022 keV lines mean.
+- **positron-annihilation-511** (`.claude/skills/positron-annihilation-511/SKILL.md`)
+  — the astrophysics of the 511 keV line (the signal itself), sourced entirely
+  from Prantzos et al. 2011 (Rev. Mod. Phys. 83, 1001; arXiv:1009.4620):
+  positronium (para/ortho, the f_Ps fraction, why most annihilations are *not* a
+  clean back-to-back 2γ), the annihilation channels and spectrum, the β⁺-decay
+  source isotopes (²⁶Al, ⁴⁴Ti, ⁵⁶Co, ²²Na — the same activation radioactivities
+  behind COSI's background), positron energies, line widths, energy loss /
+  thermalization / annihilation, and Galactic morphology. Deep material in
+  `.claude/skills/positron-annihilation-511/references/`. Use when reasoning
+  about the 511 keV / 1022 keV signal, the annihilation-angle feature, the energy
+  tolerance, positronium, or what physically produces signal vs background.
+
+## Code-review agents (`.claude/agents/`)
+
+A multi-agent code-review workflow. Invoke with the **`/cosi-review`** slash command
+(`.claude/commands/cosi-review.md`) or by asking to "use the review-orchestrator".
+All reviewers are read-only and share one finding contract
+(Severity · file:line · What · Why · Fix).
+
+- **review-orchestrator** (`.claude/agents/review-orchestrator.md`) — scopes the
+  change (diff/PR/branch/files), dispatches the three specialists in parallel,
+  merges/dedupes/prioritizes, and gives a SHIP / SHIP WITH FIXES / DO NOT SHIP
+  verdict. Falls back to running the passes itself if nested subagents are disallowed.
+- **code-quality-reviewer** (`.claude/agents/code-quality-reviewer.md`) — uses the
+  **code-quality** skill: lint/conventions, the pipeline cascade, F1-regression risk.
+- **physics-reviewer** (`.claude/agents/physics-reviewer.md`) — uses
+  **compton-physics** + **positron-annihilation-511**: feature/kinematics correctness
+  against the physics.
+- **megalib-reviewer** (`.claude/agents/megalib-reviewer.md`) — uses **megalib**:
+  `.sim`/`.tra` parsing, ANNI ground truth, PyROOT API, sim↔tra ID joins.
 
 ## Domain skills
 
