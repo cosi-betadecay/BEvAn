@@ -53,7 +53,7 @@ def _pretty(name: str) -> str:
 
 def _mean_std(values: list[float]) -> tuple[float, float]:
     """Mean and population std of the finite entries (``(nan, 0)`` if none)."""
-    arr = np.array([v for v in values if v == v], dtype=float)
+    arr = np.array([v for v in values if not np.isnan(v)], dtype=float)
     if arr.size == 0:
         return float("nan"), 0.0
     return float(arr.mean()), float(arr.std())
