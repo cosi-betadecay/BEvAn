@@ -160,7 +160,7 @@ def orderings_for_size(
         # Size-2 has no CKD redundancy, so both modes use the E_1 >= E_2 ordering
         # (Boggs & Jean §3); in energy mode every size collapses to this.
         return energy_desc_order(subsets, energies)
-    if r <= 4:
+    else:
         return ckd_orderings(subsets, energies, positions)
 
     # r >= 5: emit the subset, plus its energy-sorted ordering when it differs.
