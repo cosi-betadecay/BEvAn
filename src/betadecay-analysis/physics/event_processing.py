@@ -4,8 +4,6 @@ import torch
 
 from utils.megalib_types import MSimEvent
 
-CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo - cosφ_kin) <= this
-
 
 def candidate_perms(r: int) -> torch.Tensor:
     """Candidate orderings for a size-``r`` subset, as positions into its sorted hits.
@@ -93,7 +91,9 @@ def energy_desc_order(subsets: torch.Tensor, energies: torch.Tensor) -> torch.Te
     return torch.gather(subsets, 1, order)
 
 
-def ckd_orderings(subsets: torch.Tensor, energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+def ckd_orderings(
+    subsets: torch.Tensor, energies: torch.Tensor, positions: torch.Tensor, ckd_order_max: float = 0.05
+) -> torch.Tensor:
     """CKD-consistent candidate orderings for a batch of same-size subsets.
 
     Expands each subset into its candidate orderings (via :func:`candidate_perms`), scores
@@ -106,6 +106,7 @@ def ckd_orderings(subsets: torch.Tensor, energies: torch.Tensor, positions: torc
         subsets: ``(S, r)`` hit indices (r in {3, 4}), each row ascending.
         energies: ``(n_hits,)`` per-hit energies in keV.
         positions: ``(n_hits, 3)`` per-hit positions.
+        ckd_order_max: Maximum allowed CKD residual for an ordering to be kept.
 
     Returns:
         ``(n_kept, r)`` surviving candidate orderings (hit indices).
@@ -118,7 +119,7 @@ def ckd_orderings(subsets: torch.Tensor, energies: torch.Tensor, positions: torc
     flat = cand.reshape(s * k, r)
     resid = ckd_residual_batched(energies[flat], positions[flat]).reshape(s, k)
 
-    keep = torch.isnan(resid) | (resid <= CKD_ORDER_MAX)  # (S, K)
+    keep = torch.isnan(resid) | (resid <= ckd_order_max)  # (S, K)
     no_consistent = ~keep.any(dim=1)  # (S,)
     fallback = resid.argmin(dim=1)  # finite for no_consistent rows (no NaN there)
     keep[no_consistent, fallback[no_consistent]] = True
