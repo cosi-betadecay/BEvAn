@@ -1,9 +1,9 @@
 ---
 name: code-conventions
-description: How a well-formed function, class, and module looks in betadecay-analysis — the static authoring conventions (signatures, type hints, Google docstrings, the NaN-return idiom, naming, tensor shape comments, dataclasses, module constants) plus an adapted "Power of 10" discipline (single-responsibility functions, bounded size/complexity, assert at seams), anchored to the Google Python Style Guide + PEP 8. ADVISORY ONLY: this skill makes recommendations for a human to apply — the assistant must NOT edit code under it. Use when writing or reviewing a function/class, or when asked how code here should be structured. For the *workflow* (running ruff, the cascade, the F1 discipline) see the code-quality skill.
+description: How a well-formed function, class, and module looks in BEvAn — the static authoring conventions (signatures, type hints, Google docstrings, the NaN-return idiom, naming, tensor shape comments, dataclasses, module constants) plus an adapted "Power of 10" discipline (single-responsibility functions, bounded size/complexity, assert at seams), anchored to the Google Python Style Guide + PEP 8. ADVISORY ONLY: this skill makes recommendations for a human to apply — the assistant must NOT edit code under it. Use when writing or reviewing a function/class, or when asked how code here should be structured. For the *workflow* (running ruff, the cascade, the F1 discipline) see the code-quality skill.
 ---
 
-# Code conventions for betadecay-analysis
+# Code conventions for BEvAn
 
 This is the **reference** for what good code *looks* like here — the static
 authoring conventions, distilled from the existing code, not invented. For the

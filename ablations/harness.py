@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 # Make the src package importable when run from the repo root, the same trick the
-# entry scripts use: src/betadecay-analysis is what lands on sys.path, so the
+# entry scripts use: src/BEvAn is what lands on sys.path, so the
 # top-level pipeline packages (physics, pipeline, modeling, ...) import directly.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "betadecay-analysis"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "BEvAn"))
 
 import torch
 from batch_analysis import discover_datasets

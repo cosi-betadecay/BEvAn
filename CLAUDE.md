@@ -28,33 +28,33 @@ the event's Compton kinematics rather than a black-box model.
 
 ## Commands
 
-Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitly:
+Entry scripts live in `src/BEvAn/` and take geometry/data explicitly:
 
 - Analyze one dataset (train + eval in one pass):
-  `python src/betadecay-analysis/analysis.py --geo-file $MEGALIB/.../SPILike.geo.setup --sim-file data/SPILike.sim --tra-file data/SPILike.tra`
+  `python src/BEvAn/analysis.py --geo-file $MEGALIB/.../SPILike.geo.setup --sim-file data/SPILike.sim --tra-file data/SPILike.tra`
 - Batch every `.sim`/`.tra` pair in `data/` → `results/<timestamp>.csv`:
-  `python src/betadecay-analysis/batch_analysis.py` (geometry looked up by name in its `GEOMETRIES` map)
-- Train once, save a torch artifact: `python src/betadecay-analysis/train_model.py ... --out models/<name>.pt`
-- Infer with a saved model: `python src/betadecay-analysis/inference.py --model models/<name>.pt ...`
+  `python src/BEvAn/batch_analysis.py` (geometry looked up by name in its `GEOMETRIES` map)
+- Train once, save a torch artifact: `python src/BEvAn/train_model.py ... --out models/<name>.pt`
+- Infer with a saved model: `python src/BEvAn/inference.py --model models/<name>.pt ...`
 - Ablation study: `python ablations/main.py` (writes `ablations/results/<timestamp>/{figures,tables}`)
 - Lint/format: `ruff check` / `ruff format` (config in `ruff.toml`, see below)
-- Tests: `pytest` (pythonpath is wired to `src/betadecay-analysis/`; no suite exists yet)
+- Tests: `pytest` (pythonpath is wired to `src/BEvAn/`; no suite exists yet)
 
 ## Layout
 
-- `src/betadecay-analysis/physics/`    — features (`physics_factors.py`: the Compton
+- `src/BEvAn/physics/`    — features (`physics_factors.py`: the Compton
   geometry primitives `theta_geo`/`theta_kin`, delta_E, 511-aware ARM, annihilation
   angle), `event_processing`, Compton-cone reconstruction, and `ground_truths` (the
   511 keV label)
-- `src/betadecay-analysis/modeling/`   — histogram density estimation
+- `src/BEvAn/modeling/`   — histogram density estimation
   (`matrix_calculations.py`), the likelihood ratio (`calculate_probabilities.py`),
   Bayesian decision (`bayesian_classifier.py`), and pure evaluation metrics
   (`metrics.py`: confusion-count rates + ROC/F1 thresholds)
-- `src/betadecay-analysis/pipeline/`   — `datasets` (streams the MEGAlib reader
+- `src/BEvAn/pipeline/`   — `datasets` (streams the MEGAlib reader
   into per-event, per-class, per-bucket feature tensors + train/eval split),
   `train`, `eval` (the `Evaluator` orchestration + prior-free scores),
   `model_selection` (bin-size search + threshold calibration)
-- `src/betadecay-analysis/utils/`      — readers, plots, W&B, local CSV results
+- `src/BEvAn/utils/`      — readers, plots, W&B, local CSV results
 - `ablations/`                         — the ablation study (its own driver + harness)
 - `data/`                              — `{name}.sim` / `{name}.tra` pairs + cosima sources
 - `results/`, `models/`                — per-run CSV outputs; saved model artifacts

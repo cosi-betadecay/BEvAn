@@ -1,4 +1,4 @@
-# BEvAn: β⁺ Decay Event Analysis
+# BEvAn: β⁺ Decay Event Analyzer
 
 <p align="center">
   <img src="docs/COSI-SMEX%20Emblem_2E.png" alt="COSI-SMEX mission emblem" width="320">
@@ -52,7 +52,7 @@ Place MEGAlib simulation files in `data/` as matching `{name}.sim` / `{name}.tra
 Analyze a single dataset (train and evaluate in one pass):
 
 ```bash
-python src/betadecay-analysis/analysis.py \
+python src/BEvAn/analysis.py \
   --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
@@ -62,7 +62,7 @@ python src/betadecay-analysis/analysis.py \
 Or analyze every `.sim`/`.tra` pair found in `data/` and write a per-dataset summary to `results/<timestamp>.csv`:
 
 ```bash
-python src/betadecay-analysis/batch_analysis.py --wandb   # --wandb optional
+python src/BEvAn/batch_analysis.py --wandb   # --wandb optional
 ```
 
 ### Train once, infer later
@@ -70,7 +70,7 @@ python src/betadecay-analysis/batch_analysis.py --wandb   # --wandb optional
 To fit a model on a whole simulation and save it to a torch artifact:
 
 ```bash
-python src/betadecay-analysis/train_model.py \
+python src/BEvAn/train_model.py \
   --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/SPILike.sim \
   --tra-file data/SPILike.tra \
@@ -80,7 +80,7 @@ python src/betadecay-analysis/train_model.py \
 Then run real inference with that saved model on any other `.sim`/`.tra` dataset (the model carries the fitted densities and calibrated operating point; the `.tra` is still back-projected to reconstruct this dataset's source direction for the ARM feature):
 
 ```bash
-python src/betadecay-analysis/inference.py \
+python src/BEvAn/inference.py \
   --model models/SPILike.pt \
   --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
   --sim-file data/Max.sim \

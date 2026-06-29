@@ -3,7 +3,7 @@ name: positron-annihilation-511
 description: The astrophysics of the 511 keV positron-annihilation line — the signal this classifier detects. Sourced entirely from Prantzos et al. 2011 (Rev. Mod. Phys. 83, 1001; arXiv:1009.4620). Covers positronium (para/ortho, the positronium fraction, why most annihilations are NOT a clean back-to-back 2γ), the annihilation channels and emitted spectrum, the β⁺-decay source isotopes (²⁶Al, ⁴⁴Ti, ⁵⁶Co, ²²Na — the same activation radioactivities that make COSI's background), positron energies, line widths, energy loss / thermalization / annihilation, and the observed Galactic morphology. Use when reasoning about the 511 keV / 1022 keV signal, the annihilation-angle feature, the energy tolerance, positronium, or what physically produces signal vs background.
 ---
 
-# The 511 keV positron-annihilation line for betadecay-analysis
+# The 511 keV positron-annihilation line for BEvAn
 
 This skill is the astrophysics of the **signal the classifier flags**: the
 511 keV γ-ray line from e⁺e⁻ annihilation. Everything here is from one review:

@@ -1,5 +1,5 @@
-betadecay-analysis
-==================
+BEvAn
+=====
 
 .. toctree::
    :maxdepth: 4

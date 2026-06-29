@@ -3,7 +3,7 @@ name: compton-physics
 description: Physics of Compton telescopes for this repo — Compton kinematics, the Klein-Nishina cross-section, event reconstruction (CKD/Compton sequencing), the Compton Data Space and ARM angular resolution, SPD/electron tracking, sensitivity, polarimetry, Doppler broadening, MeV backgrounds, and the COSI instrument. Sourced entirely from Kierans, Takahashi & Kanbach 2022 ("Compton Telescopes for Gamma-ray Astrophysics", arXiv:2208.07819). Use when reasoning about delta_E / ARM / annihilation-angle features, theta_geo/theta_kin, CKD subset ordering, the 511 keV β⁺ signal, the energy tolerance, or why a feature is physically motivated.
 ---
 
-# Compton telescope physics for betadecay-analysis
+# Compton telescope physics for BEvAn
 
 This skill is the physics reference behind the classifier. Every equation,
 constant, and concept here comes from one review:

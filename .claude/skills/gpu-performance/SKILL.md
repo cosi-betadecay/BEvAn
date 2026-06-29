@@ -3,7 +3,7 @@ name: gpu-performance
 description: GPU-friendliness, vectorization, and time/space-complexity workflow for this repo — how to make the torch tensor pipeline (datasets → features → density fit → likelihood ratio → eval) run efficiently on GPU WITHOUT changing the interpretable physics-Bayes model or moving the champion F1. Covers profiling first, vectorizing the per-event scalar loops in pipeline/datasets.py, device/dtype/sync hygiene, the host↔device anti-patterns already in the code (per-event torch.cuda.empty_cache, scalar float() conversions), Big-O/space reasoning at each pipeline stage, and the F1-equivalence proof every speedup must pass. Use when working the GPU-friendliness branch, vectorizing a feature or fit, reasoning about complexity/memory, or reviewing a perf diff.
 ---
 
-# GPU performance for betadecay-analysis
+# GPU performance for BEvAn
 
 Python 3.10, **torch** tensors throughout. This skill is about making the pipeline
 **fast and GPU-friendly without changing what it computes**. It is the engineering

@@ -10,7 +10,7 @@ Scope: $ARGUMENTS
 
 **If the scope above contains `full`** (e.g. `/cosi-review full`), do **not** scope to a
 diff — review the **entire repository's source** instead: every `.py` file under
-`src/betadecay-analysis/` and `ablations/`. Each specialist audits the whole codebase in
+`src/BEvAn/` and `ablations/`. Each specialist audits the whole codebase in
 its lane, not just changed lines. Any words besides `full` still apply as an extra scope
 hint (e.g. `/cosi-review full physics` → whole-repo review weighted toward the physics
 lane). This is the deep periodic audit, not the per-change gate.

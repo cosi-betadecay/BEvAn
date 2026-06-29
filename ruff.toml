@@ -38,7 +38,7 @@ allowed-confusables = ["×", "α", "σ", "−", "φ"]
 explicit-preview-rules = true
 
 [lint.isort]
-# First-party = the top-level packages under src/betadecay-analysis/, which is
+# First-party = the top-level packages under src/BEvAn/, which is
 # what ends up on sys.path (not "src"). Keep this in sync with that tree.
 known-first-party = ["physics", "modeling", "mathematics", "pipeline", "utils"]
 combine-as-imports = true

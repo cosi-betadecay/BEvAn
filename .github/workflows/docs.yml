@@ -40,7 +40,7 @@ jobs:
 
       # Regenerate the API stubs so newly added modules appear automatically.
       - name: Generate API reference
-        run: uv run --no-sync sphinx-apidoc -o docs/source/api src/betadecay-analysis -f -e -M
+        run: uv run --no-sync sphinx-apidoc -o docs/source/api src/BEvAn -f -e -M
 
       - name: Build HTML
         run: uv run --no-sync sphinx-build -b html --fail-on-warning docs/source docs/build/html

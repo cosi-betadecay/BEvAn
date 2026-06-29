@@ -3,7 +3,7 @@
 autodoc imports the project's modules to read their docstrings, so this file
 has to reproduce the import environment the code actually runs in:
 
-* ``src/betadecay-analysis/`` is the import root (modules import each other
+* ``src/BEvAn/`` is the import root (modules import each other
   flatly, e.g. ``from utils.megalib_types import MSimEvent``), exactly as
   ``[tool.pytest.ini_options].pythonpath`` declares — so it goes on sys.path.
 * ROOT / MEGAlib is not importable everywhere docs are built (e.g. this Mac),
@@ -14,14 +14,14 @@ has to reproduce the import environment the code actually runs in:
 import os
 import sys
 
-# src/betadecay-analysis/ is the package root (see pyproject pytest pythonpath).
-sys.path.insert(0, os.path.abspath("../../src/betadecay-analysis"))
+# src/BEvAn/ is the package root (see pyproject pytest pythonpath).
+sys.path.insert(0, os.path.abspath("../../src/BEvAn"))
 
 # -- Project information -----------------------------------------------------
 
 project = "COSI β⁺ Classifier"
-copyright = "2026, COSI betadecay-analysis"
-author = "COSI betadecay-analysis"
+copyright = "2026, COSI BEvAn"
+author = "COSI BEvAn"
 release = "0.1.0"
 
 # -- General configuration ---------------------------------------------------

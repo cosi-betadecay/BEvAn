@@ -1,5 +1,5 @@
 [project]
-name = "betadecay"
+name = "BEvAn"
 version = "0.1.0"
 description = "Physics-based likelihood classifier for β⁺ (511 keV) annihilation events in COSI simulations"
 readme = "README.md"
@@ -25,9 +25,9 @@ dependencies = [
 # over any [tool.ruff] block here, so keeping it there avoids a silent override).
 
 [tool.pytest.ini_options]
-# src/betadecay-analysis/ (not "src") is what lands on sys.path when the entry
+# src/BEvAn/ (not "src") is what lands on sys.path when the entry
 # scripts run, so the test suite imports the top-level packages from there too.
-pythonpath = ["src/betadecay-analysis"]
+pythonpath = ["src/BEvAn"]
 testpaths = ["tests"]
 
 [tool.setuptools]

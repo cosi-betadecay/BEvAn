@@ -7,7 +7,7 @@ metadata:
   originSessionId: ece69588-95fa-4489-9127-cfb3217fee8e
 ---
 
-Never introduce leading-underscore names (`_unit`, `_ckd_residual`, etc.) for functions or module symbols in betadecay-analysis. Use plain public names even for internal helpers.
+Never introduce leading-underscore names (`_unit`, `_ckd_residual`, etc.) for functions or module symbols in BEvAn. Use plain public names even for internal helpers.
 
 **Why:** user explicitly rejected the `_`-prefix "private helper" convention ("Don't have `_FUNCTION` ever").
 

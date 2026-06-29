@@ -2,7 +2,7 @@
 name: megalib
 description: >-
   MEGAlib (Medium-Energy Gamma-ray Astronomy library) reference for the
-  betadecay-analysis repo AND a comprehensive guide to MEGAlib as a whole. Covers
+  BEvAn repo AND a comprehensive guide to MEGAlib as a whole. Covers
   this project's pipeline (parsing data/Activation.sim and .tra, extracting ANNI/511
   annihilation ground truth, reader_extraction.py / ground_truths.py /
   event_processing.py, the PyROOT bindings MFileEventsSim/MSimEvent/MSimIA/MSimHT) plus
@@ -14,7 +14,7 @@ description: >-
   calibrating detectors, or anything MEGAlib.
 ---
 
-# MEGAlib for betadecay-analysis (and the full MEGAlib reference)
+# MEGAlib for BEvAn (and the full MEGAlib reference)
 
 MEGAlib is the COSI collaboration's Geant4-based simulation + analysis suite for Compton
 telescopes and hard X-/gamma-ray detectors. **Full source is local at

@@ -3,7 +3,7 @@ name: code-quality
 description: Code-quality workflow for this repo — running ruff lint + format, the single-config setup (ruff.toml is the only ruff config), docstring/import conventions, pytest, tracing how a change in one function cascades downstream through the pipeline (feature → bucket routing → density → likelihood ratio → F1), and the project discipline of never regressing the champion F1 (0.8935). Use before committing, when cleaning up code, fixing lint errors, adding docstrings, changing a function the pipeline depends on, or reviewing a diff for quality.
 ---
 
-# Code quality for betadecay-analysis
+# Code quality for BEvAn
 
 Python 3.10 project (`requires-python == 3.10.*`), linted and formatted with
 **ruff**, tested with **pytest**. Tooling lives in `.venv/`; always invoke via
@@ -42,7 +42,7 @@ the moment; the test suite was removed in an earlier cleanup.)
 ## Conventions
 
 - **Imports**: isort via ruff `I`; `combine-as-imports = true`. First-party is
-  the top-level package set under `src/betadecay-analysis/` —
+  the top-level package set under `src/BEvAn/` —
   `known-first-party = ["dataset", "physics", "modeling", "mathematics", "pipeline", "utils"]`
   (NOT `"src"`; that dir is what lands on `sys.path`, not `src`). Keep this list
   in sync if a top-level package is added or renamed.

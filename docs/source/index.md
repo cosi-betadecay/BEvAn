@@ -1,12 +1,8 @@
-# COSI β⁺ Classifier — "Tagging the Positron Sky"
+# BEvAn: β⁺ Decay Event Analyzer"
 
-A physics-based likelihood classifier that tags each simulated COSI event as a
-β⁺ / positron-annihilation signal (back-to-back 511 keV photons) or background,
-using the event's Compton kinematics rather than a black-box model.
+A physics-based likelihood classifier that tags each simulated event as a β⁺ decay signal or background, using the event's Compton kinematics rather than a black-box model.
 
-The model is an **interpretable, physics-based naive-Bayes likelihood-ratio
-classifier** — per-bucket histogram densities over physics features
-(Δ-energy, 511-aware ARM, annihilation angle), routed by hit multiplicity.
+The model is an **interpretable, physics-based naive-Bayes likelihood-ratio classifier** — per-bucket histogram densities over physics features (Δ-energy, 511-aware ARM, annihilation angle), routed by hit multiplicity.
 
 ```{toctree}
 :maxdepth: 2
