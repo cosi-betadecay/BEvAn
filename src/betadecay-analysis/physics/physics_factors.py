@@ -180,7 +180,7 @@ def arm_fixed_size(
 ) -> torch.Tensor:
     """511-aware ARM for one fixed-size subset batch.
 
-    Per subset, the feature fuses the angular and energy 511-consistency tests:
+    Per subset, the feature fuses the angular and energy 511-consistency tests::
 
         a    = (theta_geo - theta_kin) / pi          # angular residual, ~0 = agree
         dE   = sum(E) - 511                           # signed energy deviation (keV)

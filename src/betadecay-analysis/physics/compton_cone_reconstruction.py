@@ -40,9 +40,11 @@ _WRAPPER_DECLARED = False
 def declare_wrapper() -> None:
     """Inline a C++ helper so we can call Backproject cleanly from Python.
 
-    The native signature is
+    The native signature is::
+
         bool Backproject(MPhysicalEvent*, double*, int*, int&, double&)
-    PyROOT's handling of the `int&` / `double&` output refs is version-dependent.
+
+    PyROOT's handling of the ``int&`` / ``double&`` output refs is version-dependent.
     Returning a POD struct from a C++ wrapper dodges that entirely.
     """
     global _WRAPPER_DECLARED

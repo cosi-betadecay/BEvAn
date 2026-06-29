@@ -1,0 +1,62 @@
+name: Docs
+
+# Build the Sphinx docs and publish them to GitHub Pages. Runs on every push to
+# main (so the site auto-updates when code or docs change) and can be triggered
+# by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the deploy job to publish to Pages via OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; don't cancel an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (pinned Python 3.10)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.10"
+          enable-cache: true
+
+      # Install runtime deps + the docs group, but not the project itself —
+      # autodoc imports the modules straight from src/ (conf.py adds it to
+      # sys.path), so no build/install of the package is needed. ROOT/MEGAlib
+      # is mocked in conf.py, so it is intentionally absent here.
+      - name: Install dependencies
+        run: uv sync --no-install-project --group docs
+
+      # Regenerate the API stubs so newly added modules appear automatically.
+      - name: Generate API reference
+        run: uv run --no-sync sphinx-apidoc -o docs/source/api src/betadecay-analysis -f -e -M
+
+      - name: Build HTML
+        run: uv run --no-sync sphinx-build -b html --fail-on-warning docs/source docs/build/html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
