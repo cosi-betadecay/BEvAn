@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "pytorch",
+  "owner": "itsmostafa",
+  "repo": "llm-engineering-skills",
+  "path": "skills/pytorch",
+  "branch": "main",
+  "sha": "2c686a902743a18a02895c3f505ee48b35fce954",
+  "source": "manual"
+}

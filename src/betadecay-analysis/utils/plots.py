@@ -36,7 +36,7 @@ LEGEND_SIZE = 13
 ANNOT_SIZE = 16
 
 # Display metadata for the model features, keyed by the feature names used in
-# dataset.datasets.FEATURES. ``label`` is the axis label (with unit), ``name``
+# pipeline.datasets.FEATURES. ``label`` is the axis label (with unit), ``name``
 # the short symbol for titles, and ``scale`` the axis scaling that matches how
 # the density's bins were built in pipeline.train (delta_E/arm are log-spaced,
 # anni is linear). Unknown features fall back to a linear axis labelled by name.

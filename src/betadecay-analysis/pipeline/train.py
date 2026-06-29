@@ -2,8 +2,8 @@ from pathlib import Path
 
 import torch
 
-from dataset.datasets import BUCKETS, FEATURES
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix, build_density_matrix_1d
+from pipeline.datasets import BUCKETS, FEATURES
 
 # Bumped whenever the saved-artifact layout changes incompatibly; load refuses
 # a payload whose version differs so a stale file fails loudly.

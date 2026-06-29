@@ -110,9 +110,6 @@ class Datasets:
             data[cls][b]["arm"].append(_arm)
             data[cls][b]["anni"].append(_anni)
 
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
         # Lists -> float32 tensors, same nested shape.
         return {
             cls: {
@@ -172,9 +169,6 @@ class Datasets:
             feats["arm"].append(_arm)
             feats["anni"].append(_anni)
             scores.append(score)
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
         return {
             "bucket": torch.tensor(buckets, dtype=torch.long),

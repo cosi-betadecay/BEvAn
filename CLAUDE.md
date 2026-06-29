@@ -42,8 +42,6 @@ Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitl
 
 ## Layout
 
-- `src/betadecay-analysis/dataset/`    — streams the MEGAlib reader into per-event,
-  per-class, per-bucket feature tensors; train/eval split
 - `src/betadecay-analysis/physics/`    — features (`physics_factors.py`: the Compton
   geometry primitives `theta_geo`/`theta_kin`, delta_E, 511-aware ARM, annihilation
   angle), `event_processing`, Compton-cone reconstruction, and `ground_truths` (the
@@ -52,9 +50,10 @@ Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitl
   (`matrix_calculations.py`), the likelihood ratio (`calculate_probabilities.py`),
   Bayesian decision (`bayesian_classifier.py`), and pure evaluation metrics
   (`metrics.py`: confusion-count rates + ROC/F1 thresholds)
-- `src/betadecay-analysis/pipeline/`   — `train`, `eval` (the `Evaluator`
-  orchestration + prior-free scores), `model_selection` (bin-size search +
-  threshold calibration)
+- `src/betadecay-analysis/pipeline/`   — `datasets` (streams the MEGAlib reader
+  into per-event, per-class, per-bucket feature tensors + train/eval split),
+  `train`, `eval` (the `Evaluator` orchestration + prior-free scores),
+  `model_selection` (bin-size search + threshold calibration)
 - `src/betadecay-analysis/utils/`      — readers, plots, W&B, local CSV results
 - `ablations/`                         — the ablation study (its own driver + harness)
 - `data/`                              — `{name}.sim` / `{name}.tra` pairs + cosima sources
@@ -113,19 +112,21 @@ literature).
 A multi-agent code-review workflow, invoked with **`/cosi-review`** (or by asking
 to "use the review-orchestrator"):
 
-- **review-orchestrator** — scopes the change, dispatches the three specialists in
+- **review-orchestrator** — scopes the change, dispatches the four specialists in
   parallel, merges/dedupes/prioritizes their findings, and gives a
   SHIP / SHIP WITH FIXES / DO NOT SHIP verdict. Read-only.
 - **code-quality-reviewer** — lint/conventions + the cascade analysis + F1-regression
-  risk (uses the `code-quality` skill).
+  risk (uses the `code-quality` + `code-conventions` skills).
 - **physics-reviewer** — physics correctness of the features/kinematics (uses
   `compton-physics` + `positron-annihilation-511`).
 - **megalib-reviewer** — `.sim`/`.tra` parsing, ANNI ground truth, PyROOT API (uses
   `megalib`).
+- **performance-reviewer** — GPU-friendliness, vectorization, time/space complexity,
+  and proof a speedup left F1 unchanged (uses `gpu-performance` + `pytorch`).
 
 All reviewers are read-only (they report findings, they don't edit). They share one
 finding contract (Severity · file:line · What · Why · Fix) so the orchestrator can
-merge them. The orchestrator falls back to running the three passes itself if its
+merge them. The orchestrator falls back to running the four passes itself if its
 environment forbids nested subagents.
 
 ## Project memory (`.claude/memory/`)

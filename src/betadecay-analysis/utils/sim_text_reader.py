@@ -7,13 +7,19 @@ Field layout follows the verified spec in
 ``.claude/skills/megalib/references/sim-format.md`` (parsing code ground
 truth: MSimIA::AddRawInput, MSimHT::AddRawInput in MEGAlib's src/sivan/).
 
-Energies are read verbatim as cosima wrote them — the same values
-``MSimHT::GetEnergy`` returns when no additional noising is applied on load,
-which is how the pipeline currently reads them.
+Energies are read verbatim as cosima wrote them — the *un-noised* deposits.
+The production pipeline instead opens the file through MEGAlib's
+``MDGeometryQuest`` (noising on by default), so every hit is noised on load:
+its energy is Gaussian-smeared by the detector resolution and sub-threshold
+hits are dropped. This reader therefore returns different per-hit energies and
+keeps hits production would discard, so any event count, 511 keV label, or F1
+obtained here is an un-noised approximation — re-confirm it through the PyROOT
+reader before trusting it.
 
-``event_is_bdecay`` replicates ``physics.ground_truths.ground_truth_bdecay``
-(same one-level secondary lookup, same per-hit single counting) so labels
-match the production pipeline.
+``event_is_bdecay`` replicates the *algorithm* of
+``physics.ground_truths.ground_truth_bdecay`` (same one-level secondary lookup,
+same per-hit single counting), but because the energy inputs are un-noised its
+labels approximate the production labels rather than matching them exactly.
 
 Units: cm, keV, seconds.
 """

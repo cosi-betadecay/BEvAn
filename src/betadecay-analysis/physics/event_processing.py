@@ -5,126 +5,166 @@ import torch
 from utils.megalib_types import MSimEvent
 
 
-def unit(a: list[float], b: list[float]) -> tuple[float, float, float] | None:
-    """Unit vector from point ``a`` to point ``b``, or None if they coincide.
+def candidate_perms(r: int) -> torch.Tensor:
+    """Candidate orderings for a size-``r`` subset, as positions into its sorted hits.
+
+    Reproduces the reference construction ``for first in c: for second in c:
+    (first, second, *sorted(rest))`` (size 3 = all 6 permutations; size 4 = first
+    two free, last two sorted = 12), in that exact order — so the batched code emits
+    rows in the same order the scalar loop did, leaving arm's argmin tie-breaking
+    unchanged.
 
     Args:
-        a (list[float]): First 3D point.
-        b (list[float]): Second 3D point.
+        r (int): Subset size.
 
     Returns:
-        tuple[float, float, float] | None: The unit vector from ``a`` to ``b``, or None if they coincide.
+        ``(K, r)`` position-index orderings (K = 6 for r=3, 12 for r=4).
     """
-    v = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
-    n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
-    if n < 1e-9:
-        return None
-    return (v[0] / n, v[1] / n, v[2] / n)
+    perms, seen = [], set()
+    for first in range(r):
+        for second in range(r):
+            if first == second:
+                continue
+            o = (first, second, *sorted(set(range(r)) - {first, second}))
+            if o not in seen:
+                seen.add(o)
+                perms.append(o)
+    return torch.tensor(perms, dtype=torch.long)
 
 
-def ckd_residual(
-    seq: tuple[int, ...],
-    energies_cpu: list[float],
-    positions_cpu: list[list[float]],
-) -> float | None:
-    """Mean squared (cosφ_geo − cosφ_kin) over ``seq``'s internal scatters.
+def ckd_residual_batched(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    """Mean squared (cosφ_geo − cosφ_kin) over each sequence's internal scatters.
+
+    Vectorized form of the per-sequence CKD residual: for every row (a candidate
+    hit ordering) it scores how consistently the geometric and kinematic scatter
+    angles agree along the sequence. Computed in float64 because the value only
+    gates ordering selection (it is never a model feature), so the extra precision
+    keeps the filter decisions stable without affecting the float32 feature path.
 
     Args:
-        seq (tuple[int, ...]): Candidate hit ordering — the hypothesized scatter
-            sequence, given as hit indices into ``energies_cpu``/``positions_cpu``.
-        energies_cpu (list[float]): Hit energies in keV, indexed by hit.
-        positions_cpu (list[list[float]]): Hit positions in 3D space, indexed by hit.
+        energies: ``(M, r)`` per-hit energies in keV for M candidate orderings.
+        positions: ``(M, r, 3)`` matching hit positions.
 
     Returns:
-        float | None: The mean squared residual or None if not applicable.
+        ``(M,)`` mean squared residual per ordering; NaN where no internal scatter
+        is usable (the reference's ``None``).
     """
-    N = len(seq)
-    Es = [energies_cpu[h] for h in seq]
-    P = [positions_cpu[h] for h in seq]
-    W = [0.0] * N  # residual photon energy after hit i, units of 511 keV
-    suffix = 0.0
-    for i in range(N - 1, -1, -1):
-        W[i] = suffix / 511.0
-        suffix += Es[i]
-    dirs = [unit(P[i], P[i + 1]) for i in range(N - 1)]
-    resids = []
-    for i in range(1, N - 1):
-        if dirs[i - 1] is None or dirs[i] is None:
-            continue
-        w_in, w_out = W[i - 1], W[i]
-        if w_in < 1e-9 or w_out < 1e-9:
-            continue
-        cos_geo = sum(dirs[i - 1][k] * dirs[i][k] for k in range(3))
-        cos_kin = 1.0 + 1.0 / w_in - 1.0 / w_out
-        cos_kin = max(-1.0, min(1.0, cos_kin))
-        resids.append((cos_geo - cos_kin) ** 2)
-    if not resids:
-        return None
-    return sum(resids) / len(resids)
+    E = energies.to(torch.float64)
+    P = positions.to(torch.float64)
+
+    # W[i] = (summed energy still to be deposited after hit i) / 511, in 511-keV
+    # units. W[:, -1] is 0 and is never read (no scatter is internal at the end).
+    W = (E.sum(dim=1, keepdim=True) - E.cumsum(dim=1)) / 511.0  # (M, r)
+
+    legs = P[:, 1:, :] - P[:, :-1, :]  # (M, r-1, 3) hit i -> i+1
+    norm = legs.norm(dim=2)  # (M, r-1)
+    valid_leg = norm >= 1e-9  # unit() returns None below this
+    legs_unit = legs / norm.clamp_min(1e-12).unsqueeze(-1)
+
+    # Internal scatter i (1..r-2) uses legs (i-1, i) and residual energies W[i-1], W[i].
+    cos_geo = (legs_unit[:, :-1, :] * legs_unit[:, 1:, :]).sum(dim=2)  # (M, r-2)
+    w_in = W[:, :-2]  # (M, r-2)
+    w_out = W[:, 1:-1]  # (M, r-2)
+    cos_kin = (1.0 + 1.0 / w_in - 1.0 / w_out).clamp(-1.0, 1.0)
+    resid = (cos_geo - cos_kin) ** 2  # (M, r-2)
+
+    valid = valid_leg[:, :-1] & valid_leg[:, 1:] & (w_in >= 1e-9) & (w_out >= 1e-9)
+    count = valid.sum(dim=1)  # (M,)
+    resid_sum = torch.where(valid, resid, torch.zeros_like(resid)).sum(dim=1)
+    return resid_sum / count  # count == 0 -> NaN, the reference's None
 
 
-def orderings(
-    energies_cpu: list[float],
-    positions_cpu: list[list[float]],
-    c: tuple[int, ...],
+def energy_desc_order(subsets: torch.Tensor, energies: torch.Tensor) -> torch.Tensor:
+    """Reorder each subset's hits by descending energy (stable on ties).
+
+    Stable matches the reference ``sorted(..., reverse=True)``, which keeps the
+    original ascending-index order for equal energies.
+
+    Args:
+        subsets: ``(S, r)`` hit indices, each row ascending.
+        energies: ``(n_hits,)`` per-hit energies in keV.
+
+    Returns:
+        ``(S, r)`` hit indices reordered by descending energy.
+    """
+    order = torch.argsort(energies[subsets], dim=1, descending=True, stable=True)
+    return torch.gather(subsets, 1, order)
+
+
+def ckd_orderings(
+    subsets: torch.Tensor, energies: torch.Tensor, positions: torch.Tensor, ckd_order_max: float = 0.05
+) -> torch.Tensor:
+    """CKD-consistent candidate orderings for a batch of same-size subsets.
+
+    Expands each subset into its candidate orderings (via :func:`candidate_perms`), scores
+    them with :func:`ckd_residual_batched`, and keeps those within
+    :data:`CKD_ORDER_MAX` (NaN/no-scatter counts as consistent). Subsets with no
+    consistent ordering fall back to their single most-consistent one. Rows are
+    emitted subset-by-subset in template order, matching the reference.
+
+    Args:
+        subsets: ``(S, r)`` hit indices (r in {3, 4}), each row ascending.
+        energies: ``(n_hits,)`` per-hit energies in keV.
+        positions: ``(n_hits, 3)`` per-hit positions.
+        ckd_order_max: Maximum allowed CKD residual for an ordering to be kept.
+
+    Returns:
+        ``(n_kept, r)`` surviving candidate orderings (hit indices).
+    """
+    r = subsets.shape[1]
+    perm = candidate_perms(r)  # (K, r)
+    cand = subsets[:, perm]  # (S, K, r)
+    s, k, _ = cand.shape
+
+    flat = cand.reshape(s * k, r)
+    resid = ckd_residual_batched(energies[flat], positions[flat]).reshape(s, k)
+
+    keep = torch.isnan(resid) | (resid <= ckd_order_max)  # (S, K)
+    no_consistent = ~keep.any(dim=1)  # (S,)
+    fallback = resid.argmin(dim=1)  # finite for no_consistent rows (no NaN there)
+    keep[no_consistent, fallback[no_consistent]] = True
+    return cand[keep]  # (n_kept, r), row-major over (S, K)
+
+
+def orderings_for_size(
+    subsets: torch.Tensor,
+    energies: torch.Tensor,
+    positions: torch.Tensor,
     ordering: str,
-    ckd_order_max: float,
-) -> list[tuple[int, ...]]:
-    """Candidate hit orderings for subset ``c``, filtered by CKD consistency.
+) -> torch.Tensor:
+    """Candidate orderings for one size group of subsets.
 
-    Size-2 subsets return the energy-ordered (E_1 >= E_2) pair; size 3-4
-    keep orderings whose mean CKD residual is within ``ckd_order_max`` (or
-    the single most-consistent one if none qualify); larger subsets return
-    the input plus its energy-sorted ordering. With ``ordering == "energy"``
-    the CKD logic is bypassed and every subset returns its single energy-sorted
-    ordering (the no-CKD-order ablation).
+    Dispatches by subset size: singletons pass through; size 2 takes the
+    E_1 >= E_2 ordering; sizes 3-4 keep their CKD-consistent orderings; larger
+    sizes keep the subset plus its energy-sorted ordering. ``ordering == "energy"``
+    bypasses CKD entirely and returns one energy-sorted ordering per subset
+    (the no-CKD-order ablation).
 
     Args:
-        energies_cpu (list[float]): Hit energies in keV, indexed by hit.
-        positions_cpu (list[list[float]]): Hit positions in 3D space, indexed by hit.
-        c (tuple[int, ...]): Hit subset (indices) to order.
-        ordering (str): ``"ckd"`` keeps CKD-consistent orderings; ``"energy"``
-            bypasses the CKD logic and returns one energy-sorted ordering.
-        ckd_order_max (float): Keep an ordering whose mean squared
-            (cosφ_geo − cosφ_kin) residual is within this threshold.
+        subsets: ``(S, r)`` hit indices, each row ascending.
+        energies: ``(n_hits,)`` per-hit energies in keV.
+        positions: ``(n_hits, 3)`` per-hit positions.
+        ordering: ``"ckd"`` or ``"energy"``.
 
     Returns:
-        list[tuple[int, ...]]: Candidate orderings (hit-index tuples) for ``c``.
+        ``(n_kept, r)`` candidate orderings (hit indices).
     """
-    r = len(c)
-    if r < 2:
-        return [c]
-    if ordering == "energy":
-        return [tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))]
+    r = subsets.shape[1]
+    if r == 1:
+        return subsets
+    if ordering == "energy" or r == 2:
+        # Size-2 has no CKD redundancy, so both modes use the E_1 >= E_2 ordering
+        # (Boggs & Jean §3); in energy mode every size collapses to this.
+        return energy_desc_order(subsets, energies)
     if r <= 4:
-        cset = set(c)
-        cand = []
-        seen = set()
-        for first in c:
-            for second in c:
-                if first == second:
-                    continue
-                o = (first, second, *sorted(cset - {first, second}))
-                if o not in seen:
-                    seen.add(o)
-                    cand.append(o)
-        if r == 2:
-            # No CKD redundancy for 2-hit subsets, so use SSD instead
-            # (Boggs & Jean §3): a real 2-site photon deposits more energy
-            # in the first scatter, so feed arm only the E_1>=E_2 ordering.
-            # This denies background 2-site subsets the reverse ordering that
-            # can give a spurious low arm; delta_E/angle are unaffected.
-            a, b = c
-            return [(a, b) if energies_cpu[a] >= energies_cpu[b] else (b, a)]
-        scored = [(o, ckd_residual(o, energies_cpu, positions_cpu)) for o in cand]
-        consistent = [o for o, res in scored if res is None or res <= ckd_order_max]
-        if consistent:
-            return consistent
-        # No consistent ordering: emit only the most-consistent one, so the
-        # subset still feeds delta_E/angle without giving arm a spurious pick.
-        return [min(scored, key=lambda x: x[1] if x[1] is not None else 0.0)[0]]
-    ordered = tuple(sorted(c, key=lambda h: energies_cpu[h], reverse=True))
-    return [c] if ordered == c else [c, ordered]
+        return ckd_orderings(subsets, energies, positions)
+
+    # r >= 5: emit the subset, plus its energy-sorted ordering when it differs.
+    desc = energy_desc_order(subsets, energies)
+    differs = ~(desc == subsets).all(dim=1)  # (S,)
+    stacked = torch.stack([subsets, desc], dim=1)  # (S, 2, r)
+    keep = torch.stack([torch.ones_like(differs), differs], dim=1)  # (S, 2)
+    return stacked[keep]
 
 
 def event_data_processing(
@@ -154,11 +194,13 @@ def event_data_processing(
     if n_hits == 0:
         return None, None, None
 
-    # Load event data onto GPU
+    # Load per-hit event data on CPU: it is tiny (n_hits values) and only feeds
+    # the subset enumeration below. The device boundary is pushed down to the big
+    # gathered combo tensors, which is the only GPU-shaped work here.
     energies = torch.tensor(
         [event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)],
         dtype=torch.float32,
-        device=device,
+        device="cpu",
     )
 
     positions = torch.tensor(
@@ -171,39 +213,38 @@ def event_data_processing(
             for i in range(n_hits)
         ],
         dtype=torch.float32,
-        device=device,
+        device="cpu",
     )
 
-    # Build all hit combinations (CPU once, GPU afterwards)
-    combos = []
-    sizes = []
+    # Build all hit combinations, vectorized per size group. itertools.combinations
+    # generates each size's subsets (C-level, far faster than torch.combinations);
+    # orderings_for_size then expands and CKD-filters the whole group as one batched
+    # tensor op instead of a per-subset Python loop.
+    max_r = min(n_hits, 7)  # Boggs & Jean (2000)
+    idx_parts = []
+    size_parts = []
+    for r in range(1, max_r + 1):
+        subsets = torch.tensor(list(itertools.combinations(range(n_hits), r)), dtype=torch.long)
+        ordered = orderings_for_size(subsets, energies, positions, ordering)  # (n_kept, r)
+        if r < max_r:
+            pad = torch.full((ordered.shape[0], max_r - r), n_hits, dtype=torch.long)
+            ordered = torch.cat([ordered, pad], dim=1)
+        idx_parts.append(ordered)
+        size_parts.append(torch.full((ordered.shape[0],), r, dtype=torch.long))
 
-    energies_cpu = energies.tolist()
-    positions_cpu = positions.tolist()
-
-    CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo - cosφ_kin) <= this
-
-    for r in range(1, min(n_hits + 1, 8)):  # Boggs & Jean (2000)
-        for c in itertools.combinations(range(n_hits), r):
-            for o in orderings(energies_cpu, positions_cpu, c, ordering, CKD_ORDER_MAX):
-                combos.append(o)
-                sizes.append(r)
-
-    max_r = max(sizes)
-    n_combo = len(combos)
-
-    # Pad combinations with sentinel index n_hits (maps to appended NaN row)
-    idx = torch.full((n_combo, max_r), n_hits, dtype=torch.long)
-    for i, c in enumerate(combos):
-        idx[i, : len(c)] = torch.tensor(c)
-
-    idx = idx.to(device)
-    sizes = torch.tensor(sizes, device=device)
+    idx = torch.cat(idx_parts, dim=0).to(device)
+    sizes = torch.cat(size_parts, dim=0).to(device)
 
     # Append one all-NaN entry so padded indices gather an unmistakably invalid
-    # sentinel instead of a potentially physical zero hit/position.
-    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0)  # (n_hits + 1,)
-    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0)  # (n_hits + 1, 3)
+    # sentinel instead of a potentially physical zero hit/position. Move to the
+    # device here (alongside idx) so the per-combo physics reductions run batched
+    # over all n_combo rows — the actual GPU-parallel work.
+    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0).to(
+        device
+    )  # (n_hits + 1,)
+    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0).to(
+        device
+    )  # (n_hits + 1, 3)
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)

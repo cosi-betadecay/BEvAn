@@ -4,16 +4,16 @@ from pathlib import Path
 
 # Make the src package importable when run from the repo root, the same trick the
 # entry scripts use: src/betadecay-analysis is what lands on sys.path, so the
-# top-level pipeline packages (dataset, physics, pipeline, ...) import directly.
+# top-level pipeline packages (physics, pipeline, modeling, ...) import directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "betadecay-analysis"))
 
 import torch
 from batch_analysis import discover_datasets
 
-from dataset.datasets import BUCKETS, Datasets
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix_1d, lookup_density_values_1d
 from modeling.metrics import best_f1_threshold, metrics, roc_auc
 from physics.compton_cone_reconstruction import FarFieldImager
+from pipeline.datasets import BUCKETS, Datasets
 from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, search_hyperparams
 from pipeline.train import Trainer
