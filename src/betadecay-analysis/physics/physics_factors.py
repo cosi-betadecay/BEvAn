@@ -192,6 +192,14 @@ def arm_fixed_size(
     toward +-1 in the direction of the energy miss and in proportion to it. The
     subset minimizing ``|feature|`` is selected (must satisfy *both* tests on the
     same photon) and its signed feature returned.
+
+    Args:
+        energies: ``(B, n)`` per-hit energies for one fixed-size subset batch.
+        positions: ``(B, n, 3)`` hit positions for the same batch.
+        reconstructed_unit_vector: Source direction passed through to ``theta_geo``.
+
+    Returns:
+        The signed feature of the best subset as a ``(1,)`` tensor (NaN if ``n < 2``).
     """
     n_pos = positions.shape[1]
     if n_pos < 2:

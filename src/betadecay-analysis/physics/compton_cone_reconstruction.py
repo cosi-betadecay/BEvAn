@@ -29,8 +29,8 @@ def ensure_megalib_loaded() -> None:
             "MEGAlib symbols not available. Source $MEGALIB/bin/source-megalib.sh before running Python."
         )
     if not _MGLOBAL_INITIALIZED:
-        G = M.MGlobal()
-        G.Initialize()
+        m_global = M.MGlobal()
+        m_global.Initialize()
         _MGLOBAL_INITIALIZED = True
 
 
@@ -179,8 +179,12 @@ class FarFieldImager:
     def backproject_event(self, event: MPhysicalEvent) -> bool:
         """Add one event's cone contribution to the accumulator.
 
-        Returns True on success, False if the event was skipped
-        (non-Compton, or Backproject reported failure).
+        Args:
+            event: A reconstructed physical event from the ``.tra`` reader.
+
+        Returns:
+            bool: True on success, False if the event was skipped (non-Compton,
+            or Backproject reported failure).
         """
         if event.GetType() != M.MPhysicalEvent.c_Compton:
             return False
@@ -206,7 +210,12 @@ class FarFieldImager:
     ) -> int:
         """Read ``tra_file`` and backproject every Compton event in it.
 
-        Returns the number of events successfully accumulated.
+        Args:
+            tra_file: Path to a MEGAlib ``.tra`` file of reconstructed events.
+            max_events: Optional cap on the number of events to accumulate.
+
+        Returns:
+            int: The number of events successfully accumulated.
         """
         reader = M.MFileEventsTra()
         if not reader.Open(M.MString(str(tra_file))):

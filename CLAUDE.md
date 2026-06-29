@@ -49,7 +49,7 @@ Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitl
   angle), `event_processing`, Compton-cone reconstruction, and `ground_truths` (the
   511 keV label)
 - `src/betadecay-analysis/modeling/`   — histogram density estimation
-  (`matrix_calculations.py`), the likelihood ratio (`calculate_probablities.py`),
+  (`matrix_calculations.py`), the likelihood ratio (`calculate_probabilities.py`),
   Bayesian decision (`bayesian_annihilation.py`)
 - `src/betadecay-analysis/pipeline/`   — `train`, `eval` (metrics, thresholds),
   `model_selection` (bin-size search + threshold calibration)

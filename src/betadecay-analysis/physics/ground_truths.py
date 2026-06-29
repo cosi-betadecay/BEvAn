@@ -15,8 +15,12 @@ def calculate_tolerance(n_std: int = 3) -> float:
 
     Therefore, sigma = FWHM / 2.355.
 
+    Args:
+        n_std (int): Number of resolution sigmas defining the 511 keV window
+            (default ``3``, the deployed label).
+
     Returns:
-        float: The energy tolerance in keV (1σ = default).
+        float: The energy tolerance in keV (``n_std`` × σ; 3σ by default).
     """
     fwhm = 2.25
     sigma = fwhm / 2.355

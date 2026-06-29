@@ -17,7 +17,7 @@ def build_default_edges(
 
     Raises:
         ValueError: If the spacing is not 'linear' or 'log'.
-        ValueError: If the log floor is not positive.
+        ValueError: If there are no positive values when building log-spaced edges.
 
     Returns:
         torch.Tensor: The bin edges.

@@ -38,8 +38,6 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: i
     Raises:
         ValueError: If any of the input files have the wrong extension.
         FileNotFoundError: If any of the input files do not exist.
-        FileNotFoundError: If any of the input files do not exist.
-        FileNotFoundError: If any of the input files do not exist.
     """
     sim_path, tra_path = Path(sim_file), Path(tra_file)
     if sim_path.suffix != ".sim":

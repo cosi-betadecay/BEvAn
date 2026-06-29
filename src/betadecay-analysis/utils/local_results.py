@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pipeline.train import Trainer
 
 
-def _save_figure(fig: Figure, path: Path) -> None:
+def save_figure(fig: Figure, path: Path) -> None:
     """Save ``fig`` to ``path`` (creating parent directories) and close it.
 
     Args:
@@ -42,7 +42,7 @@ def save_confusion_matrix(counts: dict, out_dir: Path, split_name: str) -> None:
         split_name: Split label (e.g. ``"train"`` or ``"eval"``).
     """
     fig = plot_confusion_matrix(counts["tp"], counts["fp"], counts["fn"], counts["tn"])
-    _save_figure(fig, Path(out_dir) / f"confusion_matrix_{split_name}.png")
+    save_figure(fig, Path(out_dir) / f"confusion_matrix_{split_name}.png")
 
 
 def save_score_curves(evaluator: "Evaluator", data: dict, out_dir: Path, split_name: str) -> None:
@@ -62,8 +62,8 @@ def save_score_curves(evaluator: "Evaluator", data: dict, out_dir: Path, split_n
         return
     scores, labels = pooled
     out = Path(out_dir)
-    _save_figure(plot_roc_curve(scores, labels), out / f"roc_{split_name}.png")
-    _save_figure(plot_pr_curve(scores, labels), out / f"pr_{split_name}.png")
+    save_figure(plot_roc_curve(scores, labels), out / f"roc_{split_name}.png")
+    save_figure(plot_pr_curve(scores, labels), out / f"pr_{split_name}.png")
 
 
 def save_density_terms(trainer: "Trainer", out_dir: Path) -> None:
@@ -80,7 +80,7 @@ def save_density_terms(trainer: "Trainer", out_dir: Path) -> None:
     for bucket, model in trainer.models.items():
         for term in model.get("terms", []):
             feats = density_term_features(term)
-            _save_figure(plot_density_matrix(term), out / f"density_n{bucket}_{feats}.png")
+            save_figure(plot_density_matrix(term), out / f"density_n{bucket}_{feats}.png")
 
 
 def write_metrics_json(out_dir: Path, record: dict) -> Path:

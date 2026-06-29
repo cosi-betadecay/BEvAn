@@ -47,7 +47,7 @@ FEATURE_AXES = {
 }
 
 
-def _to_numpy(values: object) -> np.ndarray:
+def to_numpy(values: object) -> np.ndarray:
     """Convert a torch tensor or array-like to a float NumPy array.
 
     Keeps this module free of a hard ``torch`` import (and of the ROOT-backed
@@ -64,7 +64,7 @@ def _to_numpy(values: object) -> np.ndarray:
     return np.asarray(values, dtype=float)
 
 
-def _axis_meta(feat: str) -> dict[str, str]:
+def axis_meta(feat: str) -> dict[str, str]:
     """Display metadata for a feature, with a linear fallback for unknown names."""
     return FEATURE_AXES.get(feat, {"label": feat, "name": feat, "scale": "linear"})
 
@@ -84,19 +84,19 @@ def density_term_features(term: dict) -> str:
     return term["xfeat"] if term.get("kind") == "1d" else f"{term['xfeat']}_{term['yfeat']}"
 
 
-def plot_confusion_matrix(TP: int, FP: int, FN: int, TN: int) -> Figure:
+def plot_confusion_matrix(tp: int, fp: int, fn: int, tn: int) -> Figure:
     """Plot and save a confusion matrix heatmap.
 
     Args:
-        TP (int): Number of true positive events.
-        FP (int): Number of false positive events.
-        FN (int): Number of false negative events.
-        TN (int): Number of true negative events.
+        tp (int): Number of true positive events.
+        fp (int): Number of false positive events.
+        fn (int): Number of false negative events.
+        tn (int): Number of true negative events.
 
     Returns:
         Figure: The confusion-matrix figure.
     """
-    cm = np.array([[TP, FN], [FP, TN]])
+    cm = np.array([[tp, fn], [fp, tn]])
     labels = ["Positive", "Negative"]
 
     fig, ax = plt.subplots()
@@ -135,8 +135,8 @@ def roc_curve(scores: object, labels: object) -> tuple[np.ndarray, np.ndarray, f
         tuple[np.ndarray, np.ndarray, float]: ``(fpr, tpr, auc)``. ``auc`` is NaN
         when either class is absent (the curve is then degenerate).
     """
-    scores = _to_numpy(scores).ravel()
-    labels = _to_numpy(labels).ravel() > 0.5
+    scores = to_numpy(scores).ravel()
+    labels = to_numpy(labels).ravel() > 0.5
 
     order = np.argsort(-scores, kind="stable")
     s = scores[order]
@@ -170,8 +170,8 @@ def pr_curve(scores: object, labels: object) -> tuple[np.ndarray, np.ndarray, fl
         tuple[np.ndarray, np.ndarray, float]: ``(recall, precision, ap)``. ``ap``
         is NaN when there are no positives.
     """
-    scores = _to_numpy(scores).ravel()
-    labels = _to_numpy(labels).ravel() > 0.5
+    scores = to_numpy(scores).ravel()
+    labels = to_numpy(labels).ravel() > 0.5
 
     order = np.argsort(-scores, kind="stable")
     s = scores[order]
@@ -228,7 +228,7 @@ def plot_pr_curve(scores: object, labels: object, title: str = "Precision-recall
         Figure: The precision-recall figure, with the average precision in the legend.
     """
     recall, precision, ap = pr_curve(scores, labels)
-    labels_np = _to_numpy(labels).ravel() > 0.5
+    labels_np = to_numpy(labels).ravel() > 0.5
     prevalence = float(labels_np.mean()) if labels_np.size else float("nan")
 
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -245,7 +245,7 @@ def plot_pr_curve(scores: object, labels: object, title: str = "Precision-recall
     return fig
 
 
-def _draw_density_panel(
+def draw_density_panel(
     ax: plt.Axes,
     matrix: np.ndarray,
     x_bins: np.ndarray,
@@ -291,7 +291,7 @@ def _draw_density_panel(
     cbar.ax.tick_params(labelsize=TICK_SIZE)
 
 
-def _draw_density_1d_panel(
+def draw_density_1d_panel(
     ax: plt.Axes,
     values: np.ndarray,
     x_bins: np.ndarray,
@@ -302,7 +302,7 @@ def _draw_density_1d_panel(
 ) -> None:
     """Draw one class's 1D probability density into ``ax`` (in place).
 
-    The 1D analogue of :func:`_draw_density_panel`: bar heights give the
+    The 1D analogue of :func:`draw_density_panel`: bar heights give the
     probability per (possibly log-spaced) bin and the bars are shaded by that
     same probability through a log-normalized colour scale, so the panel matches
     the 2D heatmap's colour language. Zero-probability bins are masked out of the
@@ -335,10 +335,10 @@ def _draw_density_1d_panel(
         cbar.ax.tick_params(labelsize=TICK_SIZE)
 
 
-def _plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
+def plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     """Plot a fitted 1D density term as side-by-side β-decay and background panels.
 
-    The 1D analogue of :func:`_plot_density_2d`: same two-panel layout, titles, and
+    The 1D analogue of :func:`plot_density_2d`: same two-panel layout, titles, and
     colour language, with one axis instead of two.
 
     Args:
@@ -349,21 +349,21 @@ def _plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     Returns:
         Figure: The two-panel density figure.
     """
-    x_meta = _axis_meta(term["xfeat"])
-    x_bins = _to_numpy(term["x_bins"])
-    beta, bg = _to_numpy(term["beta"]).ravel(), _to_numpy(term["bg"]).ravel()
+    x_meta = axis_meta(term["xfeat"])
+    x_bins = to_numpy(term["x_bins"])
+    beta, bg = to_numpy(term["beta"]).ravel(), to_numpy(term["bg"]).ravel()
 
     fig, (ax_beta, ax_bg) = plt.subplots(1, 2, figsize=(14, 5))
     joint = f"P({x_meta['name']})"
-    _draw_density_1d_panel(ax_beta, beta, x_bins, x_meta, f"β-decay: {joint}", signal_cmap, COLOR_SIGNAL)
-    _draw_density_1d_panel(ax_bg, bg, x_bins, x_meta, f"Background: {joint}", bg_cmap, COLOR_BACKGROUND)
+    draw_density_1d_panel(ax_beta, beta, x_bins, x_meta, f"β-decay: {joint}", signal_cmap, COLOR_SIGNAL)
+    draw_density_1d_panel(ax_bg, bg, x_bins, x_meta, f"Background: {joint}", bg_cmap, COLOR_BACKGROUND)
 
     fig.suptitle(f"{joint}  (n_bins={beta.shape[0]})", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
     return fig
 
 
-def _plot_density_2d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
+def plot_density_2d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     """Plot a fitted 2D density term as side-by-side β-decay and background panels.
 
     Args:
@@ -374,16 +374,16 @@ def _plot_density_2d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
     Returns:
         Figure: The two-panel density figure.
     """
-    x_meta, y_meta = _axis_meta(term["xfeat"]), _axis_meta(term["yfeat"])
-    x_bins, y_bins = _to_numpy(term["x_bins"]), _to_numpy(term["y_bins"])
-    beta, bg = _to_numpy(term["beta"]), _to_numpy(term["bg"])
+    x_meta, y_meta = axis_meta(term["xfeat"]), axis_meta(term["yfeat"])
+    x_bins, y_bins = to_numpy(term["x_bins"]), to_numpy(term["y_bins"])
+    beta, bg = to_numpy(term["beta"]), to_numpy(term["bg"])
 
     fig, (ax_beta, ax_bg) = plt.subplots(1, 2, figsize=(14, 5))
     joint = f"P({x_meta['name']}, {y_meta['name']})"
-    _draw_density_panel(
+    draw_density_panel(
         ax_beta, beta, x_bins, y_bins, x_meta, y_meta, f"β-decay: {joint}", signal_cmap, COLOR_SIGNAL
     )
-    _draw_density_panel(
+    draw_density_panel(
         ax_bg, bg, x_bins, y_bins, x_meta, y_meta, f"Background: {joint}", bg_cmap, COLOR_BACKGROUND
     )
 
@@ -423,7 +423,7 @@ def plot_density_matrix(
     """
     kind = term.get("kind")
     if kind == "1d":
-        return _plot_density_1d(term, signal_cmap, bg_cmap)
+        return plot_density_1d(term, signal_cmap, bg_cmap)
     if kind == "2d":
-        return _plot_density_2d(term, signal_cmap, bg_cmap)
+        return plot_density_2d(term, signal_cmap, bg_cmap)
     raise ValueError(f"plot_density_matrix needs a 1D or 2D term, got kind={kind!r}.")

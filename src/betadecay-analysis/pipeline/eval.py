@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from dataset.datasets import BUCKETS, FEATURES
-from modeling.calculate_probablities import confusion_counts, log_confusion
+from modeling.calculate_probabilities import confusion_counts, log_confusion
 from modeling.matrix_calculations import lookup_density_values, lookup_density_values_1d
 from utils.wandb_logging import log_score_curves
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def metrics(counts: dict) -> dict:
     """Derive precision/recall/FPR/F1 from raw confusion counts.
 
-    Matches the definitions in :func:`modeling.calculate_probablities.log_confusion`.
+    Matches the definitions in :func:`modeling.calculate_probabilities.log_confusion`.
 
     Args:
         counts: Confusion counts with ``tp``/``fp``/``fn``/``tn`` keys.
@@ -222,7 +222,14 @@ class Evaluator:
     ) -> dict | None:
         """Confusion counts for one bucket, non-finite-feature events excluded.
 
-        Returns None for an empty bucket.
+        Args:
+            data: Nested per-class, per-bucket feature dict.
+            bucket: Hit-multiplicity bucket to evaluate.
+            model: The bucket's fitted model (``terms`` plus prior counts).
+
+        Returns:
+            The bucket's ``tp``/``fp``/``fn``/``tn``/``excluded`` counts, or None
+            for an empty bucket.
         """
         prepared = self.prepare_terms(data, bucket, model)
         if prepared is None:
@@ -241,7 +248,13 @@ class Evaluator:
     ) -> tuple[torch.Tensor, torch.Tensor] | None:
         """Prior-free per-event log-likelihood ratio and truths for one bucket.
 
-        Returns ``(log_r, ground_truths)``, or None for an empty bucket.
+        Args:
+            data: Nested per-class, per-bucket feature dict.
+            bucket: Hit-multiplicity bucket to score.
+            model: The bucket's fitted model (``terms`` plus prior counts).
+
+        Returns:
+            ``(log_r, ground_truths)``, or None for an empty bucket.
         """
         prepared = self.prepare_terms(data, bucket, model)
         if prepared is None:

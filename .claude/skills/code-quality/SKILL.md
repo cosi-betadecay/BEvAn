@@ -70,7 +70,7 @@ read .sim/.tra (reader_extraction, sim_text_reader)
   → split_dataset     (train / eval)
   → model_selection.search_hyperparams (bin sizes) + Trainer.fit (densities)  [TRAIN only]
   → calibrate_global_offset (decision threshold)                              [TRAIN only]
-  → Evaluator / calculate_probablities.R (likelihood ratio) + class prior (counts)
+  → Evaluator / calculate_probabilities.R (likelihood ratio) + class prior (counts)
   → confusion_counts → metrics (F1 / AUC)
 ```
 
@@ -96,7 +96,7 @@ read .sim/.tra (reader_extraction, sim_text_reader)
 5. **Binning / `rho_floor` / smoothing** (`matrix_calculations`, `model_selection`)
    → density shape → LLR → threshold calibration → operating point. The bin search
    overfits at high `n_iter` (documented — guard floors exist for a reason).
-6. **`EPS` / log floors are duplicated** in `calculate_probablities.R` and
+6. **`EPS` / log floors are duplicated** in `calculate_probabilities.R` and
    `ablations/harness`. Change one without the other and the ablation silently
    diverges from production.
 7. **Term order within a bucket model** feeds `R()` positionally (and the ablation's

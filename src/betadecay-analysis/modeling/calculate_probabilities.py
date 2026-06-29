@@ -3,7 +3,7 @@ import math
 import torch
 import wandb
 
-from modeling.bayesian_annihilation import BayesianAnnihiliationModel
+from modeling.bayesian_annihilation import BayesianAnnihilationModel
 from utils.wandb_logging import log_confusion_matrix
 
 
@@ -53,7 +53,7 @@ def confusion_counts(
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
     ratio = R(terms) if terms else torch.ones(ground_truths.shape[0])
 
-    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference(log_threshold)
+    predictions = BayesianAnnihilationModel(ratio, n_beta_decay, n_bg).inference(log_threshold)
     valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
     excluded = int((~valid).sum().item())
     gt = ground_truths[valid]

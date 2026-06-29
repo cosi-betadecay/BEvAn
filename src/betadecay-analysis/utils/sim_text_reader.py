@@ -29,9 +29,9 @@ class SimIA:
     process: str  # "INIT", "DECA", "ANNI", "COMP", "PHOT", ...
     ia_id: int  # 1-based interaction ID
     origin_id: int  # IA ID that created the incoming particle (0 = primary)
-    position: tuple[float, float, float]
-    secondary_pid: int
-    secondary_dir: tuple[float, float, float]
+    position: tuple[float, float, float]  # cm
+    secondary_pid: int  # MEGAlib secondary particle ID
+    secondary_dir: tuple[float, float, float]  # unit direction
     secondary_energy: float  # keV
 
 
@@ -39,8 +39,8 @@ class SimIA:
 class SimHit:
     """One HTsim measured hit."""
 
-    detector: int
-    position: tuple[float, float, float]
+    detector: int  # detector id
+    position: tuple[float, float, float]  # cm
     energy: float  # keV
     origins: tuple[int, ...]  # IA ids that contributed energy to this hit
 
@@ -55,7 +55,14 @@ class SimTextEvent:
 
 
 def parse_ia(line: str) -> SimIA:
-    """Parse one ``IA`` truth line into a :class:`SimIA`."""
+    """Parse one ``IA`` truth line into a :class:`SimIA`.
+
+    Args:
+        line (str): A raw ``IA`` line from a ``.sim`` file.
+
+    Returns:
+        SimIA: The parsed truth interaction record.
+    """
     head, rest = line[3:].split(maxsplit=1)
     fields = rest.split(";")
     # fields: [0]=ID [1]=origin [2]=detector [3]=time [4..6]=x,y,z
@@ -73,7 +80,14 @@ def parse_ia(line: str) -> SimIA:
 
 
 def parse_ht(line: str) -> SimHit:
-    """Parse one ``HTsim`` measured-hit line into a :class:`SimHit`."""
+    """Parse one ``HTsim`` measured-hit line into a :class:`SimHit`.
+
+    Args:
+        line (str): A raw ``HTsim`` line from a ``.sim`` file.
+
+    Returns:
+        SimHit: The parsed measured hit.
+    """
     fields = line.split(maxsplit=1)[1].split(";")
     # fields: [0]=detector [1..3]=x,y,z [4]=energy [5]=time [6..]=origin IAs
     return SimHit(
@@ -85,7 +99,14 @@ def parse_ht(line: str) -> SimHit:
 
 
 def iter_sim_events(path: str) -> Iterator[SimTextEvent]:
-    """Yield SimTextEvent for every SE block in the file, in order."""
+    """Yield a :class:`SimTextEvent` for every SE block in the file, in order.
+
+    Args:
+        path (str): Path to a MEGAlib ``.sim`` file.
+
+    Yields:
+        SimTextEvent: The next parsed event block, in file order.
+    """
     event = None
     with open(path) as fh:
         for line in fh:
@@ -111,6 +132,13 @@ def event_is_bdecay(event: SimTextEvent, tolerance: float) -> bool:
     The event is signal iff some ANNI photon's direct secondaries deposit a
     summed hit energy within ``tolerance`` of 511 keV. Each hit counts once
     (first matching secondary), matching the production loop's break.
+
+    Args:
+        event (SimTextEvent): A parsed event with truth IAs and measured hits.
+        tolerance (float): Allowed deviation from 511 keV, in keV.
+
+    Returns:
+        bool: True iff the event is a β⁺ / 511 keV annihilation signal.
     """
     for ia in event.ias:
         if ia.process != "ANNI":

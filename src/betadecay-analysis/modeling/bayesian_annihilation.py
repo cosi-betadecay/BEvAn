@@ -3,7 +3,7 @@ import math
 import torch
 
 
-class BayesianAnnihiliationModel:
+class BayesianAnnihilationModel:
     """Bayesian classifier for identifying 511 keV positron-annihilation events.
 
     This model combines class-conditional likelihood scores

@@ -65,10 +65,22 @@ F1" caveat.
 - **Math notation in docstrings is intentional**, not a typo — `σ`, `φ`, `×`, `−`,
   `α` are whitelisted (`allowed-confusables`). Keep `m_e c²`, `FWHM = 2.355·σ`,
   `511 keV` spelled the physics way.
-- **Naming**: `snake_case` functions; physics-notation locals kept verbatim
-  (`v_in`, `v_out`, `L_in`, `L_out`, `x0`, `x1`, `cos_theta_geo`) — readability for
-  a physicist beats a generic rename. Leading `_` for module-private helpers
-  (`_draw_density_panel`).
+- **Naming**: **all functions are `snake_case`; all classes are `CamelCase`**
+  (PascalCase). Variables are `snake_case` too. **No leading-underscore
+  (`_private`) function or class names — ever** — internal/module-private helpers
+  keep plain public names (e.g. `save_figure`, not `_save_figure`). The one
+  allowed leading-underscore use is a **local variable that dodges a name
+  collision** with an imported function (e.g. `_delta_E`/`_arm`/`_anni` in
+  `dataset/datasets.py`, which would otherwise shadow the imported `delta_E`/`arm`
+  factors) — that underscore is load-bearing, leave it. A **single-letter
+  math-symbol function name** is an accepted exception to functions-are-`snake_case`
+  when it *is* the notation (e.g. `R` for the likelihood ratio in
+  `modeling/calculate_probabilities.py`, referred to as "R" throughout its
+  docstrings) — same spirit as physics-notation locals. Physics-notation locals are kept
+  verbatim (`v_in`, `v_out`, `L_in`, `L_out`, `x0`, `x1`, `cos_theta_geo`) —
+  readability for a physicist beats a generic rename — but non-physics locals,
+  including MEGAlib API-mirroring names (`Geometry`/`Reader`/`G`), follow
+  `snake_case`.
 - **Shape comments on tensors**: annotate non-obvious tensor shapes inline
   (`x0 = pos[:, 0, :]  # (B, 3)`) and state shapes in the docstring
   (`positions: (B, n, 3) hit positions`). Clamp floors are explicit and commented
@@ -167,7 +179,7 @@ proposing":
 
 **Off the cascade — reasonable to *propose* a cleanup (no F1 impact):**
 
-- `utils/plots.py` `_draw_density_panel` (9 args), `_draw_density_1d_panel` (7) —
+- `utils/plots.py` `draw_density_panel` (9 args), `draw_density_1d_panel` (7) —
   pure presentation; a `@dataclass` panel-config is the textbook fix.
 - `analysis.py` `main` — complexity 11, 53 statements, 6 args; barely over.
   Extracting arg-parse/setup is safe.
