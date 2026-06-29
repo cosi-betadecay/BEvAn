@@ -3,20 +3,15 @@ import math
 import torch
 
 
-class BayesianAnnihilationModel:
-    """Bayesian classifier for identifying 511 keV positron-annihilation events.
+class BayesianClassifier:
+    """Binary Bayesian classifier over a precomputed likelihood ratio.
 
-    This model combines class-conditional likelihood scores
-    P(D | β⁺) and P(D | bg) with prior class probabilities
-    P(β⁺) and P(bg) using Bayes' theorem to compute posterior
-    probabilities P(β⁺ | D) and P(bg | D).
-
-    The likelihood terms (posterior_beta_decay and posterior_bg)
-    are expected to represent class-conditional likelihood scores
-    derived from physics-based kernels (e.g., energy and ARM).
-
-    The class priors are estimated from event counts and should
-    ideally be computed from representative training datasets.
+    Pure Bayes' theorem — no feature or physics computation happens here. Given
+    the per-event likelihood ratio ``R = P(D | β⁺) / P(D | bg)`` and the per-class
+    event counts, it forms the class priors ``P(β⁺)`` / ``P(bg)``, the posteriors
+    ``P(β⁺ | D)`` / ``P(bg | D)``, and the decision rule. The ratio is built
+    upstream (see :func:`modeling.calculate_probabilities.R`) and the priors come
+    from the counts.
     """
 
     def __init__(
@@ -99,8 +94,8 @@ class BayesianAnnihilationModel:
         )
         return numerator / denominator
 
-    def inference(self, log_threshold: float | None = None) -> torch.Tensor:
-        """Perform classification based on probabilities.
+    def decision_rule(self, log_threshold: float | None = None) -> torch.Tensor:
+        """Apply the decision rule, returning the per-event β⁺/bg prediction.
 
         With ``log_threshold=None`` the decision is the Bayesian posterior rule
         (predict β⁺ when ``P(β⁺ | D) >= P(bg | D)``), i.e. the operating point set

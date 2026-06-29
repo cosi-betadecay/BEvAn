@@ -50,9 +50,11 @@ Entry scripts live in `src/betadecay-analysis/` and take geometry/data explicitl
   511 keV label)
 - `src/betadecay-analysis/modeling/`   — histogram density estimation
   (`matrix_calculations.py`), the likelihood ratio (`calculate_probabilities.py`),
-  Bayesian decision (`bayesian_annihilation.py`)
-- `src/betadecay-analysis/pipeline/`   — `train`, `eval` (metrics, thresholds),
-  `model_selection` (bin-size search + threshold calibration)
+  Bayesian decision (`bayesian_classifier.py`), and pure evaluation metrics
+  (`metrics.py`: confusion-count rates + ROC/F1 thresholds)
+- `src/betadecay-analysis/pipeline/`   — `train`, `eval` (the `Evaluator`
+  orchestration + prior-free scores), `model_selection` (bin-size search +
+  threshold calibration)
 - `src/betadecay-analysis/utils/`      — readers, plots, W&B, local CSV results
 - `ablations/`                         — the ablation study (its own driver + harness)
 - `data/`                              — `{name}.sim` / `{name}.tra` pairs + cosima sources

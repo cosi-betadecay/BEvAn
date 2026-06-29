@@ -5,7 +5,8 @@ import torch
 from tqdm import tqdm
 
 from dataset.datasets import BUCKETS, CLASSES, FEATURES
-from pipeline.eval import Evaluator, best_f1_threshold, f1_at_threshold
+from modeling.metrics import best_f1_threshold, f1_at_threshold
+from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 
 # Absolute floor (in F1) the calibrated threshold offset must beat, on top of the

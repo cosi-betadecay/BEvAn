@@ -7,8 +7,9 @@ import wandb
 from dotenv import load_dotenv
 
 from dataset.datasets import Datasets
+from modeling.metrics import metrics
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, metrics, prior_free_scores
+from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.local_results import (

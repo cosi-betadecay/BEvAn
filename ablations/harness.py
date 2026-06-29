@@ -12,8 +12,9 @@ from batch_analysis import discover_datasets
 
 from dataset.datasets import BUCKETS, Datasets
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix_1d, lookup_density_values_1d
+from modeling.metrics import best_f1_threshold, metrics, roc_auc
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, best_f1_threshold, metrics, prior_free_scores, roc_auc
+from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
