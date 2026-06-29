@@ -1,7 +1,7 @@
 [project]
 name = "BEvAn"
 version = "0.1.0"
-description = "Physics-based likelihood classifier for β⁺ (511 keV) annihilation events in COSI simulations"
+description = "Naive Bayes likelihood-ratio classifier for β⁺ Decay events in MEGAlib simulations"
 readme = "README.md"
 requires-python = "==3.10.*"
 dependencies = [
