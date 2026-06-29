@@ -4,18 +4,9 @@
   <img src="docs/COSI-SMEX%20Emblem_2E.png" alt="COSI-SMEX mission emblem" width="320">
 </p>
 
-This project is part of the Compton Spectrometer and Imager (COSI) program at the
-Space Sciences Laboratory, UC Berkeley. It flags each simulated COSI event as
-either a β⁺ (positron) annihilation signal or background, using the event's
-Compton kinematics and a physics-based likelihood model rather than a black-box
-classifier.
+This project is part of the Compton Spectrometer and Imager (COSI) mission. It flags each simulated COSI event as either a β⁺ (positron) annihilation signal or background, using the event's Compton kinematics and a physics-based likelihood model rather than a black-box classifier.
 
-Positron annihilation following β⁺ decay produces two back-to-back 511 keV
-photons. In COSI those photons interact mainly through Compton scattering in
-segmented high-purity germanium (HPGe) detectors, leaving a set of energy
-deposits and hit positions. By analysing the energy and geometry of those hits,
-the pipeline reconstructs each event's kinematics and decides whether it is
-consistent with 511 keV annihilation radiation.
+Positron annihilation following β⁺ decay produces two back-to-back 511 keV photons. In COSI those photons interact mainly through Compton scattering in segmented high-purity germanium (HPGe) detectors, leaving a set of energy deposits and hit positions. By analysing the energy and geometry of those hits, the pipeline reconstructs each event's kinematics and decides whether it is consistent with 511 keV annihilation radiation.
 
 ## Requirements
 
@@ -25,8 +16,7 @@ consistent with 511 keV annihilation radiation.
 
 ## Setup
 
-MEGAlib and ROOT must be available in your environment before running anything
-Python — source MEGAlib's setup script so its libraries are on the path:
+MEGAlib and ROOT must be available in your environment before running anything Python — source MEGAlib's setup script so its libraries are on the path:
 
 ```bash
 source "$MEGALIB/bin/source-megalib.sh"
@@ -48,13 +38,7 @@ WANDB_API_KEY=your_key_here
 
 ## Data
 
-Place MEGAlib simulation files in `data/` as matching `{name}.sim` / `{name}.tra`
-pairs (for example `data/SPILike.sim` and `data/SPILike.tra`). The detector
-geometry is passed explicitly via `--geo-file` to the per-dataset entry points
-(`analysis.py`, `train_model.py`, `inference.py`). The batch runner
-`batch_analysis.py` takes no geometry flag — it looks each dataset's geometry up
-by name in the static `GEOMETRIES` map at the top of the file, so add an entry
-there for any new dataset.
+Place MEGAlib simulation files in `data/` as matching `{name}.sim` / `{name}.tra` pairs (for example `data/SPILike.sim` and `data/SPILike.tra`). The detector geometry is passed explicitly via `--geo-file` to the per-dataset entry points (`analysis.py`, `train_model.py`, `inference.py`). The batch runner `batch_analysis.py` takes no geometry flag — it looks each dataset's geometry up by name in the static `GEOMETRIES` map at the top of the file, so add an entry there for any new dataset.
 
 > **Geometry paths:** use the `$MEGALIB` environment variable form (e.g.
 > `$MEGALIB/resource/examples/geomega/special/Max.geo.setup`) — it works
@@ -75,8 +59,7 @@ python src/betadecay-analysis/analysis.py \
   --wandb            # optional
 ```
 
-Or analyze every `.sim`/`.tra` pair found in `data/` and write a per-dataset
-summary to `results/<timestamp>.csv`:
+Or analyze every `.sim`/`.tra` pair found in `data/` and write a per-dataset summary to `results/<timestamp>.csv`:
 
 ```bash
 python src/betadecay-analysis/batch_analysis.py --wandb   # --wandb optional
@@ -94,10 +77,7 @@ python src/betadecay-analysis/train_model.py \
   --out models/SPILike.pt        # default: models/<sim-stem>.pt
 ```
 
-Then run real inference with that saved model on any other `.sim`/`.tra`
-dataset (the model carries the fitted densities and calibrated operating point;
-the `.tra` is still back-projected to reconstruct this dataset's source
-direction for the ARM feature):
+Then run real inference with that saved model on any other `.sim`/`.tra` dataset (the model carries the fitted densities and calibrated operating point; the `.tra` is still back-projected to reconstruct this dataset's source direction for the ARM feature):
 
 ```bash
 python src/betadecay-analysis/inference.py \
@@ -107,3 +87,14 @@ python src/betadecay-analysis/inference.py \
   --tra-file data/Max.tra \
   --out results/inference.csv    # optional CSV; otherwise prints only
 ```
+
+### Ablations
+
+The ablation study isolates one component of the model at a time (decision-threshold calibration, CKD hit ordering, learned term weights, per-factor contributions, and the label-window tolerance), each measured against a fair our-model reference:
+
+```bash
+python ablations/main.py --wandb   # --wandb optional
+```
+
+Results are written to a timestamped folder `ablations/results/<timestamp>/{figures,tables}`;
+with `--wandb` the figures are also logged to Weights & Biases.
