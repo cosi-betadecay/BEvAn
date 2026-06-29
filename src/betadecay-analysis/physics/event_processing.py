@@ -4,8 +4,6 @@ import torch
 
 from utils.megalib_types import MSimEvent
 
-CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo - cosφ_kin) <= this
-
 
 def candidate_perms(r: int) -> torch.Tensor:
     """Candidate orderings for a size-``r`` subset, as positions into its sorted hits.
@@ -35,21 +33,23 @@ def candidate_perms(r: int) -> torch.Tensor:
 
 
 def ckd_residual_batched(energies: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-    """Mean squared (cosφ_geo − cosφ_kin) over each sequence's internal scatters.
+    """Max squared (cosφ_geo − cosφ_kin) over each sequence's internal scatters.
 
     Vectorized form of the per-sequence CKD residual: for every row (a candidate
     hit ordering) it scores how consistently the geometric and kinematic scatter
-    angles agree along the sequence. Computed in float64 because the value only
-    gates ordering selection (it is never a model feature), so the extra precision
-    keeps the filter decisions stable without affecting the float32 feature path.
+    angles agree along the sequence, reduced by the *worst* (max) vertex so a
+    single inconsistent vertex can't be averaged away. Computed in float64 because
+    the value only gates ordering selection (it is never a model feature), so the
+    extra precision keeps the filter decisions stable without affecting the float32
+    feature path.
 
     Args:
         energies: ``(M, r)`` per-hit energies in keV for M candidate orderings.
         positions: ``(M, r, 3)`` matching hit positions.
 
     Returns:
-        ``(M,)`` mean squared residual per ordering; NaN where no internal scatter
-        is usable (the reference's ``None``).
+        ``(M,)`` worst-vertex squared residual per ordering; NaN where no internal
+        scatter is usable (the reference's ``None``).
     """
     E = energies.to(torch.float64)
     P = positions.to(torch.float64)
@@ -71,9 +71,12 @@ def ckd_residual_batched(energies: torch.Tensor, positions: torch.Tensor) -> tor
     resid = (cos_geo - cos_kin) ** 2  # (M, r-2)
 
     valid = valid_leg[:, :-1] & valid_leg[:, 1:] & (w_in >= 1e-9) & (w_out >= 1e-9)
-    count = valid.sum(dim=1)  # (M,)
-    resid_sum = torch.where(valid, resid, torch.zeros_like(resid)).sum(dim=1)
-    return resid_sum / count  # count == 0 -> NaN, the reference's None
+    # Worst-vertex aggregation: a correct Compton sequence should be consistent at
+    # *every* internal vertex, so we take the max squared residual rather than the
+    # mean (which can mask one bad vertex with a good one). Invalid vertices are
+    # excluded via a -inf sentinel; an ordering with no usable vertex yields NaN.
+    worst = torch.where(valid, resid, resid.new_full((), float("-inf"))).amax(dim=1)
+    return torch.where(valid.any(dim=1), worst, worst.new_full((), float("nan")))
 
 
 def energy_desc_order(subsets: torch.Tensor, energies: torch.Tensor) -> torch.Tensor:
@@ -117,6 +120,8 @@ def ckd_orderings(subsets: torch.Tensor, energies: torch.Tensor, positions: torc
 
     flat = cand.reshape(s * k, r)
     resid = ckd_residual_batched(energies[flat], positions[flat]).reshape(s, k)
+
+    CKD_ORDER_MAX = 0.05  # keep an ordering if worst-vertex sq (cosφ_geo - cosφ_kin) <= this
 
     keep = torch.isnan(resid) | (resid <= CKD_ORDER_MAX)  # (S, K)
     no_consistent = ~keep.any(dim=1)  # (S,)
