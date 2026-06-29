@@ -4,8 +4,8 @@ from collections.abc import Iterator
 import torch
 from tqdm import tqdm
 
-from dataset.datasets import BUCKETS, CLASSES, FEATURES
 from modeling.metrics import best_f1_threshold, f1_at_threshold
+from pipeline.datasets import BUCKETS, CLASSES, FEATURES
 from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 

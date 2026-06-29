@@ -30,8 +30,8 @@ def run(
         precision/recall/F1, best_f1, AUC) at each label window.
     """
     # Imported here, after `import harness` above has run its sys.path shim, so the
-    # top-level pipeline package `dataset` resolves regardless of import ordering.
-    from dataset.datasets import pool_to_features, split_features
+    # top-level pipeline package `pipeline` resolves regardless of import ordering.
+    from pipeline.datasets import pool_to_features, split_features
 
     pool = harness.extract_pool(ds, ordering="ckd")
     results: dict[int, dict] = {}

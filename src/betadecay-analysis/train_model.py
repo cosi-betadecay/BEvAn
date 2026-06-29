@@ -5,8 +5,8 @@ from pathlib import Path
 import wandb
 from dotenv import load_dotenv
 
-from dataset.datasets import Datasets
 from physics.compton_cone_reconstruction import FarFieldImager
+from pipeline.datasets import Datasets
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
