@@ -1,5 +1,3 @@
-import itertools
-
 import torch
 
 from utils.megalib_types import MSimEvent
@@ -176,7 +174,11 @@ def event_data_processing(
         device="cpu",
     )
 
-    # Build all hit combinations (CPU once, GPU afterwards)
+    # Build all hit combinations. torch.combinations generates each size's
+    # subsets in the same lexicographic order as itertools.combinations, so the
+    # row order — and thus arm's argmin tie-breaking downstream — is unchanged.
+    # The per-subset CKD ordering stays in orderings(); vectorizing that is a
+    # separate step.
     combos = []
     sizes = []
 
@@ -185,29 +187,32 @@ def event_data_processing(
 
     CKD_ORDER_MAX = 0.05  # keep an ordering if mean sq (cosφ_geo - cosφ_kin) <= this
 
+    hit_idx = torch.arange(n_hits)
     for r in range(1, min(n_hits + 1, 8)):  # Boggs & Jean (2000)
-        for c in itertools.combinations(range(n_hits), r):
-            for o in orderings(energies_cpu, positions_cpu, c, ordering, CKD_ORDER_MAX):
+        subsets = hit_idx.unsqueeze(1) if r == 1 else torch.combinations(hit_idx, r=r)
+        for c in subsets.tolist():
+            for o in orderings(energies_cpu, positions_cpu, tuple(c), ordering, CKD_ORDER_MAX):
                 combos.append(o)
                 sizes.append(r)
 
     max_r = max(sizes)
-    n_combo = len(combos)
 
-    # Pad combinations with sentinel index n_hits (maps to appended NaN row)
-    idx = torch.full((n_combo, max_r), n_hits, dtype=torch.long)
-    for i, c in enumerate(combos):
-        idx[i, : len(c)] = torch.tensor(c)
-
-    idx = idx.to(device)
+    # Pad each ordering to max_r with sentinel index n_hits (maps to the appended
+    # NaN row) in a single tensor build instead of a per-combo scatter.
+    padded = [list(o) + [n_hits] * (max_r - len(o)) for o in combos]
+    idx = torch.tensor(padded, dtype=torch.long, device=device)
     sizes = torch.tensor(sizes, device=device)
 
     # Append one all-NaN entry so padded indices gather an unmistakably invalid
     # sentinel instead of a potentially physical zero hit/position. Move to the
     # device here (alongside idx) so the per-combo physics reductions run batched
     # over all n_combo rows — the actual GPU-parallel work.
-    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0).to(device)  # (n_hits + 1,)
-    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0).to(device)  # (n_hits + 1, 3)
+    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0).to(
+        device
+    )  # (n_hits + 1,)
+    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0).to(
+        device
+    )  # (n_hits + 1, 3)
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)
