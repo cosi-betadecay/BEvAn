@@ -17,11 +17,11 @@ if TYPE_CHECKING:
     from pipeline.train import Trainer
 
 
-def _log_figure(key: str, fig: Figure) -> None:
+def log_figure(key: str, fig: Figure) -> None:
     """Attach a figure to the active W&B run under ``key``, then close it.
 
     Mirrors the image-logging half of
-    :func:`modeling.calculate_probablities.log_confusion`. Assumes a run is active
+    :func:`modeling.calculate_probabilities.log_confusion`. Assumes a run is active
     (the public helpers guard on ``wandb.run``) and always closes the figure so
     repeated logging never leaks matplotlib state.
 
@@ -37,7 +37,7 @@ def log_confusion_matrix(counts: dict, split_name: str = "eval") -> None:
     """Log a confusion-matrix image to W&B from raw confusion counts.
 
     The image-logging half of
-    :func:`modeling.calculate_probablities.log_confusion`, centralized here
+    :func:`modeling.calculate_probabilities.log_confusion`, centralized here
     alongside the other figure loggers; that function delegates to this one. No-op
     when no run is active.
 
@@ -48,7 +48,7 @@ def log_confusion_matrix(counts: dict, split_name: str = "eval") -> None:
     if wandb.run is None:
         return
     fig = plot_confusion_matrix(counts["tp"], counts["fp"], counts["fn"], counts["tn"])
-    _log_figure(f"{split_name}/confusion_matrix", fig)
+    log_figure(f"{split_name}/confusion_matrix", fig)
 
 
 def log_roc_curve(scores: object, labels: object, split_name: str = "eval") -> None:
@@ -63,7 +63,7 @@ def log_roc_curve(scores: object, labels: object, split_name: str = "eval") -> N
     """
     if wandb.run is None:
         return
-    _log_figure(f"{split_name}/roc_curve", plot_roc_curve(scores, labels))
+    log_figure(f"{split_name}/roc_curve", plot_roc_curve(scores, labels))
 
 
 def log_pr_curve(scores: object, labels: object, split_name: str = "eval") -> None:
@@ -78,7 +78,7 @@ def log_pr_curve(scores: object, labels: object, split_name: str = "eval") -> No
     """
     if wandb.run is None:
         return
-    _log_figure(f"{split_name}/pr_curve", plot_pr_curve(scores, labels))
+    log_figure(f"{split_name}/pr_curve", plot_pr_curve(scores, labels))
 
 
 def log_density_matrix(term: dict, split_name: str = "model", bucket: int | None = None) -> None:
@@ -99,7 +99,7 @@ def log_density_matrix(term: dict, split_name: str = "model", bucket: int | None
         return
     feats = density_term_features(term)
     scope = f"{split_name}/density" + (f"/n{bucket}" if bucket is not None else "")
-    _log_figure(f"{scope}/{feats}", plot_density_matrix(term))
+    log_figure(f"{scope}/{feats}", plot_density_matrix(term))
 
 
 def log_score_curves(evaluator: "Evaluator", data: dict, split_name: str = "eval") -> None:

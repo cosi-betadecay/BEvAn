@@ -46,12 +46,12 @@ TICK_SIZE = 13
 LEGEND_SIZE = 13
 
 
-def _pretty(name: str) -> str:
+def pretty(name: str) -> str:
     """Human-readable display name for an ablation (underscores spaced, capitalized)."""
     return ABLATION_TITLES.get(name, name.replace("_", " ").capitalize())
 
 
-def _mean_std(values: list[float]) -> tuple[float, float]:
+def mean_std(values: list[float]) -> tuple[float, float]:
     """Mean and population std of the finite entries (``(nan, 0)`` if none)."""
     arr = np.array([v for v in values if not np.isnan(v)], dtype=float)
     if arr.size == 0:
@@ -59,7 +59,7 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
     return float(arr.mean()), float(arr.std())
 
 
-def _save(fig: Figure, path: Path) -> Path:
+def save(fig: Figure, path: Path) -> Path:
     """Save ``fig`` to ``path`` at print resolution (creating parents), close it, return it.
 
     Args:
@@ -104,10 +104,10 @@ def plot_metric_comparison(
     width = 0.38
 
     our_model = [
-        _mean_std([r["our_model"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
+        mean_std([r["our_model"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
     ]
     ablation = [
-        _mean_std([r["ablation"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
+        mean_std([r["ablation"].get(key, float("nan")) for r in records]) for key, _ in COMPARISON_METRICS
     ]
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -126,7 +126,7 @@ def plot_metric_comparison(
         width,
         yerr=[s for _, s in ablation],
         capsize=4,
-        label=_pretty(ablation_name),
+        label=pretty(ablation_name),
         color=COLOR_ABLATION,
     )
     ax.set_xticks(x)
@@ -134,11 +134,11 @@ def plot_metric_comparison(
     ax.set_ylim(0, 1)
     ax.set_xlabel("Metric", fontsize=LABEL_SIZE)
     ax.set_ylabel("Score (mean ± std across datasets)", fontsize=LABEL_SIZE)
-    ax.set_title(f"{_pretty(ablation_name)} vs. our model", fontsize=TITLE_SIZE)
+    ax.set_title(f"{pretty(ablation_name)} vs. our model", fontsize=TITLE_SIZE)
     ax.tick_params(axis="both", labelsize=TICK_SIZE)
     ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
     fig.tight_layout()
-    return _save(fig, Path(save_dir) / f"{ablation_name}.png")
+    return save(fig, Path(save_dir) / f"{ablation_name}.png")
 
 
 def plot_gt_tolerance(
@@ -170,7 +170,7 @@ def plot_gt_tolerance(
     for ax, (key, label) in zip(axes.flat, COMPARISON_METRICS, strict=True):
         means, stds = [], []
         for n_std in n_std_values:
-            mean, std = _mean_std(
+            mean, std = mean_std(
                 [per_n[n_std].get(key, float("nan")) for per_n in included.values() if n_std in per_n]
             )
             means.append(mean)
@@ -191,7 +191,7 @@ def plot_gt_tolerance(
 
     fig.suptitle("Robustness to the 511 keV label window (averaged across datasets)", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
-    return _save(fig, Path(save_dir) / "gt_tolerance.png")
+    return save(fig, Path(save_dir) / "gt_tolerance.png")
 
 
 def plot_factor_contributions(
@@ -227,12 +227,12 @@ def plot_factor_contributions(
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     for ax, (key, label) in zip(axes, (("f1", "F1"), ("auc", "AUC")), strict=True):
         stats = [
-            _mean_std([c[f][key] for c in contributions_by_dataset.values() if f in c and key in c[f]])
+            mean_std([c[f][key] for c in contributions_by_dataset.values() if f in c and key in c[f]])
             for f in factors
         ]
         ax.bar(x, [m for m, _ in stats], width=0.6, yerr=[s for _, s in stats], capsize=4, color=COLOR_MODEL)
         if full_model_by_dataset:
-            full_mean, _ = _mean_std([fm.get(key, float("nan")) for fm in full_model_by_dataset.values()])
+            full_mean, _ = mean_std([fm.get(key, float("nan")) for fm in full_model_by_dataset.values()])
             ax.axhline(full_mean, ls="--", lw=1.5, color=COLOR_REFERENCE, label="Our model (average)")
             ax.legend(loc="lower right", fontsize=LEGEND_SIZE)
         ax.set_xticks(x)
@@ -245,4 +245,4 @@ def plot_factor_contributions(
 
     fig.suptitle("Factor contributions on ≥3-hit events (averaged across datasets)", fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
-    return _save(fig, Path(save_dir) / "factor_contributions.png")
+    return save(fig, Path(save_dir) / "factor_contributions.png")

@@ -21,18 +21,18 @@ def get_reader(geometry_file: str, sim_file: str) -> MFileEventsSim:
         RuntimeError: If the geometry or simulation file cannot be loaded.
     """
     M.gSystem.Load("$(MEGALIB)/lib/libMEGAlib.so")
-    G = M.MGlobal()
-    G.Initialize()
+    m_global = M.MGlobal()
+    m_global.Initialize()
 
     # Expand $MEGALIB / ${MEGALIB} so the path resolves regardless of CLI quoting.
     geometry_file = os.path.expandvars(geometry_file)
 
-    Geometry = M.MDGeometryQuest()
-    if not Geometry.ScanSetupFile(M.MString(geometry_file)):
+    geometry = M.MDGeometryQuest()
+    if not geometry.ScanSetupFile(M.MString(geometry_file)):
         raise RuntimeError(f"Could not load geometry {geometry_file}")
 
-    Reader = M.MFileEventsSim(Geometry)
-    if not Reader.Open(M.MString(sim_file)):
+    reader = M.MFileEventsSim(geometry)
+    if not reader.Open(M.MString(sim_file)):
         raise RuntimeError(f"Could not open simulation file {sim_file}")
 
-    return Reader
+    return reader

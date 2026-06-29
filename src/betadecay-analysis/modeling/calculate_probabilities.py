@@ -3,7 +3,8 @@ import math
 import torch
 import wandb
 
-from modeling.bayesian_annihilation import BayesianAnnihiliationModel
+from modeling.bayesian_classifier import BayesianClassifier
+from modeling.metrics import metrics
 from utils.wandb_logging import log_confusion_matrix
 
 
@@ -53,7 +54,7 @@ def confusion_counts(
     ground_truths = torch.as_tensor(ground_truths, dtype=torch.bool)
     ratio = R(terms) if terms else torch.ones(ground_truths.shape[0])
 
-    predictions = BayesianAnnihiliationModel(ratio, n_beta_decay, n_bg).inference(log_threshold)
+    predictions = BayesianClassifier(ratio, n_beta_decay, n_bg).decision_rule(log_threshold)
     valid = ~torch.isnan(ratio) & ~torch.isnan(ground_truths.to(ratio.dtype))
     excluded = int((~valid).sum().item())
     gt = ground_truths[valid]
@@ -79,10 +80,13 @@ def log_confusion(counts: dict, split_name: str = "eval", log_image: bool = True
         log_image: Whether to attach a confusion-matrix heatmap to the W&B log.
     """
     tp, fp, fn, tn = counts["tp"], counts["fp"], counts["fn"], counts["tn"]
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
-    f1_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    scores = metrics(counts)
+    precision, recall, fpr, f1_score = (
+        scores["precision"],
+        scores["recall"],
+        scores["fpr"],
+        scores["f1_score"],
+    )
     mcc_denom = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
     mcc = (tp * tn - fp * fn) / mcc_denom if mcc_denom > 0 else 0.0
 

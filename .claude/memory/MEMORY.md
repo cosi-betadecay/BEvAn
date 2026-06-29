@@ -1,6 +1,7 @@
 # Memory index
 
 - [β-decay classifier state](betadecay-classifier-state.md) — ANCHOR / read first: task, features, 3-bucket Bayesian model, clean-511 label, the ~0.89 per-event ceiling. ⚠CHAMPION UPDATED 2026-06-28: branch-75 ARM rework (signed 511-aware ARM + standard-Compton theta_kin + linear binning) is the NEW champion, dominates old 0.8935 on every metric (user-confirmed; exact F1 TBD)
+- [No underscore-prefixed names](no-underscore-prefixed-names.md) — convention: never use `_`-prefixed (`_private`) function/symbol names; internal helpers keep plain public names
 - [COSI working style](cosi-working-style.md) — feedback / read early: measure on the parser before implementing; track cumulative F1 drift (stop after 2 down-steps); user wants physics-defensibility but reverts if it costs F1; at the ceiling stop micro-optimizing. Also: keep memory load-bearing only — drop experiment-log trivia, fold rather than fragment
 - [Naive-Bayes dependence accepted](naive-bayes-dependence-accepted.md) — feedback: user knows it's naive Bayes & that feature independence is impossible; don't veto/hedge a feature for overlapping with ARM/ΔE. Judge on measured F1/AUC + physics defensibility, not independence purity
 - [No MEGAlib on this Mac](no-megalib-on-this-mac.md) — PyROOT unusable here; use utils/sim_text_reader.py (parser); production runs on the Linux VM; MEGAlib source at ~/Documents/COSI/megalib

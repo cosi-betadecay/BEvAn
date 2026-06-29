@@ -3,8 +3,9 @@ import csv
 from pathlib import Path
 
 from dataset.datasets import Datasets
+from modeling.metrics import metrics
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, metrics, prior_free_scores
+from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 

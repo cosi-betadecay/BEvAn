@@ -1,5 +1,9 @@
 import torch
 
+############################################
+# Bin edges & sizing
+############################################
+
 
 def build_default_edges(
     x: torch.Tensor,
@@ -17,7 +21,7 @@ def build_default_edges(
 
     Raises:
         ValueError: If the spacing is not 'linear' or 'log'.
-        ValueError: If the log floor is not positive.
+        ValueError: If there are no positive values when building log-spaced edges.
 
     Returns:
         torch.Tensor: The bin edges.
@@ -68,6 +72,11 @@ def bins_from_counts(n_min: int, d: int, rho_floor: float, min_bins: int = 2) ->
     if n_min <= 0:
         return min_bins
     return max(int((n_min / rho_floor) ** (1.0 / d)), min_bins)
+
+
+############################################
+# 2D density: build + lookup
+############################################
 
 
 def build_density_matrix(
@@ -193,6 +202,11 @@ def lookup_density_values(
 
     values[finite] = matrix[x_idx_full[finite], y_idx_full[finite]]
     return values
+
+
+############################################
+# 1D density: build + lookup
+############################################
 
 
 def build_density_matrix_1d(

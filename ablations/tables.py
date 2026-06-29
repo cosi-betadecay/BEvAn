@@ -9,7 +9,7 @@ TABLES_DIR = Path(__file__).resolve().parent / "tables"
 METRICS = ("f1_score", "auc", "precision", "recall")
 
 
-def _mean(values: list[float]) -> float:
+def mean(values: list[float]) -> float:
     """Mean of the finite entries (NaN if there are none)."""
     finite = [v for v in values if not math.isnan(v)]
     return sum(finite) / len(finite) if finite else float("nan")
@@ -53,8 +53,8 @@ def save_comparison_csv(
         included = [r for k, r in per_dataset.items() if k not in exclude]
         mean_row = {"dataset": f"mean (excl. {', '.join(exclude)})" if exclude else "mean"}
         for m in METRICS:
-            mean_row[f"our_model_{m}"] = _mean([r["our_model"].get(m, float("nan")) for r in included])
-            mean_row[f"ablation_{m}"] = _mean([r["ablation"].get(m, float("nan")) for r in included])
+            mean_row[f"our_model_{m}"] = mean([r["our_model"].get(m, float("nan")) for r in included])
+            mean_row[f"ablation_{m}"] = mean([r["ablation"].get(m, float("nan")) for r in included])
         writer.writerow(mean_row)
     return path
 
@@ -146,7 +146,7 @@ def save_gt_tolerance_csv(
                 {
                     "dataset": label,
                     "n_std": n_std,
-                    **{m: _mean([r.get(m, float("nan")) for r in included]) for m in METRICS},
+                    **{m: mean([r.get(m, float("nan")) for r in included]) for m in METRICS},
                 }
             )
     return path
@@ -170,8 +170,8 @@ def summary_row(
     row: dict[str, float] = {"ablation": ablation_name}
     records = [v for k, v in per_dataset.items() if k not in exclude]
     for m in METRICS:
-        our_model = _mean([r["our_model"].get(m, float("nan")) for r in records])
-        ablation = _mean([r["ablation"].get(m, float("nan")) for r in records])
+        our_model = mean([r["our_model"].get(m, float("nan")) for r in records])
+        ablation = mean([r["ablation"].get(m, float("nan")) for r in records])
         row[f"our_model_{m}"] = our_model
         row[f"ablation_{m}"] = ablation
         row[f"delta_{m}"] = ablation - our_model

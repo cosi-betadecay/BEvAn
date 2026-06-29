@@ -28,7 +28,7 @@ gate NaN-ing a >=3-hit event): bucket 1 = ΔE only; 2 = ΔE+ARM; 3 = ΔE+ARM+ann
   double-counted in bucket 3 (two 2D joints), once elsewhere.
 - `pipeline/eval.py`: loops buckets, accumulates confusion, logs per-bucket
   (`eval/n1` etc.) + summed total.
-- `modeling/calculate_probablities.py`: added `confusion_counts` (no logging) +
+- `modeling/calculate_probabilities.py`: added `confusion_counts` (no logging) +
   `log_confusion`; kept `R`/`predict` for back-compat.
 - `run.py`: simplified to `data=...; train,eval=split_dataset(data)`.
 

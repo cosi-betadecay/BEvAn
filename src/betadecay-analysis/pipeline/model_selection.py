@@ -5,7 +5,8 @@ import torch
 from tqdm import tqdm
 
 from dataset.datasets import BUCKETS, CLASSES, FEATURES
-from pipeline.eval import Evaluator, best_f1_threshold, f1_at_threshold
+from modeling.metrics import best_f1_threshold, f1_at_threshold
+from pipeline.eval import Evaluator
 from pipeline.train import Trainer
 
 # Absolute floor (in F1) the calibrated threshold offset must beat, on top of the
@@ -42,7 +43,7 @@ def fold_indices(n: int, k: int, generator: torch.Generator) -> list[torch.Tenso
     return [perm[i::k] for i in range(k)]
 
 
-def _finite_count(col_dict: dict[str, torch.Tensor], *feats: str) -> int:
+def finite_count(col_dict: dict[str, torch.Tensor], *feats: str) -> int:
     """Number of rows that are finite across every named feature column."""
     mask = torch.isfinite(col_dict[feats[0]])
     for f in feats[1:]:
@@ -50,7 +51,7 @@ def _finite_count(col_dict: dict[str, torch.Tensor], *feats: str) -> int:
     return int(mask.sum())
 
 
-def _rho_for_bins(n_min: int, d: int, bins: int) -> float:
+def rho_for_bins(n_min: int, d: int, bins: int) -> float:
     """Invert :func:`~modeling.matrix_calculations.bins_from_counts`.
 
     That rule sets ``bins = floor((n_min / rho) ** (1 / d))``, so the ``rho`` that
@@ -94,8 +95,8 @@ def champion_seed(
     # Bucket 1 leads with the 1D delta_E marginal; 2 and 3 with the 2D (delta_E, arm) joint.
     feats = {1: ("delta_E",), 2: ("delta_E", "arm"), 3: ("delta_E", "arm")}
     rho = {
-        b: _rho_for_bins(
-            min(_finite_count(bd[b], *feats[b]), _finite_count(bg[b], *feats[b])),
+        b: rho_for_bins(
+            min(finite_count(bd[b], *feats[b]), finite_count(bg[b], *feats[b])),
             BUCKET_DIM[b],
             n_bins[b],
         )
@@ -120,7 +121,7 @@ def flatten_config(config: dict) -> dict[str, float]:
     return out
 
 
-def _mean_se(scores: list[float]) -> tuple[float, float]:
+def mean_se(scores: list[float]) -> tuple[float, float]:
     """Sample mean and standard error of the mean (inf SE if under two points)."""
     n = len(scores)
     if n == 0:
@@ -132,7 +133,7 @@ def _mean_se(scores: list[float]) -> tuple[float, float]:
     return mean, math.sqrt(var / n)
 
 
-def _kfold_splits(
+def kfold_splits(
     train: dict[str, dict[int, dict[str, torch.Tensor]]], k: int, seed: int
 ) -> Iterator[tuple[dict, dict]]:
     """Yield ``(train_subset, val_subset)`` for each leak-free per-class, per-bucket fold.
@@ -197,13 +198,13 @@ def cv_fold_scores(
     """
     metric = "held_out_auc" if reward == "auc" else "held_out_log_likelihood"
     scores = []
-    for tr, va in _kfold_splits(train, k, seed):
+    for tr, va in kfold_splits(train, k, seed):
         trainer = Trainer(**config).fit(tr)
         scores.append(getattr(Evaluator(trainer), metric)(va))
     return [s for s in scores if s == s]  # drop NaN folds
 
 
-def _sample_config(
+def sample_config(
     seed_config: dict,
     generator: torch.Generator,
     rho_factor: float,
@@ -282,14 +283,14 @@ def search_hyperparams(
 
     # --- Search split: pick the best-mean candidate (the seed is the baseline). ---
     best_config = seed_config
-    best_mean, _ = _mean_se(cv_fold_scores(train, seed_config, k, seed, reward))
+    best_mean, _ = mean_se(cv_fold_scores(train, seed_config, k, seed, reward))
     if best_mean != best_mean:
         raise ValueError("Champion seed produced no finite CV fold; cannot search.")
     pbar = tqdm(range(n_iter), desc="Hyperparameter search", unit="cfg")
     pbar.set_postfix(best_auc=f"{best_mean:.4f}")
     for _ in pbar:
-        candidate = _sample_config(seed_config, generator, rho_factor, joint_range, marginal_range)
-        mean, _ = _mean_se(cv_fold_scores(train, candidate, k, seed, reward))
+        candidate = sample_config(seed_config, generator, rho_factor, joint_range, marginal_range)
+        mean, _ = mean_se(cv_fold_scores(train, candidate, k, seed, reward))
         if mean == mean and mean > best_mean:
             best_config, best_mean = candidate, mean
             pbar.set_postfix(best_auc=f"{best_mean:.4f}")
@@ -300,8 +301,8 @@ def search_hyperparams(
     # confirmation-split margin to beat BOTH an extreme-value-scaled SE bar
     # (z ~ sqrt(2 ln n_iter), the expected max of n_iter noise draws) and an
     # absolute floor, so the champion is frozen unless a gain is large and real.
-    c_seed_mean, c_seed_se = _mean_se(cv_fold_scores(train, seed_config, k, seed + 1, reward))
-    c_best_mean, c_best_se = _mean_se(cv_fold_scores(train, best_config, k, seed + 1, reward))
+    c_seed_mean, c_seed_se = mean_se(cv_fold_scores(train, seed_config, k, seed + 1, reward))
+    c_best_mean, c_best_se = mean_se(cv_fold_scores(train, best_config, k, seed + 1, reward))
     margin = c_best_mean - c_seed_mean
     pooled_se = math.sqrt(c_best_se**2 + c_seed_se**2)
     z = max(1.0, math.sqrt(2.0 * math.log(max(n_iter, 2))))
@@ -325,7 +326,7 @@ def search_hyperparams(
     return chosen, info
 
 
-def _pooled_margins(
+def pooled_margins(
     trainer: Trainer, data: dict[str, dict[int, dict[str, torch.Tensor]]]
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-event decision margin ``LLR - log(n_bg/n_beta)`` pooled across buckets.
@@ -393,7 +394,7 @@ def calibrate_global_offset(
         ``(offset, info)``. ``offset`` is ``0.0`` when the default is kept; ``info``
         records the candidate offset, acceptance, and the CV gain / SE behind it.
     """
-    margins, labels = _pooled_margins(trainer, train)
+    margins, labels = pooled_margins(trainer, train)
     if margins.numel() == 0 or int(labels.sum()) == 0:
         return 0.0, {"accepted": False, "offset": 0.0, "reason": "no calibratable events"}
 
@@ -403,9 +404,9 @@ def calibrate_global_offset(
 
     # Leak-free guard: does moving to `candidate` beat the default on held-out folds?
     gains = []
-    for tr, va in _kfold_splits(train, k, seed):
+    for tr, va in kfold_splits(train, k, seed):
         fold_trainer = Trainer(**config).fit(tr)
-        mv, lv = _pooled_margins(fold_trainer, va)
+        mv, lv = pooled_margins(fold_trainer, va)
         if mv.numel() == 0:
             continue
         f1_default = f1_at_threshold(mv, lv, 0.0)
@@ -413,7 +414,7 @@ def calibrate_global_offset(
         if f1_default == f1_default and f1_candidate == f1_candidate:
             gains.append(f1_candidate - f1_default)
 
-    mean_gain, se = _mean_se(gains)
+    mean_gain, se = mean_se(gains)
     accepted = (mean_gain == mean_gain) and (mean_gain > max(se, floor))
     offset = candidate if accepted else 0.0
     info = {

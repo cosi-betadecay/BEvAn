@@ -7,8 +7,9 @@ import wandb
 from dotenv import load_dotenv
 
 from dataset.datasets import Datasets
+from modeling.metrics import metrics
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, metrics, prior_free_scores
+from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, flatten_config, search_hyperparams
 from pipeline.train import Trainer
 from utils.local_results import (
@@ -37,8 +38,6 @@ def main(geo_file: str, sim_file: str, tra_file: str, use_wandb: bool, n_iter: i
 
     Raises:
         ValueError: If any of the input files have the wrong extension.
-        FileNotFoundError: If any of the input files do not exist.
-        FileNotFoundError: If any of the input files do not exist.
         FileNotFoundError: If any of the input files do not exist.
     """
     sim_path, tra_path = Path(sim_file), Path(tra_file)

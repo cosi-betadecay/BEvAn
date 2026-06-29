@@ -12,13 +12,14 @@ from batch_analysis import discover_datasets
 
 from dataset.datasets import BUCKETS, Datasets
 from modeling.matrix_calculations import bins_from_counts, build_density_matrix_1d, lookup_density_values_1d
+from modeling.metrics import best_f1_threshold, metrics, roc_auc
 from physics.compton_cone_reconstruction import FarFieldImager
-from pipeline.eval import Evaluator, best_f1_threshold, metrics, prior_free_scores, roc_auc
+from pipeline.eval import Evaluator, prior_free_scores
 from pipeline.model_selection import apply_offset, calibrate_global_offset, search_hyperparams
 from pipeline.train import Trainer
 from utils.reader_extraction import get_reader
 
-# Floor inside the per-term log densities (mirrors modeling.calculate_probablities.R).
+# Floor inside the per-term log densities (mirrors modeling.calculate_probabilities.R).
 EPS = 1e-8
 # The three physics factors, in plot/column order; each maps to one pipeline term.
 FACTORS = ("delta_E", "arm", "anni")
@@ -152,7 +153,7 @@ def champion(train: dict, n_iter: int = 50, calibrate: bool = True) -> tuple[Tra
     return trainer, config
 
 
-def _pooled_counts(evaluator: Evaluator, data: dict) -> dict:
+def pooled_counts(evaluator: Evaluator, data: dict) -> dict:
     """Sum the per-bucket confusion counts for ``data`` (no logging side effects)."""
     total = {"tp": 0, "fp": 0, "fn": 0, "tn": 0, "excluded": 0}
     for b in BUCKETS:
@@ -178,7 +179,7 @@ def metric_record(trainer: Trainer, data: dict) -> dict:
         Merged ``{counts, metrics, prior_free_scores}`` dict for the split.
     """
     evaluator = Evaluator(trainer)
-    counts = _pooled_counts(evaluator, data)
+    counts = pooled_counts(evaluator, data)
     return {**counts, **metrics(counts), **prior_free_scores(evaluator, data)}
 
 
@@ -238,7 +239,7 @@ def term_factor(spec: dict) -> str:
     return spec["xfeat"] if spec.get("kind") == "1d" else spec["yfeat"]
 
 
-def _all_factors_finite(bucket_features: dict) -> torch.Tensor:
+def all_factors_finite(bucket_features: dict) -> torch.Tensor:
     """Boolean mask of events finite across all three factor features in a bucket."""
     mask = torch.ones_like(bucket_features["delta_E"], dtype=torch.bool)
     for f in FACTORS:
@@ -278,10 +279,10 @@ def factor_1d_llr(
     tr_bd, tr_bg = train["bdecay"][bucket], train["bg"][bucket]
     ev_bd, ev_bg = eval_data["bdecay"][bucket], eval_data["bg"][bucket]
 
-    fb = tr_bd[factor][_all_factors_finite(tr_bd)]
-    fg = tr_bg[factor][_all_factors_finite(tr_bg)]
-    eb = ev_bd[factor][_all_factors_finite(ev_bd)]
-    eg = ev_bg[factor][_all_factors_finite(ev_bg)]
+    fb = tr_bd[factor][all_factors_finite(tr_bd)]
+    fg = tr_bg[factor][all_factors_finite(tr_bg)]
+    eb = ev_bd[factor][all_factors_finite(ev_bd)]
+    eg = ev_bg[factor][all_factors_finite(ev_bg)]
     if min(fb.numel(), fg.numel(), eb.numel(), eg.numel()) == 0:
         return None
 
