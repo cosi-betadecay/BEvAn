@@ -154,11 +154,13 @@ def event_data_processing(
     if n_hits == 0:
         return None, None, None
 
-    # Load event data onto GPU
+    # Load per-hit event data on CPU: it is tiny (n_hits values) and only feeds
+    # the serial CPU subset enumeration below. The device boundary is pushed down
+    # to the big gathered combo tensors, which is the only GPU-shaped work here.
     energies = torch.tensor(
         [event_sim.GetHTAt(i).GetEnergy() for i in range(n_hits)],
         dtype=torch.float32,
-        device=device,
+        device="cpu",
     )
 
     positions = torch.tensor(
@@ -171,7 +173,7 @@ def event_data_processing(
             for i in range(n_hits)
         ],
         dtype=torch.float32,
-        device=device,
+        device="cpu",
     )
 
     # Build all hit combinations (CPU once, GPU afterwards)
@@ -201,9 +203,11 @@ def event_data_processing(
     sizes = torch.tensor(sizes, device=device)
 
     # Append one all-NaN entry so padded indices gather an unmistakably invalid
-    # sentinel instead of a potentially physical zero hit/position.
-    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0)  # (n_hits + 1,)
-    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0)  # (n_hits + 1, 3)
+    # sentinel instead of a potentially physical zero hit/position. Move to the
+    # device here (alongside idx) so the per-combo physics reductions run batched
+    # over all n_combo rows — the actual GPU-parallel work.
+    energies_ext = torch.cat([energies, energies.new_full((1,), float("nan"))], dim=0).to(device)  # (n_hits + 1,)
+    positions_ext = torch.cat([positions, positions.new_full((1, 3), float("nan"))], dim=0).to(device)  # (n_hits + 1, 3)
 
     energy_combo = energies_ext[idx]  # (n_combo, max_r)
     pos_combo = positions_ext[idx]  # (n_combo, max_r, 3)

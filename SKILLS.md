@@ -39,6 +39,18 @@ in `skills-lock.json` (all from the `wentorai/research-plugins` GitHub source).
   `.claude/skills/positron-annihilation-511/references/`. Use when reasoning
   about the 511 keV / 1022 keV signal, the annihilation-angle feature, the energy
   tolerance, positronium, or what physically produces signal vs background.
+- **gpu-performance** (`.claude/skills/gpu-performance/SKILL.md`) — GPU-friendliness,
+  vectorization, and time/space-complexity workflow for the torch pipeline: profile
+  first, vectorize the per-event scalar loops in `pipeline/datasets.py`, device/dtype/sync
+  hygiene (incl. the per-event `empty_cache` and scalar `float()` anti-patterns already in
+  the tree), Big-O/space reasoning per stage, and the F1-equivalence test every speedup
+  must pass. The engineering counterpart to `code-quality`; defers torch mechanics to the
+  `pytorch` skill. Use on the GPU-friendliness branch or any perf/vectorization diff.
+- **pytorch** (`.claude/skills/pytorch/SKILL.md`) — third-party reference
+  (`itsmostafa/llm-engineering-skills`, added via skillfish) for torch mechanics:
+  `torch.profiler`, `torch.compile` (inductor vs cudagraphs), gradient checkpointing,
+  data-loader bottlenecks, device patterns. Used for the generic torch *how*; see
+  `gpu-performance` for what's load-bearing in *this* pipeline.
 
 ## Code-review agents (`.claude/agents/`)
 
@@ -48,16 +60,20 @@ All reviewers are read-only and share one finding contract
 (Severity · file:line · What · Why · Fix).
 
 - **review-orchestrator** (`.claude/agents/review-orchestrator.md`) — scopes the
-  change (diff/PR/branch/files), dispatches the three specialists in parallel,
+  change (diff/PR/branch/files), dispatches the four specialists in parallel,
   merges/dedupes/prioritizes, and gives a SHIP / SHIP WITH FIXES / DO NOT SHIP
   verdict. Falls back to running the passes itself if nested subagents are disallowed.
 - **code-quality-reviewer** (`.claude/agents/code-quality-reviewer.md`) — uses the
-  **code-quality** skill: lint/conventions, the pipeline cascade, F1-regression risk.
+  **code-quality** + **code-conventions** skills: lint/conventions, the pipeline
+  cascade, F1-regression risk.
 - **physics-reviewer** (`.claude/agents/physics-reviewer.md`) — uses
   **compton-physics** + **positron-annihilation-511**: feature/kinematics correctness
   against the physics.
 - **megalib-reviewer** (`.claude/agents/megalib-reviewer.md`) — uses **megalib**:
   `.sim`/`.tra` parsing, ANNI ground truth, PyROOT API, sim↔tra ID joins.
+- **performance-reviewer** (`.claude/agents/performance-reviewer.md`) — uses
+  **gpu-performance** + **pytorch**: GPU-friendliness, vectorization, time/space
+  complexity, and the proof that a speedup left the champion F1 unchanged.
 
 ## Domain skills
 
