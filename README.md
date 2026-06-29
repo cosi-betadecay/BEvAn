@@ -4,9 +4,9 @@
   <img src="docs/COSI-SMEX%20Emblem_2E.png" alt="COSI-SMEX mission emblem" width="320">
 </p>
 
-This project is part of the Compton Spectrometer and Imager (COSI) mission. It flags each simulated COSI event as either a β⁺ (positron) annihilation signal or background, using the event's Compton kinematics and a physics-based likelihood model rather than a black-box classifier.
+This project is part of the [Compton Spectrometer and Imager (COSI)](https://cosi.ssl.berkeley.edu/) mission. It flags each simulated event as either β⁺ decay or background, using the event's Compton kinematics and a physics-based likelihood model rather than a black-box classifier.
 
-Positron annihilation following β⁺ decay produces two back-to-back 511 keV photons. In COSI those photons interact mainly through Compton scattering in segmented high-purity germanium (HPGe) detectors, leaving a set of energy deposits and hit positions. By analysing the energy and geometry of those hits, the pipeline reconstructs each event's kinematics and decides whether it is consistent with 511 keV annihilation radiation.
+Positron annihilation following β⁺ decay produces two back-to-back 511 keV photons. Those photons interact mainly through Compton scattering in segmented high-purity germanium (HPGe) detectors, leaving a set of energy deposits and hit positions. By analysing the energy and geometry of those hits, the pipeline reconstructs each event's kinematics and decides whether it is consistent with 511 keV annihilation radiation.
 
 ## Requirements
 
