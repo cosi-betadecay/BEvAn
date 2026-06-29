@@ -15,16 +15,13 @@ def theta_geo(
 ) -> torch.Tensor:
     """Geometric Compton scatter angle at the first interaction, in radians.
 
-    The angle between the incoming photon momentum and the first scatter leg
-    (first hit -> second hit), per subset. ``reconstructed_unit_vector`` points
-    from the origin *toward* the source (the reconstructed peak sky pixel), so
-    the incoming momentum is its negation (source -> first interaction); the
-    cosine is negated below to use that true incoming direction.
+    The angle between the reconstructed incoming photon direction
+    (``reconstructed_unit_vector``) and the first scatter leg (first hit ->
+    second hit), per subset.
 
     Args:
         positions: ``(B, n, 3)`` hit positions (or ``(n, 3)`` for one subset).
-        reconstructed_unit_vector: Direction toward the source, ``(3,)`` or
-            ``(B, 3)`` (negated here to recover the incoming photon momentum).
+        reconstructed_unit_vector: Incoming source direction, ``(3,)`` or ``(B, 3)``.
 
     Returns:
         Scatter angle in radians, shape ``(B,)``.
@@ -41,9 +38,7 @@ def theta_geo(
     L_in = torch.clamp(torch.norm(v_in, dim=1), min=1e-3)
     L_out = torch.clamp(torch.norm(v_out, dim=1), min=1e-3)
 
-    # Negate to use the incoming photon momentum (source -> first interaction)
-    # rather than the source direction, so this returns the true scatter angle.
-    cos_theta_geo = -(v_in * v_out).sum(dim=1) / (L_in * L_out)
+    cos_theta_geo = (v_in * v_out).sum(dim=1) / (L_in * L_out)
     cos_theta_geo = torch.clamp(cos_theta_geo, -1.0, 1.0)
     return torch.arccos(cos_theta_geo)
 
