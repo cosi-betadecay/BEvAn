@@ -81,10 +81,10 @@ Then run real inference with that saved model on any other `.sim`/`.tra` dataset
 
 ```bash
 python src/BEvAn/inference.py \
-  --model models/SPILike.pt \
-  --geo-file $MEGALIB/resource/examples/geomega/special/SPILike.geo.setup \
-  --sim-file data/Max.sim \
-  --tra-file data/Max.tra \
+  --model models/Max.pt \
+  --geo-file $MEGALIB/resource/examples/geomega/special/Max.geo.setup \
+  --sim-file data/Max_v2.sim \
+  --tra-file data/Max_v2.tra \
   --out results/inference.csv    # optional CSV; otherwise prints only
 ```
 
