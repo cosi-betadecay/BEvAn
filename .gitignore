@@ -1,0 +1,60 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Simulation output files
+*.sim
+*.tra
+*.sim.gz
+!tests/test.sim
+!tests/test.tra
+
+# Saved model artifacts
+models/
+
+# Run outputs (per-run plots, metrics.json, summary.csv) — generated, not tracked
+results/
+
+# Inference outputs (per-event classification tensors) — generated, not tracked
+predictions/
+
+# Ablation study outputs (generated): cached features and per-run results
+# (results/<timestamp>/{figures,tables}). figures/ and tables/ cover earlier runs.
+ablations/cache/
+ablations/results/
+
+# environment variables
+.env
+.env.*
+
+# pytest
+.pytest_cache/
+.pytest_cache/*
+.coverage
+
+# Weights & Biases
+wandb
+
+# UV
+uv.lock
+
+# Logs
+*.log
+runs/
+
+# MEGAlib
+crossections/
+
+# Hugging Face upload resume-cache (hf upload-large-folder)
+data/.cache/
+
+# Coverage outputs (badge is published to the `badges` branch by CI)
+coverage.xml
+coverage.svg

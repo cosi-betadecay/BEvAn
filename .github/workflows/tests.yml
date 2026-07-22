@@ -1,0 +1,55 @@
+name: Tests
+
+# Run the unit-test suite (no MEGAlib needed: tests/fake_megalib.py stands in
+# for ROOT) with coverage on every push and pull request. On pushes to main the
+# coverage badge is regenerated and force-pushed to the `badges` branch, where
+# the README references it.
+on:
+  push:
+    branches-ignore: [badges]
+  pull_request:
+  workflow_dispatch:
+
+# contents: write is needed only to push the badge branch.
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (pinned Python 3.14)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      # Runtime deps + the dev group (pytest, pytest-cov); the project itself is
+      # never installed — pytest imports straight from src/BEvAn via pythonpath.
+      - name: Install dependencies
+        run: uv sync --no-install-project
+
+      - name: Run tests with coverage
+        run: uv run --no-sync pytest --cov=src/BEvAn --cov=ablations --cov-report=term --cov-report=xml
+
+      - name: Generate coverage badge
+        run: uvx --from 'genbadge[coverage]' genbadge coverage -i coverage.xml -o coverage.svg
+
+      # Publish the badge from every branch push: a fresh single-file orphan
+      # branch, so `badges` never accumulates history and never re-triggers this
+      # workflow (it is excluded from the push trigger above). PR runs skip it
+      # (no push credentials for forks; the branch push publishes anyway).
+      - name: Publish coverage badge
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir badge-branch
+          cp coverage.svg badge-branch/
+          cd badge-branch
+          git init -b badges
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage.svg
+          git commit -m "Update coverage badge"
+          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" badges

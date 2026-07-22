@@ -1,0 +1,45 @@
+# Template Run for Step 3 of activation simulation:
+# Simulate the delayed decays of the activated isotopes
+
+# You can run this instance via mcosima
+
+# Global parameters:
+Version                            1
+Geometry                           $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup
+DetectorTimeConstant               0.000005
+
+
+# Physics parameters
+PhysicsListEM                      LivermorePol
+PhysicsListHD                      qgsp-bic-hp
+DecayMode                          ActivationDelayedDecay
+
+
+# Storage parameters
+StoreSimulationInfo                all
+
+
+# Particle range cuts:
+DefaultRangeCut     0.1
+
+
+Run ActivationStep3
+ActivationStep3.FileName                         ActivationStep3
+# It is very important to use a Time here and not a number of triggers/events
+# ActivationDelayedDecay stores radioactive daughter elements to get cascades right,
+# this might blow up the memory consumption, if we don't know a time limit
+#
+# mcosima does NOT split this time across incarnations -- each one simulates the
+# full Time with its own seed, so yields scale as (Time x incarnations).
+# Measured on this geometry at ~5.5 kBq total activation (75 s, 1 incarnation):
+#   18381 events stored           -> ~246 /s
+#    8124 events with >=1 hit     -> ~108 /s   (the rest lose every hit to the
+#                                               15 keV Ge NoiseThreshold and are
+#                                               skipped by the pipeline)
+#     494 beta+ ground-truth      -> ~6.6 /s
+# 1020 s x 4 incarnations => ~1.0e6 stored, ~442k usable, ~27k beta+ labels.
+# Run as: mcosima -t 4 -m 2 ActivationStep3.source   (-m 2: 755 MB per cosima)
+ActivationStep3.Time                             200.0
+
+ActivationStep3.ActivationSources                Activation.dat
+

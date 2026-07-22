@@ -1,0 +1,38 @@
+# Template Run for Step 2 of activation simulation: 
+# Calculate the activation
+
+# You should not run tis instance via mcosima!!
+
+# Global parameters:
+Version                            1
+Geometry                           $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup
+DetectorTimeConstant               0.000005
+
+
+# Physics parameters
+PhysicsListHD                      qgsp-bic-hp
+PhysicsListEM                      LivermorePol
+
+
+# The activation calculation
+Activator A
+A.IsotopeProductionFile   Isotopes.inc1.dat
+# If you ran step 1 via mcosima, EVERY incarnation must be listed here -- cosima
+# silently uses only the files it is given, so a missing one just throws away
+# that fraction of the production statistics:
+# A.IsotopeProductionFile   Isotopes.p1.inc1.dat
+# A.IsotopeProductionFile   Isotopes.p2.inc1.dat
+# ...
+
+# Irradiation time = the flight duration we are modelling, in seconds.
+# 3974400 s = 46 d, the COSI balloon flight this 10-detector config corresponds to.
+# The template's 31556736 (1 year) is a SATELLITE exposure and is wrong for a
+# balloon: the activator applies A = R * (1 - exp(-lambda*T)), so a year
+# over-builds every long-lived isotope. Saturation fraction, 1 yr vs 46 d:
+#   Na-22 (T1/2 2.60 yr): 0.234 vs 0.033  -> 7.1x too much
+#   Sc-46 (T1/2 83.8 d) : 0.951 vs 0.317  -> 3.0x too much
+#   F-18, Na-24 (hours) : 1.000 vs 1.000  -> unaffected (saturated either way)
+# Na-22 is a beta+ emitter, so this directly biases the ANNI ground truth and
+# the class priors. Change this if modelling a different flight.
+A.ActivationMode          ConstantIrradiation  3974400
+A.ActivationFile          Activation.dat

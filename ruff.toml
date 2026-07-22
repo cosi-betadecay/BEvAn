@@ -1,0 +1,52 @@
+# ===============================
+# Ruff Configuration
+# ===============================
+# Single source of truth for ruff. The [tool.ruff] block in pyproject.toml is
+# intentionally absent: a standalone ruff.toml takes precedence and would
+# silently override it, so all ruff config lives here.
+
+target-version = "py314"  # matches requires-python == 3.14.* (.python-version)
+line-length = 110
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # Import sorting (isort)
+    "UP",     # Pyupgrade
+    "B",      # Bugbear
+    "A",      # builtins
+    "C4",     # comprehensions
+    "TID",    # tidy imports
+    "SIM",    # simplify
+    "Q",      # quotes
+    "RUF",    # Ruff
+    "D",      # pydocstyle (google convention, see [lint.pydocstyle])
+]
+
+ignore = [
+    "E501",   # line length handled by the formatter
+    "D100",   # missing docstring in public module
+    "D104",   # missing docstring in public package
+]
+
+# Mathematical notation used intentionally in docstrings (not typos).
+allowed-confusables = ["×", "α", "σ", "−", "φ"]
+
+# Use preview lint rules (new recommended config name)
+explicit-preview-rules = true
+
+[lint.per-file-ignores]
+# Tests and the fake-ROOT shim mimic MEGAlib's API (CamelCase methods, stub
+# args) and don't need per-function docstrings.
+"tests/*" = ["D101", "D102", "D103", "D105", "D107"]
+
+[lint.isort]
+# First-party = the top-level packages under src/BEvAn/, which is
+# what ends up on sys.path (not "src"). Keep this in sync with that tree.
+known-first-party = ["physics", "modeling", "mathematics", "pipeline", "utils"]
+combine-as-imports = true
+
+[lint.pydocstyle]
+convention = "google"

@@ -1,0 +1,47 @@
+# Template Run for Step 1 of activation simulation: 
+# Simulate primary protons & store all generated particles
+
+# You can run this first instance of cosima vis mcosima, e.g.
+# mcosima ActivationStep1.source
+# This will produce a set of Isotopes.p1.inc1.dat, Isotopes.p1.inc2.dat, etc.
+# You have to modify ActivationStep2.source to read those files.
+
+# Global parameters:
+Version                            1
+Geometry                           $(MEGALIB)/resource/examples/geomega/special/Max.geo.setup
+DetectorTimeConstant               0.000005
+
+
+# Physics parameters
+PhysicsListHD                      qgsp-bic-hp
+PhysicsListEM                      LivermorePol
+DecayMode                          Buildup
+
+
+# Storage parameters
+StoreSimulationInfo                all
+
+
+# Particle range cuts:
+DefaultRangeCut     0.1
+
+
+# Simulate the primary protons and all secondaries
+Run Step1
+Step1.FileName                         ActivationStep1
+# Irradiation time for the isotope-production statistics ONLY -- it is not a
+# physical exposure; the Activator (step 2) divides the counts by this to get
+# production rates. Too small => the isotope inventory is Poisson-starved.
+# At 1.0 s, 420 of 780 (volume, isotope) entries had exactly ONE count (54%,
+# i.e. 100% statistical error each), which corrupts the *relative* isotope mix
+# -- and that mix is what sets the beta+ fraction downstream.
+# 100.0 s is the MEGAlib template value and gives ~4.2e6 primaries here.
+Step1.Time                             10.0
+Step1.IsotopeProductionFile            Isotopes
+
+Step1.Source Step1_ProtonSource
+Step1_ProtonSource.ParticleType        4
+Step1_ProtonSource.Beam                FarFieldAreaSource 0.0 180.0 0.0 360.0
+Step1_ProtonSource.Spectrum            File CosmicProtonsInterplanetarySpace.dat
+Step1_ProtonSource.Flux                3.73
+

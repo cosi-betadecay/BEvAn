@@ -1,0 +1,45 @@
+[project]
+name = "BEvAn"
+version = "0.1.0"
+description = "Naive Bayes likelihood-ratio classifier for β⁺ Decay events in MEGAlib simulations"
+readme = "README.md"
+requires-python = "==3.14.*"
+dependencies = [
+    "numpy>=2.3.2",
+    "torch>=2.9",
+    "wandb>=0.23.0",
+    "seaborn>=0.13.2",
+    "matplotlib>=3.8.2",
+    "tqdm>=4.67.1",
+    "python-dotenv>=1.2.1",
+]
+
+# Ruff configuration lives in the standalone ruff.toml (it takes precedence
+# over any [tool.ruff] block here, so keeping it there avoids a silent override).
+
+[tool.pytest.ini_options]
+# src/BEvAn/ (not "src") is what lands on sys.path when the entry
+# scripts run, so the test suite imports the top-level packages from there too.
+pythonpath = ["src/BEvAn"]
+testpaths = ["tests"]
+# importlib mode lets mirrored test trees reuse basenames
+# (tests/BEvAn/utils/test_plots.py vs tests/ablations/test_plots.py).
+addopts = ["--import-mode=importlib"]
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.11",
+    "pytest>=8.1.0",
+    "pytest-cov>=5.0.0",
+]
+docs = [
+    "furo>=2025.12.19",
+    "myst-parser>=4.0.1",
+    "sphinx>=8.1.3",
+]
