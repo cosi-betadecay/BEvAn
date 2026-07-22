@@ -39,8 +39,23 @@ jobs:
         run: uv sync --no-install-project --group docs
 
       # Regenerate the API stubs so newly added modules appear automatically.
+      # One output dir per source tree, each with its own index.rst toc, all three
+      # wired into docs/source/index.md.
+      # ablations/ and tests/ are separate trees (no __init__.py anywhere), so
+      # --implicit-namespaces names them ablations.* / tests.* — which also keeps
+      # the mirrored test basenames (tests.BEvAn.utils.test_plots vs
+      # tests.ablations.test_plots) from colliding.
+      # ablations/511_heuristic.py is excluded: a leading-digit module name is not
+      # importable by `import`, so autodoc cannot load it (the test suite reaches
+      # it via importlib).
       - name: Generate API reference
-        run: uv run --no-sync sphinx-apidoc -o docs/source/api src/BEvAn -f -e -M
+        run: |
+          uv run --no-sync sphinx-apidoc -o docs/source/api/BEvAn src/BEvAn -f -e -M \
+            --tocfile index
+          uv run --no-sync sphinx-apidoc -o docs/source/api/ablations ablations -f -e -M \
+            --implicit-namespaces --tocfile index ablations/511_heuristic.py
+          uv run --no-sync sphinx-apidoc -o docs/source/api/tests tests -f -e -M \
+            --implicit-namespaces --tocfile index
 
       - name: Build HTML
         run: uv run --no-sync sphinx-build -b html --fail-on-warning docs/source docs/build/html

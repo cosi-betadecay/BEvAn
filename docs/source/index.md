@@ -1,4 +1,4 @@
-# BEvAn: β⁺ Decay Event Analyzer"
+# BEvAn: β⁺ Decay Event Analyzer
 
 A physics-based likelihood classifier that tags each simulated event as a β⁺ decay signal or background, using the event's Compton kinematics rather than a black-box model.
 
@@ -8,7 +8,9 @@ The model is an **interpretable, physics-based naive-Bayes likelihood-ratio clas
 :maxdepth: 2
 :caption: Contents
 
-api/modules
+api/BEvAn/index
+api/ablations/index
+api/tests/index
 ```
 
 ## Pipeline at a glance
