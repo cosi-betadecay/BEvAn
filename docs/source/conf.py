@@ -61,6 +61,10 @@ autodoc_member_order = "bysource"
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+# Render Attributes: sections as :ivar: field lists rather than standalone
+# .. attribute:: directives, so they don't register duplicate cross-ref targets
+# that collide with autodoc's own documentation of the same attributes.
+napoleon_use_ivar = True
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
