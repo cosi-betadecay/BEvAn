@@ -1,8 +1,13 @@
+from pathlib import Path
+
 import harness
 import learned_weights
 
 
-def test_run_returns_metrics_and_fitted_weights(tiny_split, tmp_path):
+def test_run_returns_metrics_and_fitted_weights(
+    tiny_split: tuple[dict, dict], tmp_path: Path
+) -> None:
+    """Verify learned_weights.run reports metrics, a float weight per factor, and its plots."""
     train, eval_data = tiny_split
     out = tmp_path / "learned_weights"
     record = learned_weights.run(train, eval_data, harness.Trainer().config(), plots_dir=out)
@@ -20,7 +25,8 @@ def test_run_returns_metrics_and_fitted_weights(tiny_split, tmp_path):
     assert list(out.glob("density_*.png"))
 
 
-def test_run_is_deterministic(tiny_split):
+def test_run_is_deterministic(tiny_split: tuple[dict, dict]) -> None:
+    """Verify two runs on the same split produce identical fitted weights and F1."""
     train, eval_data = tiny_split
     config = harness.Trainer().config()
     first = learned_weights.run(train, eval_data, config)

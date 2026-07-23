@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import inference
 import pytest
@@ -7,14 +8,18 @@ import train_model
 
 
 @pytest.fixture()
-def model_file(tmp_path, synthetic_dataset) -> str:
+def model_file(tmp_path: Path, synthetic_dataset: dict) -> str:
+    """Train and save a tiny model on the synthetic dataset, returning its path."""
     ds = synthetic_dataset
     out = tmp_path / "tiny_model.pt"
     train_model.train_and_save(ds["geo"], ds["sim"], ds["tra"], str(out), False, [ds["prior"]])
     return str(out)
 
 
-def test_run_inference_validates_inputs(tmp_path, synthetic_dataset, model_file):
+def test_run_inference_validates_inputs(
+    tmp_path: Path, synthetic_dataset: dict, model_file: str
+) -> None:
+    """Reject wrong extensions and a missing model before running inference."""
     ds = synthetic_dataset
     out = str(tmp_path / "classifications.pt")
     with pytest.raises(ValueError, match="sim-file"):
@@ -25,7 +30,10 @@ def test_run_inference_validates_inputs(tmp_path, synthetic_dataset, model_file)
         inference.run_inference(str(tmp_path / "no.pt"), ds["geo"], ds["sim"], ds["tra"], out)
 
 
-def test_run_inference_end_to_end(tmp_path, synthetic_dataset, model_file):
+def test_run_inference_end_to_end(
+    tmp_path: Path, synthetic_dataset: dict, model_file: str
+) -> None:
+    """Run inference end to end and classify the separable events exactly."""
     ds = synthetic_dataset
     out = tmp_path / "results" / "classifications.pt"
     classifications = inference.run_inference(model_file, ds["geo"], ds["sim"], ds["tra"], str(out))
@@ -42,7 +50,10 @@ def test_run_inference_end_to_end(tmp_path, synthetic_dataset, model_file):
     assert torch.equal(classifications[:18], expected)
 
 
-def test_parse_args_requires_model_and_paths(monkeypatch, capsys):
+def test_parse_args_requires_model_and_paths(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Require model and path args and parse a valid argv into the namespace."""
     monkeypatch.setattr(sys, "argv", ["inference.py", "--sim-file", "a.sim"])
     with pytest.raises(SystemExit):
         inference.parse_args()

@@ -1,4 +1,6 @@
 import json
+from collections.abc import Iterator
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pytest
@@ -17,12 +19,14 @@ COUNTS = {"tp": 5, "fp": 1, "fn": 2, "tn": 8}
 
 
 @pytest.fixture(autouse=True)
-def close_figures():
+def close_figures() -> Iterator[None]:
+    """Close all matplotlib figures after each test."""
     yield
     plt.close("all")
 
 
-def test_save_figure_creates_parents_and_closes(tmp_path):
+def test_save_figure_creates_parents_and_closes(tmp_path: Path) -> None:
+    """Save a figure, creating parent dirs and closing the figure."""
     fig = plt.figure()
     path = tmp_path / "nested" / "figure.png"
     save_figure(fig, path)
@@ -30,24 +34,28 @@ def test_save_figure_creates_parents_and_closes(tmp_path):
     assert fig.number not in plt.get_fignums()
 
 
-def test_save_confusion_matrix(tmp_path):
+def test_save_confusion_matrix(tmp_path: Path) -> None:
+    """Write a named confusion-matrix PNG to disk."""
     save_confusion_matrix(COUNTS, tmp_path, "train")
     assert (tmp_path / "confusion_matrix_train.png").is_file()
 
 
-def test_save_score_curves(tmp_path):
+def test_save_score_curves(tmp_path: Path) -> None:
+    """Write ROC and PR curve PNGs for pooled scores."""
     pooled = (torch.tensor([3.0, 2.0, 1.0, 0.0]), torch.tensor([1, 1, 0, 0]))
     save_score_curves(pooled, tmp_path, "eval")
     assert (tmp_path / "roc_eval.png").is_file()
     assert (tmp_path / "pr_eval.png").is_file()
 
 
-def test_save_score_curves_none_is_noop(tmp_path):
+def test_save_score_curves_none_is_noop(tmp_path: Path) -> None:
+    """Write nothing when there are no pooled scores."""
     save_score_curves(None, tmp_path, "eval")
     assert list(tmp_path.iterdir()) == []
 
 
-def test_save_density_terms_one_file_per_term(tmp_path):
+def test_save_density_terms_one_file_per_term(tmp_path: Path) -> None:
+    """Write one density PNG per fitted term, skipping term-less buckets."""
     term = {
         "kind": "1d",
         "xfeat": "delta_E",
@@ -64,14 +72,16 @@ def test_save_density_terms_one_file_per_term(tmp_path):
     assert len(list(tmp_path.glob("density_*.png"))) == 1
 
 
-def test_save_sky_backprojection(tmp_path):
+def test_save_sky_backprojection(tmp_path: Path) -> None:
+    """Write the sky-backprojection PNG from a single image."""
     image = torch.zeros(4, 8)
     image[2, 3] = 1.0
-    save_sky_backprojection([("All events", image, 7)], tmp_path, (0.0, 6.28), (0.0, 3.14))
+    save_sky_backprojection(image, 7, tmp_path, (0.0, 6.28), (0.0, 3.14))
     assert (tmp_path / "sky_backprojection.png").is_file()
 
 
-def test_write_metrics_json_roundtrip(tmp_path):
+def test_write_metrics_json_roundtrip(tmp_path: Path) -> None:
+    """Write metrics.json and read the same record back."""
     record = {"dataset": "tiny", "train": COUNTS}
     path = write_metrics_json(tmp_path / "run", record)
     assert path == tmp_path / "run" / "metrics.json"

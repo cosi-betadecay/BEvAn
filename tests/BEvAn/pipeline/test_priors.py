@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -16,7 +17,8 @@ from pipeline.priors import (
 )
 
 
-def test_validate_prior_sims_rejects_bad_paths(tmp_path):
+def test_validate_prior_sims_rejects_bad_paths(tmp_path: Path) -> None:
+    """Reject empty, wrong-extension, and missing prior-sim paths; accept a valid one."""
     with pytest.raises(ValueError, match="At least one"):
         validate_prior_sims([])
     with pytest.raises(ValueError, match=r"\.sim"):
@@ -28,7 +30,8 @@ def test_validate_prior_sims_rejects_bad_paths(tmp_path):
     validate_prior_sims([str(ok)])
 
 
-def test_count_prior_events_matches_direct_parse(geo_path, sim_path):
+def test_count_prior_events_matches_direct_parse(geo_path: Path, sim_path: Path) -> None:
+    """Match count_prior_events against a direct per-bucket parse of the sim file."""
     counts = count_prior_events(str(geo_path), [str(sim_path)])
 
     expected = {b: {"bdecay": 0, "bg": 0} for b in (1, 2, 3)}
@@ -43,7 +46,8 @@ def test_count_prior_events_matches_direct_parse(geo_path, sim_path):
     assert sum(sum(c.values()) for c in counts.values()) > 0
 
 
-def test_count_prior_events_sums_over_files(geo_path, sim_path):
+def test_count_prior_events_sums_over_files(geo_path: Path, sim_path: Path) -> None:
+    """Sum prior counts linearly across repeated sim files."""
     single = count_prior_events(str(geo_path), [str(sim_path)])
     double = count_prior_events(str(geo_path), [str(sim_path), str(sim_path)])
     for b in (1, 2, 3):
@@ -52,7 +56,7 @@ def test_count_prior_events_sums_over_files(geo_path, sim_path):
 
 
 @pytest.mark.parametrize("n_std", [1, 2, 5, 10])
-def test_pool_prior_counts_matches_a_fresh_count(geo_path, sim_path, n_std):
+def test_pool_prior_counts_matches_a_fresh_count(geo_path: Path, sim_path: Path, n_std: int) -> None:
     """The pooled prior must reproduce a fresh stream at every window, not just 5."""
     pool = count_prior_pool(str(geo_path), [str(sim_path)])
 
@@ -67,12 +71,18 @@ def test_pool_prior_counts_matches_a_fresh_count(geo_path, sim_path, n_std):
     assert pool_prior_counts(pool, n_std) == expected
 
 
-def test_pool_prior_counts_at_the_deployed_window_matches_count_prior_events(geo_path, sim_path):
+def test_pool_prior_counts_at_the_deployed_window_matches_count_prior_events(
+    geo_path: Path, sim_path: Path
+) -> None:
+    """Reproduce count_prior_events from the pool at the deployed window of 5."""
     pool = count_prior_pool(str(geo_path), [str(sim_path)])
     assert pool_prior_counts(pool, 5) == count_prior_events(str(geo_path), [str(sim_path)])
 
 
-def test_count_prior_pool_skips_zero_hit_events_and_sums_over_files(geo_path, sim_path):
+def test_count_prior_pool_skips_zero_hit_events_and_sums_over_files(
+    geo_path: Path, sim_path: Path
+) -> None:
+    """Skip zero-hit events and sum pool rows across repeated files."""
     n_nonempty = sum(1 for e in iter_sim_events(sim_path) if e.GetNHTs() > 0)
     single = count_prior_pool(str(geo_path), [str(sim_path)])
     double = count_prior_pool(str(geo_path), [str(sim_path), str(sim_path)])
@@ -81,19 +91,22 @@ def test_count_prior_pool_skips_zero_hit_events_and_sums_over_files(geo_path, si
     assert double["bucket"].numel() == 2 * n_nonempty
 
 
-def test_validate_prior_counts_raises_on_empty_bucket():
+def test_validate_prior_counts_raises_on_empty_bucket() -> None:
+    """Raise when a bucket has no prior events at all."""
     counts = {1: {"bdecay": 1, "bg": 1}, 2: {"bdecay": 0, "bg": 0}, 3: {"bdecay": 1, "bg": 1}}
     with pytest.raises(ValueError, match="bucket 2"):
         validate_prior_counts(counts)
 
 
-def test_validate_prior_counts_warns_on_single_class_bucket():
+def test_validate_prior_counts_warns_on_single_class_bucket() -> None:
+    """Warn when a bucket holds only one class of prior events."""
     counts = {1: {"bdecay": 1, "bg": 1}, 2: {"bdecay": 3, "bg": 0}, 3: {"bdecay": 1, "bg": 1}}
     with pytest.warns(UserWarning, match="Bucket 2"):
         validate_prior_counts(counts)
 
 
-def test_bucket_priors_fractions_and_nan():
+def test_bucket_priors_fractions_and_nan() -> None:
+    """Compute per-bucket beta fractions, yielding NaN for an empty bucket."""
     counts = {1: {"bdecay": 1, "bg": 3}, 2: {"bdecay": 0, "bg": 0}, 3: {"bdecay": 2, "bg": 2}}
     priors = bucket_priors(counts)
     assert priors[1] == pytest.approx(0.25)
@@ -101,7 +114,9 @@ def test_bucket_priors_fractions_and_nan():
     assert priors[3] == pytest.approx(0.5)
 
 
-def test_apply_prior_counts_overwrites_only_fitted_buckets():
+def test_apply_prior_counts_overwrites_only_fitted_buckets() -> None:
+    """Overwrite counts only in buckets that have fitted density terms."""
+
     class TrainerStub:
         models: ClassVar[dict[int, dict]] = {
             1: {"n_beta": 5, "n_bg": 5, "terms": []},

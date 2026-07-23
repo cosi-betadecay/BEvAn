@@ -1,15 +1,19 @@
+from pathlib import Path
+
 import dedicated_prior
 import harness
 import label_window
 import pytest
 
 
-def test_default_sweep_covers_the_deployed_window():
+def test_default_sweep_covers_the_deployed_window() -> None:
+    """Verify the default n_std sweep spans 1..10 and includes the deployed window of 5."""
     assert tuple(range(1, 11)) == label_window.N_STD_VALUES
     assert 5 in label_window.N_STD_VALUES
 
 
-def test_run_relabels_per_window(tiny_ds, tiny_cache):
+def test_run_relabels_per_window(tiny_ds: harness.DatasetPaths, tiny_cache: Path) -> None:
+    """Verify each n_std window relabels events, shrinking positives as the window narrows."""
     results = label_window.run(tiny_ds, n_std_values=(1, 5))
     assert set(results) == {1, 5}
     for record in results.values():
@@ -21,7 +25,9 @@ def test_run_relabels_per_window(tiny_ds, tiny_cache):
     assert positives[1] < positives[5]
 
 
-def test_deployed_window_reproduces_the_dedicated_prior_record(tiny_ds, tiny_cache, tiny_split):
+def test_deployed_window_reproduces_the_dedicated_prior_record(
+    tiny_ds: harness.DatasetPaths, tiny_cache: Path, tiny_split: tuple[dict, dict]
+) -> None:
     """The whole point of the per-window prior: n_std=5 IS the deployed run.
 
     Same dataset, same seed, same dedicated-prior operating point — so the sweep's
@@ -36,7 +42,9 @@ def test_deployed_window_reproduces_the_dedicated_prior_record(tiny_ds, tiny_cac
         assert swept[key] == pytest.approx(value, nan_ok=True), key
 
 
-def test_sweep_uses_the_prior_pool_not_the_training_counts(tiny_ds, tiny_cache, monkeypatch):
+def test_sweep_uses_the_prior_pool_not_the_training_counts(
+    tiny_ds: harness.DatasetPaths, tiny_cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A doctored prior must move the sweep's operating point, per window."""
     baseline = label_window.run(tiny_ds, n_std_values=(5,))[5]
 

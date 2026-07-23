@@ -24,7 +24,7 @@ def candidate_perms(r: int) -> torch.Tensor:
     must not mutate the returned tensor.
 
     Args:
-        r (int): Subset size.
+        r: Subset size.
 
     Returns:
         ``(K, r)`` position-index orderings (K = 6 for r=3, 12 for r=4).
@@ -49,8 +49,8 @@ def hit_subsets(n_hits: int, r: int) -> torch.Tensor:
     mutate the returned tensor.
 
     Args:
-        n_hits (int): Number of hits to choose from.
-        r (int): Subset size.
+        n_hits: Number of hits to choose from.
+        r: Subset size.
 
     Returns:
         ``(C(n_hits, r), r)`` hit indices, each row ascending.

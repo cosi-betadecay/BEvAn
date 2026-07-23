@@ -11,8 +11,6 @@ from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     import torch
 
 CMAP_SIGNAL = "mako_r"
@@ -48,7 +46,7 @@ def to_numpy(values: object) -> np.ndarray:
         values: A torch tensor, NumPy array, or any array-like of numbers.
 
     Returns:
-        np.ndarray: The values as a ``float`` NumPy array (shape preserved).
+        The values as a ``float`` NumPy array (shape preserved).
     """
     if hasattr(values, "detach"):
         values = values.detach().cpu()
@@ -70,7 +68,7 @@ def density_term_features(term: dict) -> str:
         term: A 1D or 2D density term dict.
 
     Returns:
-        str: ``xfeat`` for a 1D term, or ``"<xfeat>_<yfeat>"`` for a 2D term.
+        ``xfeat`` for a 1D term, or ``"<xfeat>_<yfeat>"`` for a 2D term.
     """
     return term["xfeat"] if term.get("kind") == "1d" else f"{term['xfeat']}_{term['yfeat']}"
 
@@ -79,13 +77,13 @@ def plot_confusion_matrix(tp: int, fp: int, fn: int, tn: int) -> Figure:
     """Plot and save a confusion matrix heatmap.
 
     Args:
-        tp (int): Number of true positive events.
-        fp (int): Number of false positive events.
-        fn (int): Number of false negative events.
-        tn (int): Number of true negative events.
+        tp: Number of true positive events.
+        fp: Number of false positive events.
+        fn: Number of false negative events.
+        tn: Number of true negative events.
 
     Returns:
-        Figure: The confusion-matrix figure.
+        The confusion-matrix figure.
     """
     cm = np.array([[tp, fn], [fp, tn]])
     labels = ["Positive", "Negative"]
@@ -123,8 +121,8 @@ def roc_curve(scores: object, labels: object) -> tuple[np.ndarray, np.ndarray, f
         labels: Per-event truth labels; non-zero is the positive (β⁺) class.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, float]: ``(fpr, tpr, auc)``. ``auc`` is NaN
-        when either class is absent (the curve is then degenerate).
+        ``(fpr, tpr, auc)``. ``auc`` is NaN when either class is absent (the
+        curve is then degenerate).
     """
     scores = to_numpy(scores).ravel()
     labels = to_numpy(labels).ravel() > 0.5
@@ -158,8 +156,7 @@ def pr_curve(scores: object, labels: object) -> tuple[np.ndarray, np.ndarray, fl
         labels: Per-event truth labels; non-zero is the positive (β⁺) class.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, float]: ``(recall, precision, ap)``. ``ap``
-        is NaN when there are no positives.
+        ``(recall, precision, ap)``. ``ap`` is NaN when there are no positives.
     """
     scores = to_numpy(scores).ravel()
     labels = to_numpy(labels).ravel() > 0.5
@@ -189,7 +186,7 @@ def plot_roc_curve(scores: object, labels: object, title: str = "ROC curve") -> 
         title: Axes title.
 
     Returns:
-        Figure: The ROC figure, with the AUC shown in the legend.
+        The ROC figure, with the AUC shown in the legend.
     """
     fpr, tpr, auc = roc_curve(scores, labels)
 
@@ -216,7 +213,7 @@ def plot_pr_curve(scores: object, labels: object, title: str = "Precision-recall
         title: Axes title.
 
     Returns:
-        Figure: The precision-recall figure, with the average precision in the legend.
+        The precision-recall figure, with the average precision in the legend.
     """
     recall, precision, ap = pr_curve(scores, labels)
     labels_np = to_numpy(labels).ravel() > 0.5
@@ -237,82 +234,68 @@ def plot_pr_curve(scores: object, labels: object, title: str = "Precision-recall
 
 
 def plot_sky_backprojection(
-    panels: Sequence[tuple[str, torch.Tensor, int]],
+    image: torch.Tensor,
+    n_events: int,
     phi_range: tuple[float, float] = (0.0, 2.0 * np.pi),
     theta_range: tuple[float, float] = (0.0, np.pi),
     title: str = "Compton-cone backprojection",
 ) -> Figure:
-    """Plot backprojected sky images side by side, one panel per event selection.
+    """Plot the accumulated far-field backprojection as a θ/φ heatmap.
 
-    Each panel renders one accumulated far-field backprojection (the stacked
-    Compton-cone circles of its event selection) as a θ/φ heatmap. Because the
-    selections differ by orders of magnitude in event count, every panel is
-    stretched independently — percentile-clipped so the diffuse cone-crossing
-    background does not swallow the colour range — and absolute pixel values are
-    meaningless across panels; each panel instead reports its event count and the
-    significance of its brightest pixel, ``(max - mean) / std``. A crosshair at
-    the first panel's peak is drawn on all panels, so the eye can compare where
-    (and whether) each selection concentrates at the same source position.
+    Renders the stacked Compton-cone circles of every event as one sky image,
+    percentile-clipped so the diffuse cone-crossing background does not swallow
+    the colour range. A crosshair marks the brightest pixel — the reconstructed
+    source direction the ARM feature is measured against — and the panel reports
+    its event count and the significance of that peak, ``(max - mean) / std``.
 
     Args:
-        panels: One ``(title, image, n_events)`` per panel — the panel title, the
-            accumulated ``(n_theta, n_phi)`` sky image, and its event count. The
-            first panel is the reference whose peak sets the crosshair.
-        phi_range: ``(min, max)`` azimuthal extent of the images, in radians.
-        theta_range: ``(min, max)`` polar extent of the images, in radians.
+        image: The accumulated ``(n_theta, n_phi)`` sky image.
+        n_events: Number of events stacked into the image.
+        phi_range: ``(min, max)`` azimuthal extent of the image, in radians.
+        theta_range: ``(min, max)`` polar extent of the image, in radians.
         title: Figure suptitle.
 
     Returns:
-        Figure: The multi-panel sky-image figure.
-
-    Raises:
-        ValueError: If ``panels`` is empty.
+        The sky-image figure.
     """
-    if not panels:
-        raise ValueError("plot_sky_backprojection needs at least one panel.")
-
-    images = [to_numpy(image) for _, image, _ in panels]
-    n_theta, n_phi = images[0].shape
+    image = to_numpy(image)
+    n_theta, n_phi = image.shape
     phi_edges = np.degrees(np.linspace(phi_range[0], phi_range[1], n_phi + 1))
     theta_edges = np.degrees(np.linspace(theta_range[0], theta_range[1], n_theta + 1))
 
-    # Crosshair: the reference (first) panel's brightest pixel, at its bin center.
-    peak_theta_idx, peak_phi_idx = np.unravel_index(np.argmax(images[0]), images[0].shape)
+    # Crosshair at the brightest pixel, drawn at its bin center.
+    peak_theta_idx, peak_phi_idx = np.unravel_index(np.argmax(image), image.shape)
     peak_phi = (phi_edges[peak_phi_idx] + phi_edges[peak_phi_idx + 1]) / 2
     peak_theta = (theta_edges[peak_theta_idx] + theta_edges[peak_theta_idx + 1]) / 2
 
-    fig, axes = plt.subplots(1, len(panels), figsize=(6 * len(panels), 4.5), sharey=True)
-    for ax, (panel_title, _, n_events), image in zip(np.atleast_1d(axes), panels, images, strict=True):
-        vmin, vmax = np.percentile(image, [1.0, 99.5])
-        if vmax <= vmin:
-            vmax = vmin + 1.0
-        ax.pcolormesh(phi_edges, theta_edges, image, cmap=CMAP_SIGNAL, vmin=vmin, vmax=vmax)
-        # A white under-stroke keeps the crosshair legible over the cone texture.
-        stroke = [patheffects.withStroke(linewidth=2.5, foreground="white")]
-        ax.axvline(peak_phi, color=COLOR_REFERENCE, lw=1, ls="--", path_effects=stroke)
-        ax.axhline(peak_theta, color=COLOR_REFERENCE, lw=1, ls="--", path_effects=stroke)
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    vmin, vmax = np.percentile(image, [1.0, 99.5])
+    if vmax <= vmin:
+        vmax = vmin + 1.0
+    ax.pcolormesh(phi_edges, theta_edges, image, cmap=CMAP_SIGNAL, vmin=vmin, vmax=vmax)
+    # A white under-stroke keeps the crosshair legible over the cone texture.
+    stroke = [patheffects.withStroke(linewidth=2.5, foreground="white")]
+    ax.axvline(peak_phi, color=COLOR_REFERENCE, lw=1, ls="--", path_effects=stroke)
+    ax.axhline(peak_theta, color=COLOR_REFERENCE, lw=1, ls="--", path_effects=stroke)
 
-        std = image.std()
-        annotation = f"N = {n_events:,}"
-        if std > 0:
-            annotation += f"\npeak {(image.max() - image.mean()) / std:.1f}σ"
-        ax.text(
-            0.98,
-            0.96,
-            annotation,
-            transform=ax.transAxes,
-            ha="right",
-            va="top",
-            fontsize=LEGEND_SIZE,
-            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85},
-        )
-        ax.set_title(panel_title, fontsize=TITLE_SIZE)
-        ax.set_xlabel("φ [deg]", fontsize=LABEL_SIZE)
-        ax.tick_params(axis="both", labelsize=TICK_SIZE)
-
-    first = np.atleast_1d(axes)[0]
-    first.set_ylabel("θ [deg]", fontsize=LABEL_SIZE)
-    first.invert_yaxis()
+    std = image.std()
+    annotation = f"N = {n_events:,}"
+    if std > 0:
+        annotation += f"\npeak {(image.max() - image.mean()) / std:.1f}σ"
+    ax.text(
+        0.98,
+        0.96,
+        annotation,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=LEGEND_SIZE,
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85},
+    )
+    ax.set_xlabel("φ [deg]", fontsize=LABEL_SIZE)
+    ax.set_ylabel("θ [deg]", fontsize=LABEL_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_SIZE)
+    ax.invert_yaxis()
 
     fig.suptitle(title, fontsize=SUPTITLE_SIZE)
     fig.tight_layout()
@@ -423,7 +406,7 @@ def plot_density_1d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
         bg_cmap: Colormap for the background panel.
 
     Returns:
-        Figure: The two-panel density figure.
+        The two-panel density figure.
     """
     x_meta = axis_meta(term["xfeat"])
     x_bins = to_numpy(term["x_bins"])
@@ -454,7 +437,7 @@ def plot_density_2d(term: dict, signal_cmap: str, bg_cmap: str) -> Figure:
         bg_cmap: Colormap for the background panel.
 
     Returns:
-        Figure: The two-panel density figure.
+        The two-panel density figure.
     """
     x_meta, y_meta = axis_meta(term["xfeat"]), axis_meta(term["yfeat"])
     x_bins, y_bins = to_numpy(term["x_bins"]), to_numpy(term["y_bins"])
@@ -498,7 +481,7 @@ def plot_density_matrix(
         bg_cmap: Colormap for the background class.
 
     Returns:
-        Figure: The two-panel (β⁺ decay vs background) density figure.
+        The two-panel (β⁺ decay vs background) density figure.
 
     Raises:
         ValueError: If ``term`` is neither a 1D nor a 2D density term.

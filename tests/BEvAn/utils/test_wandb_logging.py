@@ -28,7 +28,7 @@ class TrainerStub:
 
 
 @pytest.fixture()
-def logged(monkeypatch) -> dict:
+def logged(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Fake an active W&B run and capture everything the helpers log."""
     captured: dict = {}
     monkeypatch.setattr(wandb, "run", object())
@@ -37,7 +37,8 @@ def logged(monkeypatch) -> dict:
     return captured
 
 
-def test_helpers_noop_without_active_run(monkeypatch):
+def test_helpers_noop_without_active_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Log nothing from any helper when there is no active W&B run."""
     monkeypatch.setattr(wandb, "run", None)
     monkeypatch.setattr(wandb, "log", pytest.fail)
     log_confusion_matrix(COUNTS)
@@ -45,30 +46,35 @@ def test_helpers_noop_without_active_run(monkeypatch):
     log_pr_curve(*SCORES)
     log_density_matrix(TERM_1D)
     log_score_curves(SCORES)
-    log_sky_backprojection([("All", torch.zeros(2, 2), 1)], (0.0, 6.28), (0.0, 3.14))
+    log_sky_backprojection(torch.zeros(2, 2), 1, (0.0, 6.28), (0.0, 3.14))
     log_density_terms(TrainerStub())
 
 
-def test_log_confusion_matrix_key(logged):
+def test_log_confusion_matrix_key(logged: dict) -> None:
+    """Log the confusion matrix under the split-namespaced key."""
     log_confusion_matrix(COUNTS, split_name="eval/n2")
     assert set(logged) == {"eval/n2/confusion_matrix"}
 
 
-def test_log_score_curves_keys(logged):
+def test_log_score_curves_keys(logged: dict) -> None:
+    """Log ROC and PR curves under the split-namespaced keys."""
     log_score_curves(SCORES, split_name="train")
     assert set(logged) == {"train/roc_curve", "train/pr_curve"}
 
 
-def test_log_score_curves_none_is_noop(logged):
+def test_log_score_curves_none_is_noop(logged: dict) -> None:
+    """Log nothing when there are no pooled scores."""
     log_score_curves(None)
     assert logged == {}
 
 
-def test_log_density_terms_namespaced_by_bucket(logged):
+def test_log_density_terms_namespaced_by_bucket(logged: dict) -> None:
+    """Log each density term under a bucket-namespaced key."""
     log_density_terms(TrainerStub())
     assert set(logged) == {"model/density/n1/delta_E"}
 
 
-def test_log_sky_backprojection_key(logged):
-    log_sky_backprojection([("All", torch.zeros(2, 2), 1)], (0.0, 6.28), (0.0, 3.14))
+def test_log_sky_backprojection_key(logged: dict) -> None:
+    """Log the sky backprojection under its model-namespaced key."""
+    log_sky_backprojection(torch.zeros(2, 2), 1, (0.0, 6.28), (0.0, 3.14))
     assert set(logged) == {"model/sky_backprojection"}

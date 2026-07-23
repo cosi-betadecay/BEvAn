@@ -1,5 +1,4 @@
 import json
-from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -86,25 +85,27 @@ def save_density_terms(trainer: Trainer, out_dir: Path) -> None:
 
 
 def save_sky_backprojection(
-    panels: Sequence[tuple[str, torch.Tensor, int]],
+    image: torch.Tensor,
+    n_events: int,
     out_dir: Path,
     phi_range: tuple[float, float],
     theta_range: tuple[float, float],
 ) -> None:
-    """Save the per-selection sky-image figure as ``sky_backprojection.png``.
+    """Save the sky-image figure as ``sky_backprojection.png``.
 
     The local-disk counterpart of
-    :func:`utils.wandb_logging.log_sky_backprojection`. The tagging is
-    model-level (independent of split), so this is called once per run.
+    :func:`utils.wandb_logging.log_sky_backprojection`. Model-level
+    (independent of split), so this is called once per run.
 
     Args:
-        panels: Per-panel ``(title, image, n_events)`` tuples (see
+        image: The accumulated ``(n_theta, n_phi)`` sky image (see
             :func:`utils.plots.plot_sky_backprojection`).
+        n_events: Number of events stacked into the image.
         out_dir: Per-dataset results directory.
-        phi_range: ``(min, max)`` azimuthal extent of the images, in radians.
-        theta_range: ``(min, max)`` polar extent of the images, in radians.
+        phi_range: ``(min, max)`` azimuthal extent of the image, in radians.
+        theta_range: ``(min, max)`` polar extent of the image, in radians.
     """
-    fig = plot_sky_backprojection(panels, phi_range, theta_range)
+    fig = plot_sky_backprojection(image, n_events, phi_range, theta_range)
     save_figure(fig, Path(out_dir) / "sky_backprojection.png")
 
 
@@ -117,7 +118,7 @@ def write_metrics_json(out_dir: Path, record: dict) -> Path:
             and the per-split (``train``/``eval``) metric blocks.
 
     Returns:
-        Path: The written ``metrics.json`` path.
+        The written ``metrics.json`` path.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

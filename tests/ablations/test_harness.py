@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import harness
 import pytest
@@ -8,7 +9,9 @@ from pipeline.datasets import BUCKETS, CLASSES, FEATURES
 from pipeline.eval import Evaluator
 
 
-def make_data_dir(tmp_path, monkeypatch, folders: dict[str, list[str]]):
+def make_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, folders: dict[str, list[str]]
+) -> Path:
     """Point harness at a tmp data/ tree holding the given per-folder filenames."""
     data_dir = tmp_path / "data"
     for name, files in folders.items():
@@ -21,7 +24,10 @@ def make_data_dir(tmp_path, monkeypatch, folders: dict[str, list[str]]):
     return data_dir
 
 
-def test_discover_datasets_complete_folder_only(tmp_path, monkeypatch, capsys):
+def test_discover_datasets_complete_folder_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Verify discover_datasets returns only folders with all required files and reports skips."""
     make_data_dir(
         tmp_path,
         monkeypatch,
@@ -49,7 +55,8 @@ def test_discover_datasets_complete_folder_only(tmp_path, monkeypatch, capsys):
     assert "cosima" not in skipped  # folders with no .sim at all are ignored silently
 
 
-def test_aggregate_seed_records_mean_std_and_passthrough():
+def test_aggregate_seed_records_mean_std_and_passthrough() -> None:
+    """Verify seed aggregation averages scalars, adds std columns, and passes non-scalars through."""
     records = [
         {"f1_score": 0.8, "tp": 1, "weights": {"arm": 1.0}},
         {"f1_score": 0.6, "tp": 3, "weights": {"arm": 2.0}},
@@ -61,7 +68,8 @@ def test_aggregate_seed_records_mean_std_and_passthrough():
     assert agg["weights"] == {"arm": 1.0}  # non-scalars carried from the first seed
 
 
-def test_aggregate_seed_records_needs_two_finite_for_std():
+def test_aggregate_seed_records_needs_two_finite_for_std() -> None:
+    """Verify std is NaN unless at least two finite values are aggregated."""
     single = harness.aggregate_seed_records([{"f1_score": 0.8}])
     assert single["f1_score"] == pytest.approx(0.8)
     assert math.isnan(single["f1_score_std"])
@@ -70,7 +78,10 @@ def test_aggregate_seed_records_needs_two_finite_for_std():
     assert math.isnan(one_finite["f1_score_std"])
 
 
-def test_extract_split_seed_varies_partition(tiny_ds, tiny_cache):
+def test_extract_split_seed_varies_partition(
+    tiny_ds: harness.DatasetPaths, tiny_cache: Path
+) -> None:
+    """Verify a different split seed repartitions the same cached feature pool."""
     train_default, _ = harness.extract_split(tiny_ds)
     train_seeded, _ = harness.extract_split(tiny_ds, seed=43)
     assert train_seeded["bdecay"][2]["delta_E"].numel() == train_default["bdecay"][2]["delta_E"].numel()
@@ -81,7 +92,10 @@ def test_extract_split_seed_varies_partition(tiny_ds, tiny_cache):
     )
 
 
-def test_extract_split_writes_and_reuses_cache(tiny_ds, tiny_cache):
+def test_extract_split_writes_and_reuses_cache(
+    tiny_ds: harness.DatasetPaths, tiny_cache: Path
+) -> None:
+    """Verify extract_split writes its cache once and reuses it without re-extracting."""
     train, eval_data = harness.extract_split(tiny_ds)
     assert (tiny_cache / "tiny_ckd.pt").is_file()
     for cls in CLASSES:
@@ -91,7 +105,8 @@ def test_extract_split_writes_and_reuses_cache(tiny_ds, tiny_cache):
     assert train["bdecay"][2]["delta_E"].numel() == 4
     assert eval_data["bdecay"][2]["delta_E"].numel() == 2
 
-    def boom(*args, **kwargs):
+    def boom(*args: object, **kwargs: object) -> None:
+        """Fail if the extraction payload is rebuilt instead of read from cache."""
         raise AssertionError("cache miss: re-extracted despite existing cache")
 
     original = harness.__dict__["_extract_payload"]
@@ -103,7 +118,8 @@ def test_extract_split_writes_and_reuses_cache(tiny_ds, tiny_cache):
     assert torch.equal(train_again["bdecay"][2]["delta_E"], train["bdecay"][2]["delta_E"])
 
 
-def test_extract_keyed_layout_and_sky(tiny_ds, tiny_cache):
+def test_extract_keyed_layout_and_sky(tiny_ds: harness.DatasetPaths, tiny_cache: Path) -> None:
+    """Verify extract_keyed's per-cell key layout and the all-events sky image totals."""
     data, keys, sky_image, n_events = harness.extract_keyed(tiny_ds)
     assert sky_image.shape == (180, 360)
     assert n_events == 6  # the six Compton events of the synthetic .tra
@@ -115,7 +131,8 @@ def test_extract_keyed_layout_and_sky(tiny_ds, tiny_cache):
     assert total == 30  # every non-empty synthetic event lands in exactly one cell
 
 
-def test_extract_pool_caches_flat_pool(tiny_ds, tiny_cache):
+def test_extract_pool_caches_flat_pool(tiny_ds: harness.DatasetPaths, tiny_cache: Path) -> None:
+    """Verify extract_pool caches and reuses a flat feature pool of every non-empty event."""
     pool = harness.extract_pool(tiny_ds)
     assert (tiny_cache / "tiny_ckd_pool.pt").is_file()
     assert pool["bucket"].numel() == 30
@@ -124,21 +141,24 @@ def test_extract_pool_caches_flat_pool(tiny_ds, tiny_cache):
     assert torch.equal(again["label_score"], pool["label_score"])
 
 
-def test_reference_uses_default_trainer_config(tiny_split):
+def test_reference_uses_default_trainer_config(tiny_split: tuple[dict, dict]) -> None:
+    """Verify the reference model trains with the default trainer config across all buckets."""
     train, _ = tiny_split
     trainer, config = harness.reference(train)
     assert config == harness.Trainer().config()
     assert set(trainer.models) == set(BUCKETS)
 
 
-def test_pooled_counts_match_evaluator_totals(tiny_split):
+def test_pooled_counts_match_evaluator_totals(tiny_split: tuple[dict, dict]) -> None:
+    """Verify pooled_counts reproduces the evaluator's own confusion totals."""
     train, eval_data = tiny_split
     trainer, _ = harness.reference(train)
     evaluator = Evaluator(trainer)
     assert harness.pooled_counts(evaluator, eval_data) == evaluator.evaluate(eval_data)
 
 
-def test_metric_record_keys(tiny_split):
+def test_metric_record_keys(tiny_split: tuple[dict, dict]) -> None:
+    """Verify metric_record reports the full set of confusion and ranking metrics."""
     train, eval_data = tiny_split
     trainer, _ = harness.reference(train)
     record = harness.metric_record(trainer, eval_data)
@@ -159,7 +179,8 @@ def test_metric_record_keys(tiny_split):
     assert record["tp"] + record["fp"] + record["fn"] + record["tn"] + record["excluded"] > 0
 
 
-def test_save_model_plots_writes_figure_set(tiny_split, tmp_path):
+def test_save_model_plots_writes_figure_set(tiny_split: tuple[dict, dict], tmp_path: Path) -> None:
+    """Verify save_model_plots writes the confusion, ROC, PR, and density figures."""
     train, eval_data = tiny_split
     trainer, _ = harness.reference(train)
     out = tmp_path / "reference"
@@ -170,7 +191,8 @@ def test_save_model_plots_writes_figure_set(tiny_split, tmp_path):
     assert list(out.glob("density_*.png"))
 
 
-def test_best_f1_record_on_separable_split(tiny_split):
+def test_best_f1_record_on_separable_split(tiny_split: tuple[dict, dict]) -> None:
+    """Verify best_f1_record yields a valid F1 and accounts for every positive event."""
     train, eval_data = tiny_split
     trainer, _ = harness.reference(train)
     record = harness.best_f1_record(trainer, train, eval_data)
@@ -178,7 +200,8 @@ def test_best_f1_record_on_separable_split(tiny_split):
     assert record["tp"] + record["fn"] == int(sum(eval_data["bdecay"][b]["delta_E"].numel() for b in BUCKETS))
 
 
-def test_best_f1_record_empty_split_is_nan(tiny_split):
+def test_best_f1_record_empty_split_is_nan(tiny_split: tuple[dict, dict]) -> None:
+    """Verify best_f1_record degrades to zero counts and NaN scores on empty data."""
     train, _ = tiny_split
     trainer, _ = harness.reference(train)
     empty = {cls: {b: {f: torch.tensor([]) for f in FEATURES} for b in BUCKETS} for cls in CLASSES}
@@ -188,12 +211,14 @@ def test_best_f1_record_empty_split_is_nan(tiny_split):
     assert math.isnan(record["auc"])
 
 
-def test_term_factor_dispatch():
+def test_term_factor_dispatch() -> None:
+    """Verify term_factor picks the x-feature for 1d terms and the y-feature for 2d terms."""
     assert harness.term_factor({"kind": "1d", "xfeat": "delta_E"}) == "delta_E"
     assert harness.term_factor({"kind": "2d", "xfeat": "delta_E", "yfeat": "arm"}) == "arm"
 
 
-def test_all_factors_finite_mask():
+def test_all_factors_finite_mask() -> None:
+    """Verify all_factors_finite masks rows where any factor is NaN."""
     nan = float("nan")
     bucket = {
         "delta_E": torch.tensor([1.0, 1.0, nan]),
@@ -203,14 +228,16 @@ def test_all_factors_finite_mask():
     assert harness.all_factors_finite(bucket).tolist() == [True, False, False]
 
 
-def test_bins_from_counts_scaling():
+def test_bins_from_counts_scaling() -> None:
+    """Verify bins_from_counts scales with sample count and dimension and respects min_bins."""
     assert harness.bins_from_counts(0, d=1, rho_floor=10.0) == 2
     assert harness.bins_from_counts(1000, d=1, rho_floor=10.0) == 100
     assert harness.bins_from_counts(1000, d=2, rho_floor=10.0) == 10
     assert harness.bins_from_counts(5, d=1, rho_floor=10.0, min_bins=4) == 4
 
 
-def test_factor_1d_llr_scores_common_population(tiny_split):
+def test_factor_1d_llr_scores_common_population(tiny_split: tuple[dict, dict]) -> None:
+    """Verify factor_1d_llr scores the shared eval population with aligned labels."""
     train, eval_data = tiny_split
     scored = harness.factor_1d_llr(train, eval_data, "delta_E")
     assert scored is not None
@@ -220,14 +247,16 @@ def test_factor_1d_llr_scores_common_population(tiny_split):
     assert labels.sum() == eval_data["bdecay"][3]["delta_E"].numel()
 
 
-def test_factor_1d_llr_none_when_class_empty(tiny_split):
+def test_factor_1d_llr_none_when_class_empty(tiny_split: tuple[dict, dict]) -> None:
+    """Verify factor_1d_llr returns None when a class has no training events to fit."""
     train, eval_data = tiny_split
     for f in FEATURES:
         train["bdecay"][3][f] = torch.tensor([])
     assert harness.factor_1d_llr(train, eval_data, "delta_E") is None
 
 
-def test_bucket_full_scores(tiny_split):
+def test_bucket_full_scores(tiny_split: tuple[dict, dict]) -> None:
+    """Verify bucket_full_scores returns valid F1/AUC and NaNs them on empty data."""
     train, eval_data = tiny_split
     trainer, _ = harness.reference(train)
     scores = harness.bucket_full_scores(trainer, eval_data)
@@ -239,7 +268,8 @@ def test_bucket_full_scores(tiny_split):
     assert math.isnan(nan_scores["f1"]) and math.isnan(nan_scores["auc"])
 
 
-def test_term_llr_columns_zero_for_absent_factors(tiny_split):
+def test_term_llr_columns_zero_for_absent_factors(tiny_split: tuple[dict, dict]) -> None:
+    """Verify term_llr_columns zeros the columns for factors a bucket does not contribute."""
     train, _ = tiny_split
     trainer, _ = harness.reference(train)
     x, y = harness.term_llr_columns(Evaluator(trainer), train)
@@ -250,7 +280,8 @@ def test_term_llr_columns_zero_for_absent_factors(tiny_split):
     assert (x[:, harness.FACTOR_INDEX["delta_E"]] != 0).any()
 
 
-def test_term_llr_columns_empty_data(tiny_split):
+def test_term_llr_columns_empty_data(tiny_split: tuple[dict, dict]) -> None:
+    """Verify term_llr_columns yields empty matrices when there are no events to score."""
     train, _ = tiny_split
     trainer, _ = harness.reference(train)
     empty = {cls: {b: {f: torch.tensor([]) for f in FEATURES} for b in BUCKETS} for cls in CLASSES}
@@ -259,7 +290,8 @@ def test_term_llr_columns_empty_data(tiny_split):
     assert y.numel() == 0
 
 
-def test_fit_logistic_separable_sign():
+def test_fit_logistic_separable_sign() -> None:
+    """Verify fit_logistic recovers a positive weight that separates the labelled data."""
     x = torch.tensor([[-2.0], [-1.0], [1.0], [2.0]])
     y = torch.tensor([False, False, True, True])
     weights, bias = harness.fit_logistic(x, y)

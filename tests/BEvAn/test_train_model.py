@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import pytest
 import torch
@@ -7,7 +8,8 @@ import train_model
 from pipeline.train import Trainer
 
 
-def test_train_and_save_validates_inputs(tmp_path, synthetic_dataset):
+def test_train_and_save_validates_inputs(tmp_path: Path, synthetic_dataset: dict) -> None:
+    """Reject wrong extensions, a missing sim file, and an empty prior list."""
     ds = synthetic_dataset
     out = str(tmp_path / "model.pt")
     with pytest.raises(ValueError, match="sim-file"):
@@ -20,7 +22,8 @@ def test_train_and_save_validates_inputs(tmp_path, synthetic_dataset):
         train_model.train_and_save(ds["geo"], ds["sim"], ds["tra"], out, False, [])
 
 
-def test_train_and_save_end_to_end(tmp_path, synthetic_dataset):
+def test_train_and_save_end_to_end(tmp_path: Path, synthetic_dataset: dict) -> None:
+    """Train and save a model end to end with the expected counts and provenance."""
     ds = synthetic_dataset
     out = tmp_path / "models" / "tiny.pt"
     train_model.train_and_save(ds["geo"], ds["sim"], ds["tra"], str(out), False, [ds["prior"]])
@@ -40,7 +43,10 @@ def test_train_and_save_end_to_end(tmp_path, synthetic_dataset):
     assert payload["provenance"]["prior_counts"][2] == {"bdecay": 6, "bg": 6}
 
 
-def test_parse_args_requires_paths(monkeypatch, capsys):
+def test_parse_args_requires_paths(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Require the path args and parse a valid argv into the namespace."""
     monkeypatch.setattr(sys, "argv", ["train_model.py", "--sim-file", "a.sim"])
     with pytest.raises(SystemExit):
         train_model.parse_args()

@@ -1,8 +1,17 @@
+from pathlib import Path
+
 import dedicated_prior
+import harness
 import pytest
 
 
-def test_run_deploys_at_the_dedicated_prior_point(tiny_ds, tiny_cache, tiny_split, tmp_path):
+def test_run_deploys_at_the_dedicated_prior_point(
+    tiny_ds: harness.DatasetPaths,
+    tiny_cache: Path,
+    tiny_split: tuple[dict, dict],
+    tmp_path: Path,
+) -> None:
+    """Verify dedicated_prior.run deploys at the per-bucket prior and writes its plot set."""
     train, eval_data = tiny_split
     out = tmp_path / "dedicated_prior"
     record = dedicated_prior.run(tiny_ds, train, eval_data, plots_dir=out)

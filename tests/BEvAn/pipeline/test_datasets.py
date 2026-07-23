@@ -12,13 +12,16 @@ Z_HAT = torch.tensor([0.0, 0.0, 1.0])
 class ListReader:
     """Minimal reader satisfying the MFileEventsSim protocol, for synthetic events."""
 
-    def __init__(self, events: list[SimEvent]):
+    def __init__(self, events: list[SimEvent]) -> None:
+        """Store the events to stream through GetNextEvent."""
         self._it = iter(events)
 
     def GetNextEvent(self) -> SimEvent | None:
+        """Return the next event, or None when the list is exhausted."""
         return next(self._it, None)
 
     def Close(self) -> None:
+        """Satisfy the reader protocol; nothing to release."""
         return None
 
 
@@ -44,10 +47,12 @@ def _events() -> list[SimEvent]:
 
 
 def _dataset() -> Datasets:
+    """Build a Datasets over the synthetic four-event stream."""
     return Datasets(ListReader(_events()), Z_HAT)
 
 
-def test_feature_bucket_routing():
+def test_feature_bucket_routing() -> None:
+    """Route (delta_E, anni) presence to the expected feature bucket."""
     ds = _dataset()
     nan = float("nan")
     assert ds.feature_bucket(nan, nan) == 1
@@ -56,7 +61,8 @@ def test_feature_bucket_routing():
     assert ds.feature_bucket(nan, -0.9) == 3  # anni alone routes to 3
 
 
-def test_compute_event_features_routes_and_labels():
+def test_compute_event_features_routes_and_labels() -> None:
+    """Route each event to the right class/bucket cell with correct feature values."""
     data = _dataset().compute_event_features()
 
     assert data["bdecay"][1]["delta_E"].tolist() == pytest.approx([0.0])
@@ -73,7 +79,8 @@ def test_compute_event_features_routes_and_labels():
     assert len(empty) == 3  # everything except the three populated (class, bucket) cells
 
 
-def test_compute_event_features_keyed_colocation():
+def test_compute_event_features_keyed_colocation() -> None:
+    """Keep per-cell keys aligned one-to-one with the feature rows they index."""
     data, keys = _dataset().compute_event_features_keyed()
     assert keys["bdecay"][1] == [(0, 1)]
     assert keys["bg"][2] == [(0, 3)]
@@ -84,7 +91,8 @@ def test_compute_event_features_keyed_colocation():
                 assert data[cls][b][f].numel() == len(keys[cls][b])
 
 
-def test_compute_event_pool_relabel_parity():
+def test_compute_event_pool_relabel_parity() -> None:
+    """Relabeling the event pool at the deployed window reproduces direct features."""
     features = Datasets(ListReader(_events()), Z_HAT).compute_event_features()
     pool = Datasets(ListReader(_events()), Z_HAT).compute_event_pool()
     relabeled = pool_to_features(pool, n_std=5)
@@ -97,7 +105,8 @@ def test_compute_event_pool_relabel_parity():
                 assert torch.allclose(features[cls][b][f], relabeled[cls][b][f], equal_nan=True)
 
 
-def test_pool_to_features_moves_labels_with_the_window():
+def test_pool_to_features_moves_labels_with_the_window() -> None:
+    """Widen or narrow the tolerance window and watch labels move with it."""
     pool = {
         "bucket": torch.tensor([1, 1]),
         "delta_E": torch.tensor([0.5, 1.5]),
@@ -112,7 +121,8 @@ def test_pool_to_features_moves_labels_with_the_window():
     assert narrow["bg"][1]["delta_E"].numel() == 2
 
 
-def test_split_features_deterministic_and_partitioning():
+def test_split_features_deterministic_and_partitioning() -> None:
+    """Split deterministically into disjoint train/eval partitions that recombine to the input."""
     data = {
         cls: {b: {f: torch.arange(10, dtype=torch.float32) + (100 * b) for f in FEATURES} for b in BUCKETS}
         for cls in CLASSES
@@ -129,7 +139,8 @@ def test_split_features_deterministic_and_partitioning():
             assert torch.equal(combined.sort().values, data[cls][b]["delta_E"])
 
 
-def test_split_features_seed_varies_partition():
+def test_split_features_seed_varies_partition() -> None:
+    """Change the seed and get a different but still valid partition."""
     data = {
         cls: {b: {f: torch.arange(10, dtype=torch.float32) + (100 * b) for f in FEATURES} for b in BUCKETS}
         for cls in CLASSES

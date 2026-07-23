@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from fake_megalib import SimEvent
 
 TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS_DIR))
@@ -16,11 +22,13 @@ if "ROOT" not in sys.modules:
 
 @pytest.fixture(scope="session")
 def sim_path() -> Path:
+    """Provide the path to the checked-in ``.sim`` reference fixture."""
     return TESTS_DIR / "test.sim"
 
 
 @pytest.fixture(scope="session")
 def tra_path() -> Path:
+    """Provide the path to the checked-in ``.tra`` reference fixture."""
     return TESTS_DIR / "test.tra"
 
 
@@ -32,7 +40,7 @@ def geo_path(tmp_path: Path) -> Path:
     return path
 
 
-def synthetic_sim_events() -> list:
+def synthetic_sim_events() -> list[SimEvent]:
     """Small event mix covering every (class, bucket) cell.
 
     Per bucket: β⁺ events carry an ANNI whose secondary (IA id 2) hits sum into
@@ -96,7 +104,7 @@ def synthetic_sim_events() -> list:
 
 
 @pytest.fixture()
-def synthetic_dataset(tmp_path: Path, geo_path: Path) -> dict:
+def synthetic_dataset(tmp_path: Path, geo_path: Path) -> dict[str, str | int]:
     """Self-consistent tiny ``.sim``/``.tra``/prior files for entry-script tests."""
     from fake_megalib import MPhysicalEvent, PhysicalEvent, write_sim_file, write_tra_file
 

@@ -60,7 +60,7 @@ def save_comparison_csv(
         exclude: Dataset names dropped from the mean row only (kept as detail rows).
 
     Returns:
-        Path: The written ``<ablation_name>.csv``.
+        The written ``<ablation_name>.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -122,7 +122,7 @@ def save_factor_contributions_csv(
         save_dir: Directory to write the CSV into.
 
     Returns:
-        Path: The written ``factor_contributions.csv``.
+        The written ``factor_contributions.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -194,7 +194,7 @@ def save_label_window_csv(
         exclude: Dataset names dropped from the mean rows only (kept as detail rows).
 
     Returns:
-        Path: The written ``label_window.csv``.
+        The written ``label_window.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -271,7 +271,7 @@ def save_dedicated_prior_csv(
         save_dir: Directory to write the CSV into.
 
     Returns:
-        Path: The written ``dedicated_prior.csv``.
+        The written ``dedicated_prior.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -324,7 +324,7 @@ def save_timing_csv(
         save_dir: Directory to write the CSV into.
 
     Returns:
-        Path: The written ``timing.csv``.
+        The written ``timing.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -407,7 +407,7 @@ def save_summary_csv(rows: list[dict[str, str | float]], save_dir: Path = TABLES
         save_dir: Directory to write the CSV into.
 
     Returns:
-        Path: The written ``summary.csv``.
+        The written ``summary.csv``.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)

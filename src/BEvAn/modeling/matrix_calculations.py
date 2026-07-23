@@ -14,17 +14,17 @@ def build_default_edges(
     """Build default bin edges for a 1D histogram.
 
     Args:
-        x (torch.Tensor): Input tensor from which to derive the bin edges.
-        n_bins (int): Number of bins to create.
-        spacing (str): Spacing type for the bins ('linear' or 'log').
-        log_floor (float | None): Floor value for log-spaced bins.
+        x: Input tensor from which to derive the bin edges.
+        n_bins: Number of bins to create.
+        spacing: Spacing type for the bins (``'linear'`` or ``'log'``).
+        log_floor: Floor value for log-spaced bins.
 
     Raises:
-        ValueError: If the spacing is not 'linear' or 'log'.
+        ValueError: If the spacing is not ``'linear'`` or ``'log'``.
         ValueError: If there are no positive values when building log-spaced edges.
 
     Returns:
-        torch.Tensor: The bin edges.
+        The bin edges, one more than ``n_bins``.
     """
     if spacing == "linear":
         x_min, x_max = x.min(), x.max()
@@ -72,23 +72,24 @@ def build_density_matrix(
     """Build a normalized 2D probability matrix over (x, y).
 
     Args:
-        x (torch.Tensor): _x_ values for the 2D histogram.
-        y (torch.Tensor): _y_ values for the 2D histogram.
-        x_bins (torch.Tensor | None, optional): Pre-built bin edges for the x-axis. Defaults to None.
-        y_bins (torch.Tensor | None, optional): Pre-built bin edges for the y-axis. Defaults to None.
-        n_bins_x (int, optional): Number of bins for the x-axis. Defaults to 200.
-        n_bins_y (int, optional): Number of bins for the y-axis. Defaults to 200.
-        spacing_x (str, optional): Spacing type for the x-axis ('linear' or 'log'). Defaults to "linear".
-        spacing_y (str, optional): Spacing type for the y-axis ('linear' or 'log'). Defaults to "linear".
-        log_x_floor (float | None, optional): Floor value for log-spaced x-axis bins. Defaults to None.
-        log_y_floor (float | None, optional): Floor value for log-spaced y-axis bins. Defaults to None.
-        smoothing (float, optional): Smoothing parameter for Laplace-style pseudo-counts. Defaults to 0.0.
+        x: _x_ values for the 2D histogram.
+        y: _y_ values for the 2D histogram.
+        x_bins: Pre-built bin edges for the x-axis; derived from ``x`` when None.
+        y_bins: Pre-built bin edges for the y-axis; derived from ``y`` when None.
+        n_bins_x: Number of bins for the x-axis when edges are derived.
+        n_bins_y: Number of bins for the y-axis when edges are derived.
+        spacing_x: Spacing type for the x-axis (``'linear'`` or ``'log'``).
+        spacing_y: Spacing type for the y-axis (``'linear'`` or ``'log'``).
+        log_x_floor: Floor value for log-spaced x-axis bins.
+        log_y_floor: Floor value for log-spaced y-axis bins.
+        smoothing: Laplace-style pseudo-count added to every bin.
 
     Raises:
-        ValueError: If the input tensors are empty or if the binning parameters are invalid.
+        ValueError: If the input tensors are empty after dropping non-finite values.
 
     Returns:
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The normalized 2D probability matrix and the bin edges for both axes.
+        ``(probs, x_bins, y_bins)`` — the normalized 2D probability matrix and the
+        bin edges for both axes.
     """
     x = x.flatten()
     y = y.flatten()
@@ -148,16 +149,16 @@ def lookup_density_values(
     """Lookup density values from a 2D probability matrix for given (x, y) pairs.
 
     Args:
-        x (torch.Tensor): _x_ values for which to lookup density values.
-        y (torch.Tensor): _y_ values for which to lookup density values.
-        matrix (torch.Tensor): 2D probability matrix from which to lookup values.
-        x_bins (torch.Tensor): _x_ bin edges corresponding to the matrix.
-        y_bins (torch.Tensor): _y_ bin edges corresponding to the matrix.
+        x: _x_ values for which to lookup density values.
+        y: _y_ values for which to lookup density values.
+        matrix: 2D probability matrix from which to lookup values.
+        x_bins: _x_ bin edges corresponding to the matrix.
+        y_bins: _y_ bin edges corresponding to the matrix.
 
     Returns:
-        torch.Tensor: Density values corresponding to the input (x, y) pairs. Out-of-range
-            values are clamped into the edge bins (matching the build-side binning);
-            non-finite values are assigned a density of 0.0.
+        Density values corresponding to the input ``(x, y)`` pairs. Out-of-range
+        values are clamped into the edge bins (matching the build-side binning);
+        non-finite values are assigned a density of 0.0.
     """
     x = x.flatten().to(device=matrix.device, dtype=x_bins.dtype)
     y = y.flatten().to(device=matrix.device, dtype=y_bins.dtype)
@@ -199,18 +200,19 @@ def build_density_matrix_1d(
     """Build a normalized 1D probability vector over x.
 
     Args:
-        x (torch.Tensor): _x_ values for the 1D histogram.
-        x_bins (torch.Tensor | None, optional): The bin edges for the x-axis. Defaults to None.
-        n_bins_x (int, optional): The number of bins for the x-axis. Defaults to 20.
-        spacing_x (str, optional): The spacing for the x-axis bins. Defaults to "linear".
-        log_x_floor (float | None, optional): The floor value for the logarithmic spacing of the x-axis. Defaults to None.
-        smoothing (float, optional): The amount of smoothing to apply to the probability vector. Defaults to 0.0.
+        x: _x_ values for the 1D histogram.
+        x_bins: Pre-built bin edges for the x-axis; derived from ``x`` when None.
+        n_bins_x: Number of bins for the x-axis when edges are derived.
+        spacing_x: Spacing type for the x-axis (``'linear'`` or ``'log'``).
+        log_x_floor: Floor value for log-spaced x-axis bins.
+        smoothing: Laplace-style pseudo-count added to every bin.
 
     Raises:
-        ValueError: If the input tensors are empty or if the binning parameters are invalid.
+        ValueError: If the input tensor is empty after dropping non-finite values.
 
     Returns:
-        tuple[torch.Tensor, torch.Tensor]: The normalized 1D probability vector and the bin edges for the x-axis.
+        ``(probs, x_bins)`` — the normalized 1D probability vector and the bin
+        edges for the x-axis.
     """
     x = x.flatten()
     x = x[torch.isfinite(x)]
@@ -246,12 +248,12 @@ def lookup_density_values_1d(
     """1D analogue of :func:`lookup_density_values`. Out-of-range → edge bin, NaN → 0.0.
 
     Args:
-        x (torch.Tensor): _x_ values for which to lookup density values.
-        matrix (torch.Tensor): The density matrix.
-        x_bins (torch.Tensor): The bin edges for the x-axis.
+        x: _x_ values for which to lookup density values.
+        matrix: The 1D density vector.
+        x_bins: The bin edges for the x-axis.
 
     Returns:
-        torch.Tensor: The density values for the given x values.
+        The density values for the given ``x`` values.
     """
     x = x.flatten().to(device=matrix.device, dtype=x_bins.dtype)
     values = torch.full_like(x, 0.0, dtype=matrix.dtype, device=matrix.device)

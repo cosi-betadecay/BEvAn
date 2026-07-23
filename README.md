@@ -40,7 +40,7 @@ WANDB_API_KEY=your_key_here
 
 ## Data
 
-MEGAlib simulation files live one dataset per folder, `data/{name}/`, holding the train+eval pair `{name}.sim` / `{name}.tra` (for example `data/SPILike/SPILike.sim`) plus the two dedicated prior simulations `{name}_P1.sim` / `{name}_P2.sim`. The detector geometry is passed explicitly via `--geo-file` to the per-dataset entry points (`analysis.py`, `train_model.py`, `inference.py`). The ablation driver takes no geometry flag — it looks each folder's geometry up by name in the static `GEOMETRIES` map in `ablations/harness.py`, so add an entry there for any new dataset.
+The main entry points (`analysis.py`, `train_model.py`, `inference.py`) take every input as an explicit path — `--geo-file`, `--sim-file`, `--tra-file`, `--prior-sim` — so your files can live anywhere and be named anything. The `data/{name}/` layout used throughout this README (the train+eval pair `{name}.sim` / `{name}.tra` plus the prior simulations `{name}_P1.sim` / `{name}_P2.sim`, e.g. `data/SPILike/SPILike.sim`) is just a convenient convention. It becomes a hard requirement only for the ablation driver, which takes no path flags: it auto-discovers each `data/{name}/` folder by that naming scheme and looks its geometry up by name in the static `GEOMETRIES` map in `ablations/harness.py`, so add an entry there for any new dataset.
 
 The dataset used during R&D (6.38 GB — seven geometries, each with its `.sim`/`.tra`
 pair, the `mcosima` chunks they point at, and two dedicated prior runs) is hosted on Hugging Face: [**aryaraeesi/BEvAn-data**](https://huggingface.co/datasets/aryaraeesi/BEvAn-data).
@@ -137,3 +137,17 @@ anywhere — including CI, where it runs on every push (see the badge above).
 ## Documentation
 
 API documentation is built with Sphinx and published to GitHub Pages: [cosi-betadecay.github.io/BEvAn](https://cosi-betadecay.github.io/BEvAn/).
+
+## Citation
+
+If you use BEvAn in your research, please cite the repository.
+
+```bibtex
+@software{bevan,
+  author  = {Raeesi, Arya and Zoglauer, Andreas and Tomsick, John},
+  title   = {{BEvAn: $\beta^+$ Decay Event Analyzer}},
+  year    = {2026},
+  url     = {https://github.com/cosi-betadecay/BEvAn},
+  note    = {Compton Spectrometer and Imager}
+}
+```

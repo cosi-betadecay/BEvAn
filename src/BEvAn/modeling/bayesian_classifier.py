@@ -43,7 +43,7 @@ class BayesianClassifier:
         False, predicting background (those events are excluded downstream).
 
         Returns:
-            torch.Tensor: Batched boolean classification output.
+            Per-event boolean predictions (β⁺ = True).
         """
         counts = torch.tensor([float(self.n_bg), float(self.n_beta_decay)])
         log_prior_ratio = torch.log(counts[0]) - torch.log(counts[1])

@@ -1,11 +1,13 @@
 import csv
 import math
+from pathlib import Path
 
 import pytest
 import tables
 
 
-def record(f1: float, auc: float = 0.9, fpr: float = 0.1) -> dict:
+def record(f1: float, auc: float = 0.9, fpr: float = 0.1) -> dict[str, float]:
+    """Build a metric record with the given F1, AUC, and FPR (precision/recall track F1)."""
     return {"f1_score": f1, "auc": auc, "precision": f1, "recall": f1, "fpr": fpr}
 
 
@@ -15,18 +17,21 @@ COMPARISON = {
 }
 
 
-def read_csv(path) -> list[dict]:
+def read_csv(path: Path) -> list[dict[str, str]]:
+    """Read a CSV file into a list of row dicts."""
     with path.open() as fh:
         return list(csv.DictReader(fh))
 
 
-def test_mean_skips_nan():
+def test_mean_skips_nan() -> None:
+    """Verify mean ignores NaN values and returns NaN for an all-NaN or empty input."""
     assert tables.mean([1.0, float("nan"), 3.0]) == pytest.approx(2.0)
     assert math.isnan(tables.mean([float("nan")]))
     assert math.isnan(tables.mean([]))
 
 
-def test_save_comparison_csv_rows_and_mean(tmp_path):
+def test_save_comparison_csv_rows_and_mean(tmp_path: Path) -> None:
+    """Verify save_comparison_csv writes a per-dataset row plus a mean row with both models' metrics."""
     path = tables.save_comparison_csv("no_ckd_order", COMPARISON, tmp_path)
     assert path == tmp_path / "no_ckd_order.csv"
     rows = read_csv(path)
@@ -37,13 +42,15 @@ def test_save_comparison_csv_rows_and_mean(tmp_path):
     assert float(rows[0]["our_model_fpr"]) == pytest.approx(0.1)
 
 
-def test_save_comparison_csv_exclude_only_affects_mean(tmp_path):
+def test_save_comparison_csv_exclude_only_affects_mean(tmp_path: Path) -> None:
+    """Verify an excluded dataset still gets a row but is dropped from the mean."""
     rows = read_csv(tables.save_comparison_csv("x", COMPARISON, tmp_path, exclude=("B",)))
     assert [r["dataset"] for r in rows] == ["A", "B", "mean (excl. B)"]
     assert float(rows[2]["our_model_f1_score"]) == pytest.approx(0.9)  # B dropped from the mean only
 
 
-def test_summary_row_deltas():
+def test_summary_row_deltas() -> None:
+    """Verify summary_row reports mean metrics and their our_model-minus-ablation deltas."""
     row = tables.summary_row("no_ckd_order", COMPARISON)
     assert row["ablation"] == "no_ckd_order"
     assert row["our_model_f1_score"] == pytest.approx(0.8)
@@ -52,7 +59,8 @@ def test_summary_row_deltas():
     assert math.isnan(row["delta_f1_score_std"])  # no per-seed pairs given
 
 
-def test_summary_row_paired_delta_std():
+def test_summary_row_paired_delta_std() -> None:
+    """Verify summary_row's delta std comes from the paired per-seed deltas, not marginals."""
     per_seed = {
         "A": [
             {"our_model": record(0.9), "ablation": record(0.8)},  # delta -0.10
@@ -66,7 +74,8 @@ def test_summary_row_paired_delta_std():
     assert row["delta_f1_score_std"] == pytest.approx(0.025)
 
 
-def test_save_summary_csv(tmp_path):
+def test_save_summary_csv(tmp_path: Path) -> None:
+    """Verify save_summary_csv writes one row per summary record with its delta columns."""
     rows = [tables.summary_row("x", COMPARISON)]
     csv_rows = read_csv(tables.save_summary_csv(rows, tmp_path))
     assert len(csv_rows) == 1
@@ -74,7 +83,8 @@ def test_save_summary_csv(tmp_path):
     assert float(csv_rows[0]["delta_auc"]) == pytest.approx(0.0)
 
 
-def test_save_factor_contributions_csv_long_format(tmp_path):
+def test_save_factor_contributions_csv_long_format(tmp_path: Path) -> None:
+    """Verify factor contributions are written in long format, one row per dataset-factor pair."""
     contributions = {"A": {"delta_E": {"f1": 0.8, "auc": 0.9}, "arm": {"f1": 0.6, "auc": 0.7}}}
     full = {"A": {"f1": 0.95, "auc": 0.99}}
     rows = read_csv(tables.save_factor_contributions_csv(contributions, full, tmp_path))
@@ -83,7 +93,8 @@ def test_save_factor_contributions_csv_long_format(tmp_path):
     assert float(rows[1]["auc"]) == pytest.approx(0.7)
 
 
-def test_save_label_window_csv_with_mean_rows(tmp_path):
+def test_save_label_window_csv_with_mean_rows(tmp_path: Path) -> None:
+    """Verify the label-window CSV lists per-dataset rows then excluded-aware mean rows per window."""
     results = {
         "A": {1: record(0.5), 5: record(0.9)},
         "B": {1: record(0.7), 5: record(0.7)},
@@ -101,7 +112,8 @@ def test_save_label_window_csv_with_mean_rows(tmp_path):
     assert float(rows[5]["f1_score"]) == pytest.approx(0.9)
 
 
-def test_save_label_window_csv_std_columns(tmp_path):
+def test_save_label_window_csv_std_columns(tmp_path: Path) -> None:
+    """Verify per-seed std columns are carried through to both dataset and mean rows."""
     seeded = {
         **record(0.5),
         "f1_score_std": 0.02,
@@ -122,11 +134,13 @@ def test_save_label_window_csv_std_columns(tmp_path):
         assert float(rows[1][column]) == pytest.approx(value)  # mean row: mean of per-dataset spreads
 
 
-def hrecord(f: float, fpr: float = 0.01) -> dict:
+def hrecord(f: float, fpr: float = 0.01) -> dict[str, float | int]:
+    """Build a heuristic-baseline record with the given F1 and FPR plus unit confusion counts."""
     return {"f1_score": f, "precision": f, "recall": f, "fpr": fpr, "tp": 1, "fp": 1, "fn": 1, "tn": 1}
 
 
-def test_save_label_window_csv_has_heuristic_columns(tmp_path):
+def test_save_label_window_csv_has_heuristic_columns(tmp_path: Path) -> None:
+    """Verify the heuristic baseline adds only its four metric columns (no AUC, no std)."""
     results = {"A": {1: record(0.5), 5: record(0.9)}, "B": {1: record(0.7), 5: record(0.7)}}
     heuristic = {"A": {1: hrecord(0.2), 5: hrecord(0.3)}, "B": {1: hrecord(0.25), 5: hrecord(0.28)}}
     path = tables.save_label_window_csv(results, heuristic, tmp_path, exclude=("B",))
@@ -140,7 +154,8 @@ def test_save_label_window_csv_has_heuristic_columns(tmp_path):
     assert float(rows[-1]["heuristic_recall"]) == pytest.approx(0.3)
 
 
-def test_save_label_window_csv_heuristic_columns_always_present(tmp_path):
+def test_save_label_window_csv_heuristic_columns_always_present(tmp_path: Path) -> None:
+    """Verify the heuristic columns are always emitted, holding NaN when no data is supplied."""
     # The baseline is a fixed part of this table: columns exist even with no data,
     # holding NaN rather than being dropped.
     path = tables.save_label_window_csv({"A": {1: record(0.5)}}, {}, tmp_path)
@@ -149,7 +164,8 @@ def test_save_label_window_csv_heuristic_columns_always_present(tmp_path):
     assert math.isnan(float(rows[0]["heuristic_f1_score"]))
 
 
-def test_save_dedicated_prior_csv_std_columns(tmp_path):
+def test_save_dedicated_prior_csv_std_columns(tmp_path: Path) -> None:
+    """Verify the dedicated-prior CSV carries per-split f1 and best_f1 std columns."""
     results = {
         "A": {
             "priors": {1: 0.5},
@@ -163,7 +179,8 @@ def test_save_dedicated_prior_csv_std_columns(tmp_path):
     assert float(rows[1]["best_f1_std"]) == pytest.approx(0.02)
 
 
-def test_save_dedicated_prior_csv_per_split_rows(tmp_path):
+def test_save_dedicated_prior_csv_per_split_rows(tmp_path: Path) -> None:
+    """Verify the dedicated-prior CSV writes a train and eval row with per-bucket prior columns."""
     results = {
         "A": {
             "priors": {1: 0.5, 2: 0.25, 3: 0.1},
@@ -179,7 +196,7 @@ def test_save_dedicated_prior_csv_per_split_rows(tmp_path):
     assert float(rows[1]["best_f1"]) == pytest.approx(0.85)
 
 
-def test_save_comparison_csv_writes_extra_ablation_columns(tmp_path):
+def test_save_comparison_csv_writes_extra_ablation_columns(tmp_path: Path) -> None:
     """learned_weights persists its fitted weights; other ablations gain no columns."""
     weighted = {
         "A": {"our_model": record(0.9), "ablation": record(0.8) | {"w_delta_E": 0.5, "bias": -1.8}},

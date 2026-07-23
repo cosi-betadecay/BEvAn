@@ -107,8 +107,8 @@ def discover_datasets() -> list[DatasetPaths]:
     folders with no ``.sim`` at all (e.g. ``data/cosima/``) are ignored silently.
 
     Returns:
-        One :class:`DatasetPaths` per dataset: name, geo_file, sim_file, and
-            tra_file (str) plus prior_sims (list[str]).
+        One :class:`DatasetPaths` per dataset: its name, geometry, sim and tra
+        paths, plus the dedicated prior-sim paths.
     """
     datasets: list[DatasetPaths] = []
     for folder in sorted(p for p in DATA_DIR.iterdir() if p.is_dir()):
@@ -595,13 +595,13 @@ def bins_from_counts(n_min: int, d: int, rho_floor: float, min_bins: int = 2) ->
     ``O(n_min / rho_floor)`` — linear in the data, never blowing up the matrix.
 
     Args:
-        n_min (int): Finite-feature event count of the limiting class for this term.
-        d (int): Histogram dimensionality (1 or 2).
-        rho_floor (float): Target events per cell.
-        min_bins (int): Smallest bins-per-axis to return.
+        n_min: Finite-feature event count of the limiting class for this term.
+        d: Histogram dimensionality (1 or 2).
+        rho_floor: Target events per cell.
+        min_bins: Smallest bins-per-axis to return.
 
     Returns:
-        int: Bins-per-axis, at least ``min_bins``.
+        Bins-per-axis, at least ``min_bins``.
     """
     if n_min <= 0:
         return min_bins

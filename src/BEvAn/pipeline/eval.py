@@ -106,7 +106,7 @@ class Evaluator:
 
     def evaluate_bucket(
         self, data: dict[str, dict[int, dict[str, torch.Tensor]]], bucket: int, model: dict
-    ) -> dict | None:
+    ) -> dict[str, int] | None:
         """Confusion counts for one bucket, non-finite-feature events excluded.
 
         Args:

@@ -14,8 +14,6 @@ from utils.plots import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     import torch
 
     from pipeline.train import Trainer
@@ -126,26 +124,30 @@ def log_score_curves(pooled: tuple | None, split_name: str = "eval") -> None:
 
 
 def log_sky_backprojection(
-    panels: Sequence[tuple[str, torch.Tensor, int]],
+    image: torch.Tensor,
+    n_events: int,
     phi_range: tuple[float, float],
     theta_range: tuple[float, float],
     split_name: str = "model",
 ) -> None:
-    """Log the per-selection sky-image figure to W&B, the way the densities are logged.
+    """Log the sky-image figure to W&B, the way the densities are logged.
 
-    The tagging is model-level (independent of the eval split), so the default
-    namespace matches the density terms'. No-op when no run is active.
+    Model-level (independent of the eval split), so the default namespace
+    matches the density terms'. No-op when no run is active.
 
     Args:
-        panels: Per-panel ``(title, image, n_events)`` tuples (see
+        image: The accumulated ``(n_theta, n_phi)`` sky image (see
             :func:`utils.plots.plot_sky_backprojection`).
-        phi_range: ``(min, max)`` azimuthal extent of the images, in radians.
-        theta_range: ``(min, max)`` polar extent of the images, in radians.
+        n_events: Number of events stacked into the image.
+        phi_range: ``(min, max)`` azimuthal extent of the image, in radians.
+        theta_range: ``(min, max)`` polar extent of the image, in radians.
         split_name: Metric namespace prefix.
     """
     if wandb.run is None:
         return
-    log_figure(f"{split_name}/sky_backprojection", plot_sky_backprojection(panels, phi_range, theta_range))
+    log_figure(
+        f"{split_name}/sky_backprojection", plot_sky_backprojection(image, n_events, phi_range, theta_range)
+    )
 
 
 def log_density_terms(trainer: Trainer, split_name: str = "model") -> None:

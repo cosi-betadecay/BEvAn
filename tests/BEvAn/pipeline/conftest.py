@@ -9,6 +9,7 @@ def separable_data() -> dict[str, dict[int, dict[str, torch.Tensor]]]:
     nan = torch.full((n,), float("nan"))
 
     def bucket(delta_e: torch.Tensor, arm: torch.Tensor, anni: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Assemble one bucket's feature tensors into a feature-keyed dict."""
         return {"delta_E": delta_e, "arm": arm, "anni": anni}
 
     beta_de = torch.linspace(0.01, 1.0, n)

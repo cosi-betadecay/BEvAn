@@ -1,10 +1,6 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import harness
-
-if TYPE_CHECKING:
-    from pipeline.train import Trainer
 
 
 def run(
@@ -54,7 +50,7 @@ def run(
     apply_prior_counts(trainer, prior_counts)
     if plots_dir is not None:
         harness.save_model_plots(trainer, eval_data, plots_dir)
-        save_sky_figure(ds, trainer, plots_dir)
+        save_sky_figure(ds, plots_dir)
     return {
         "prior_counts": prior_counts,
         "priors": priors,
@@ -63,34 +59,22 @@ def run(
     }
 
 
-def save_sky_figure(ds: harness.DatasetPaths, trainer: Trainer, plots_dir: Path) -> None:
-    """Save (and W&B-log) the official pipeline's tagged-cone sky comparison.
+def save_sky_figure(ds: harness.DatasetPaths, plots_dir: Path) -> None:
+    """Save (and W&B-log) the all-events Compton-cone sky image.
 
-    Tags every scorable event with the deployed decision rule, backprojects the
-    β⁺-tagged and background-tagged cones in one ``.tra`` pass, and draws them
-    next to the all-events image cached at extraction — the same figure
+    Draws the all-events backprojection cached at extraction — the same figure
     ``analysis.py`` produces per run.
 
     Args:
         ds: Dataset paths with ``name``/``geo_file``/``tra_file`` keys.
-        trainer: The reference fitted at the dedicated-prior operating point.
         plots_dir: Directory for this dataset's dedicated_prior figures.
     """
-    from pipeline.eval import Evaluator
     from utils.local_results import save_sky_backprojection
     from utils.wandb_logging import log_sky_backprojection
 
-    data, keys, sky_all, n_all = harness.extract_keyed(ds)
-    tagged = Evaluator(trainer).classify_events(data, keys)
-
+    _, _, sky_all, n_all = harness.extract_keyed(ds)
     imager = harness.sky_imager(ds)
-    images, counts = imager.backproject_file_grouped(ds["tra_file"], tagged)
-    panels = [
-        ("All events", sky_all, n_all),
-        ("β⁺-tagged", images["bdecay"], counts["bdecay"]),
-        ("Background-tagged", images["bg"], counts["bg"]),
-    ]
-    save_sky_backprojection(panels, plots_dir, imager.phi_range, imager.theta_range)
+    save_sky_backprojection(sky_all, n_all, plots_dir, imager.phi_range, imager.theta_range)
     log_sky_backprojection(
-        panels, imager.phi_range, imager.theta_range, split_name=f"{ds['name']}/dedicated_prior"
+        sky_all, n_all, imager.phi_range, imager.theta_range, split_name=f"{ds['name']}/dedicated_prior"
     )

@@ -16,11 +16,11 @@ def calculate_tolerance(n_std: int = 5) -> float:
     Therefore, sigma = FWHM / 2.355.
 
     Args:
-        n_std (int): Number of resolution sigmas defining the 511 keV window
+        n_std: Number of resolution sigmas defining the 511 keV window
             (default ``5``, the deployed label).
 
     Returns:
-        float: The energy tolerance in keV (``n_std`` × σ; 5σ by default).
+        The energy tolerance in keV (``n_std`` × σ; 5σ by default).
     """
     fwhm = 2.25
     sigma = fwhm / 2.355
@@ -37,10 +37,10 @@ def anni_process_energies(event: MSimEvent) -> list[float]:
     computation in one place stops the two from drifting apart.
 
     Args:
-        event (MSimEvent): MEGAlib event object containing interactions and hits.
+        event: MEGAlib event object containing interactions and hits.
 
     Returns:
-        list[float]: One summed secondary energy (keV) per ANNI process.
+        One summed secondary energy (keV) per ANNI process.
     """
     energies: list[float] = []
     for i in range(event.GetNIAs()):
@@ -64,14 +64,14 @@ def ground_truth_bdecay(event: MSimEvent, n_std: int = 5) -> bool:
     """Whether any ANNI process's secondaries sum to within the 511 keV window.
 
     Args:
-        event (MSimEvent): MEGAlib event object containing interactions and hits.
-        n_std (int): Number of resolution sigmas defining the 511 keV photopeak
+        event: MEGAlib event object containing interactions and hits.
+        n_std: Number of resolution sigmas defining the 511 keV photopeak
             window. The deployed label uses ``5``; the ``label_window`` ablation
             sweeps it (cheaply, via :func:`bdecay_label_score`) to show the study's
             conclusions do not hinge on the cut.
 
     Returns:
-        bool: True if any ANNI process matches 511 keV within tolerance, else False.
+        True if any ANNI process matches 511 keV within tolerance, else False.
     """
     tolerance = calculate_tolerance(n_std)
     return any(abs(total_energy - 511.0) < tolerance for total_energy in anni_process_energies(event))
@@ -87,10 +87,10 @@ def bdecay_label_score(event: MSimEvent) -> float:
     extraction at that window would (the comparison is the same strict ``<``).
 
     Args:
-        event (MSimEvent): MEGAlib event object containing interactions and hits.
+        event: MEGAlib event object containing interactions and hits.
 
     Returns:
-        float: ``min(|sum - 511|)`` over ANNI processes, or ``inf`` if there are none.
+        ``min(|sum - 511|)`` over ANNI processes, or ``inf`` if there are none.
     """
     return min(
         (abs(total_energy - 511.0) for total_energy in anni_process_energies(event)), default=float("inf")

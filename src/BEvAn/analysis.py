@@ -41,11 +41,11 @@ def main(
     """Run the β⁺ annihilation detection pipeline on a given MEGAlib dataset.
 
     Args:
-        geo_file (str): Path to the MEGAlib geometry setup file.
-        sim_file (str): Path to the MEGAlib .sim file containing simulated events.
-        tra_file (str): Path to the MEGAlib .tra file containing Compton events.
-        use_wandb (bool): Whether to use Weights & Biases for logging.
-        prior_sims (list): Dedicated prior ``.sim`` files the per-bucket class
+        geo_file: Path to the MEGAlib geometry setup file.
+        sim_file: Path to the MEGAlib .sim file containing simulated events.
+        tra_file: Path to the MEGAlib .tra file containing Compton events.
+        use_wandb: Whether to use Weights & Biases for logging.
+        prior_sims: Dedicated prior ``.sim`` files the per-bucket class
             priors are counted from (see :mod:`pipeline.priors`); the training
             split is never used for the prior.
 
@@ -85,7 +85,7 @@ def main(
     reader_sim = open_sim_reader(load_geometry(geo_file), sim_file)
 
     datasets = Datasets(reader_sim, unit_vector)
-    data, event_keys = datasets.compute_event_features_keyed()
+    data = datasets.compute_event_features()
     train, eval_data = datasets.split_dataset(data)
 
     # Fixed reference config (no hyperparameter search or calibration): fit on
@@ -124,19 +124,10 @@ def main(
         save_score_curves(pooled, out_dir, split_name)
         log_score_curves(pooled, split_name)
 
-    # Sky-image comparison at the deployed operating point: tag every scorable
-    # event, then backproject the tagged cones next to the all-events image. If
-    # the classifier works, the β⁺ panel concentrates at the source and the
-    # background panel shows no hotspot there.
-    tagged = evaluator.classify_events(data, event_keys)
-    sky_images, sky_counts = imager.backproject_file_grouped(tra_file, tagged)
-    sky_panels = [
-        ("All events", imager.image_2d(), n_events),
-        ("β⁺-tagged", sky_images["bdecay"], sky_counts["bdecay"]),
-        ("Background-tagged", sky_images["bg"], sky_counts["bg"]),
-    ]
-    save_sky_backprojection(sky_panels, out_dir, imager.phi_range, imager.theta_range)
-    log_sky_backprojection(sky_panels, imager.phi_range, imager.theta_range)
+    # All Compton cones stacked into one far-field image. Its peak is the
+    # reconstructed source direction the ARM feature is measured against.
+    save_sky_backprojection(imager.image_2d(), n_events, out_dir, imager.phi_range, imager.theta_range)
+    log_sky_backprojection(imager.image_2d(), n_events, imager.phi_range, imager.theta_range)
 
     # One metrics.json per dataset, both splits, with the chosen config.
     write_metrics_json(
@@ -160,7 +151,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments: geo/sim/tra paths, ``--prior-sim`` files, ``--wandb``.
 
     Returns:
-        argparse.Namespace: The parsed arguments.
+        The parsed arguments.
     """
     parser = argparse.ArgumentParser(description="Run β⁺ annihilation detection on one .sim/.tra dataset.")
     parser.add_argument(

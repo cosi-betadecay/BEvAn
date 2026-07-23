@@ -120,7 +120,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments: the geo/sim/tra paths, output path, and run options.
 
     Returns:
-        argparse.Namespace: The parsed arguments.
+        The parsed arguments.
     """
     parser = argparse.ArgumentParser(
         description="Train the β⁺ annihilation model on a full .sim and save it for later inference."

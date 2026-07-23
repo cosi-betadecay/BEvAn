@@ -66,7 +66,7 @@ def save(fig: Figure, path: Path) -> Path:
         path: Destination ``.png`` path.
 
     Returns:
-        Path: The written path.
+        The written path.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=200, bbox_inches="tight")
@@ -96,7 +96,7 @@ def plot_metric_comparison(
             balloon); they stay in the per-dataset CSV but are not pooled here.
 
     Returns:
-        Path: The written ``<ablation_name>.png``.
+        The written ``<ablation_name>.png``.
     """
     records = [v for k, v in per_dataset.items() if k not in exclude]
     x = np.arange(len(COMPARISON_METRICS))
@@ -162,7 +162,7 @@ def plot_label_window(
             balloon); they stay in the per-dataset CSV but are not pooled here.
 
     Returns:
-        Path: The written ``label_window.png``.
+        The written ``label_window.png``.
     """
     included = {k: v for k, v in results_by_dataset.items() if k not in exclude}
     n_std_values = sorted({n for per_n in included.values() for n in per_n})
@@ -236,7 +236,7 @@ def plot_factor_contributions(
             balloon); they stay in the per-dataset CSV but are not pooled here.
 
     Returns:
-        Path: The written ``factor_contributions.png``.
+        The written ``factor_contributions.png``.
     """
     contributions_by_dataset = {k: v for k, v in contributions_by_dataset.items() if k not in exclude}
     if full_model_by_dataset:

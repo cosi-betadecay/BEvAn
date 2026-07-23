@@ -6,7 +6,8 @@ import torch
 from modeling.metrics import best_f1_threshold, metrics, roc_auc
 
 
-def test_metrics_hand_values():
+def test_metrics_hand_values() -> None:
+    """Compute precision, recall, FPR, and F1 from hand-checked counts."""
     scores = metrics({"tp": 8, "fp": 2, "fn": 4, "tn": 6})
     assert scores["precision"] == pytest.approx(0.8)
     assert scores["recall"] == pytest.approx(8 / 12)
@@ -14,12 +15,14 @@ def test_metrics_hand_values():
     assert scores["f1_score"] == pytest.approx(2 * 0.8 * (8 / 12) / (0.8 + 8 / 12))
 
 
-def test_metrics_zero_denominators():
+def test_metrics_zero_denominators() -> None:
+    """Return zero metrics when the denominators are zero."""
     scores = metrics({"tp": 0, "fp": 0, "fn": 0, "tn": 5})
     assert scores == {"precision": 0.0, "recall": 0.0, "fpr": 0.0, "f1_score": 0.0}
 
 
-def test_roc_auc_perfect_random_and_ties():
+def test_roc_auc_perfect_random_and_ties() -> None:
+    """Compute ROC AUC for perfect, inverted, tied, and degenerate inputs."""
     labels = torch.tensor([False, False, True, True])
     assert roc_auc(torch.tensor([0.0, 1.0, 2.0, 3.0]), labels) == pytest.approx(1.0)
     assert roc_auc(torch.tensor([3.0, 2.0, 1.0, 0.0]), labels) == pytest.approx(0.0)
@@ -27,7 +30,8 @@ def test_roc_auc_perfect_random_and_ties():
     assert math.isnan(roc_auc(torch.tensor([1.0]), torch.tensor([True])))
 
 
-def test_best_f1_threshold_hand_case():
+def test_best_f1_threshold_hand_case() -> None:
+    """Find the score threshold maximizing F1 on a hand-checked case."""
     scores = torch.tensor([0.9, 0.8, 0.7, 0.6])
     labels = torch.tensor([True, True, False, True])
     best, threshold = best_f1_threshold(scores, labels)
@@ -44,7 +48,8 @@ def test_best_f1_threshold_hand_case():
     assert predicted_f1 == pytest.approx(best)
 
 
-def test_best_f1_threshold_no_positives():
+def test_best_f1_threshold_no_positives() -> None:
+    """Return NaN best-F1 and threshold when there are no positive labels."""
     best, threshold = best_f1_threshold(torch.tensor([1.0, 2.0]), torch.tensor([False, False]))
     assert math.isnan(best)
     assert math.isnan(threshold)

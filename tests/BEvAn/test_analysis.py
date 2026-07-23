@@ -1,11 +1,13 @@
 import json
 import sys
+from pathlib import Path
 
 import analysis
 import pytest
 
 
-def test_main_validates_file_extensions(synthetic_dataset):
+def test_main_validates_file_extensions(synthetic_dataset: dict) -> None:
+    """Reject sim/tra arguments that have the wrong file extension."""
     ds = synthetic_dataset
     with pytest.raises(ValueError, match="sim-file"):
         analysis.main(ds["geo"], ds["tra"], ds["tra"], False, [ds["prior"]])
@@ -13,7 +15,8 @@ def test_main_validates_file_extensions(synthetic_dataset):
         analysis.main(ds["geo"], ds["sim"], ds["sim"], False, [ds["prior"]])
 
 
-def test_main_validates_file_existence(tmp_path, synthetic_dataset):
+def test_main_validates_file_existence(tmp_path: Path, synthetic_dataset: dict) -> None:
+    """Reject missing sim/tra files and an empty prior list."""
     ds = synthetic_dataset
     with pytest.raises(FileNotFoundError, match="Simulation"):
         analysis.main(ds["geo"], str(tmp_path / "missing.sim"), ds["tra"], False, [ds["prior"]])
@@ -23,7 +26,10 @@ def test_main_validates_file_existence(tmp_path, synthetic_dataset):
         analysis.main(ds["geo"], ds["sim"], ds["tra"], False, [])
 
 
-def test_main_end_to_end_writes_results(monkeypatch, tmp_path, synthetic_dataset):
+def test_main_end_to_end_writes_results(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, synthetic_dataset: dict
+) -> None:
+    """Run analysis end to end and write metrics plus all result figures."""
     ds = synthetic_dataset
     monkeypatch.setattr(analysis, "RESULTS_DIR", tmp_path / "results")
     analysis.main(ds["geo"], ds["sim"], ds["tra"], False, [ds["prior"]])
@@ -51,7 +57,10 @@ def test_main_end_to_end_writes_results(monkeypatch, tmp_path, synthetic_dataset
         assert (out / name).is_file(), name
 
 
-def test_parse_args_requires_sim_tra_and_prior(monkeypatch, capsys):
+def test_parse_args_requires_sim_tra_and_prior(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Require sim/tra/prior args and parse a valid argv into the namespace."""
     monkeypatch.setattr(sys, "argv", ["analysis.py"])
     with pytest.raises(SystemExit):
         analysis.parse_args()

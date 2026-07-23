@@ -3,10 +3,11 @@ import ROOT as M
 
 from modeling.metrics import metrics
 from physics.ground_truths import bdecay_label_score, calculate_tolerance
+from utils.megalib_types import MSimEvent
 from utils.reader_extraction import load_geometry, open_sim_reader
 
 
-def event_scores(event) -> tuple[float, float] | None:
+def event_scores(event: MSimEvent) -> tuple[float, float] | None:
     """One event's window-free label and prediction distances (both keV).
 
     Neither depends on ``n_std``: thresholding each against
@@ -32,7 +33,7 @@ def event_scores(event) -> tuple[float, float] | None:
     return label_score, abs(total_energy - 511)
 
 
-def event_counts(event, n_std: int) -> tuple[bool, bool] | None:
+def event_counts(event: MSimEvent, n_std: int) -> tuple[bool, bool] | None:
     """One event's (label, prediction) for the energy-only 511 keV photopeak cut.
 
     Args:

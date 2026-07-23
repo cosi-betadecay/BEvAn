@@ -284,7 +284,7 @@ def parse_args() -> argparse.Namespace:
     """Parse the driver CLI: logging and the dataset/ablation filters.
 
     Returns:
-        argparse.Namespace: The parsed arguments.
+        The parsed arguments.
     """
     parser = argparse.ArgumentParser(description="Run the β⁺ ablation study over every dataset in data/.")
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")

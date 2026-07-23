@@ -18,12 +18,14 @@ def protocol_methods(protocol: type) -> list[str]:
         (megalib_types.MDGeometryQuest, fake_megalib.MDGeometryQuest),
     ],
 )
-def test_fake_classes_cover_the_protocol_surface(protocol, implementation):
+def test_fake_classes_cover_the_protocol_surface(protocol: type, implementation: type) -> None:
+    """Verify each fake class implements every method its protocol declares."""
     for name in protocol_methods(protocol):
         assert callable(getattr(implementation, name, None)), f"{implementation.__name__} lacks {name}"
 
 
-def test_protocols_declare_the_accessors_the_pipeline_calls():
+def test_protocols_declare_the_accessors_the_pipeline_calls() -> None:
+    """Pin the exact accessor surface each MEGAlib protocol declares."""
     assert set(protocol_methods(megalib_types.MSimEvent)) == {"GetNIAs", "GetIAAt", "GetNHTs", "GetHTAt"}
     assert set(protocol_methods(megalib_types.MFileEventsSim)) == {"GetNextEvent", "Close"}
     assert set(protocol_methods(megalib_types.MPhysicalEvent)) == {"GetType", "GetId"}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +11,6 @@ import torch
 from tqdm import tqdm
 
 from utils.megalib_types import MPhysicalEvent
-from utils.reader_extraction import ChunkScopedIds
 
 ############################################
 # MEGAlib + wrapper setup (idempotent)
@@ -239,8 +238,8 @@ class FarFieldImager:
             event: A reconstructed physical event from the ``.tra`` reader.
 
         Returns:
-            bool: True on success, False if the event was skipped (non-Compton,
-            or Backproject reported failure).
+            True on success, False if the event was skipped (non-Compton, or
+            Backproject reported failure).
         """
         projected = self.project_event(event)
         if projected is None:
@@ -263,7 +262,7 @@ class FarFieldImager:
             max_events: Optional cap on the number of events to accumulate.
 
         Returns:
-            int: The number of events successfully accumulated.
+            The number of events successfully accumulated.
         """
         count = 0
         for evt in self._iter_tra(tra_file, desc="Backprojecting events", total=max_events):
@@ -272,57 +271,6 @@ class FarFieldImager:
                 if max_events is not None and count >= max_events:
                     break
         return count
-
-    def backproject_file_grouped(
-        self,
-        tra_file: str | Path,
-        groups: Mapping[str, set[tuple[int, int]]],
-    ) -> tuple[dict[str, torch.Tensor], dict[str, int]]:
-        """Accumulate a separate sky image per event-ID group, in one pass over ``tra_file``.
-
-        Events are matched by their chunk-scoped ``(chunk, id)`` key (see
-        :class:`~utils.reader_extraction.ChunkScopedIds`) against each group's key
-        set — e.g. the classifier-tagged sets from
-        :meth:`~pipeline.eval.Evaluator.classify_events` — and each matched event's
-        cone is added to that group's image. Unmatched events are read past (their
-        IDs still advance the chunk tracking). The instance's main accumulated
-        image is left untouched.
-
-        Args:
-            tra_file: Path to the MEGAlib ``.tra`` file the groups' keys refer to.
-            groups: Group name -> set of chunk-scoped event keys.
-
-        Returns:
-            ``(images, counts)`` — per-group ``(n_theta, n_phi)`` sky images and
-            per-group counts of successfully accumulated events.
-
-        Raises:
-            RuntimeError: If the file cannot be opened, or no event matched any
-                nonempty group (a broken ``.sim``/``.tra`` ID join).
-        """
-        flat = {name: torch.zeros(self.n_pixels, dtype=torch.float64) for name in groups}
-        counts = dict.fromkeys(groups, 0)
-        ids = ChunkScopedIds()
-
-        for evt in self._iter_tra(tra_file, desc="Backprojecting tagged events"):
-            key = ids.key(int(evt.GetId()))
-            matched = [name for name, keys in groups.items() if key in keys]
-            if not matched:
-                continue
-            projected = self.project_event(evt)
-            if projected is None:
-                continue
-            bins, values = projected
-            for name in matched:
-                flat[name].index_put_((bins,), values, accumulate=True)
-                counts[name] += 1
-
-        if any(groups.values()) and sum(counts.values()) == 0:
-            raise RuntimeError(
-                f"No event in {tra_file} matched any group: the .sim/.tra chunk-scoped ID join is broken."
-            )
-        images = {name: img.reshape(self.n_theta, self.n_phi) for name, img in flat.items()}
-        return images, counts
 
     def peak_direction(self) -> tuple[float, float]:
         """``(theta, phi)`` of the brightest pixel, in radians."""

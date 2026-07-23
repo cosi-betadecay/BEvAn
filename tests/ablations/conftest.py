@@ -12,7 +12,7 @@ import harness
 
 
 @pytest.fixture()
-def tiny_ds(synthetic_dataset) -> harness.DatasetPaths:
+def tiny_ds(synthetic_dataset: dict[str, str | int]) -> harness.DatasetPaths:
     """The synthetic dataset shaped as a discovered ablation dataset entry."""
     ds = synthetic_dataset
     return {
@@ -25,7 +25,7 @@ def tiny_ds(synthetic_dataset) -> harness.DatasetPaths:
 
 
 @pytest.fixture()
-def tiny_cache(tmp_path, monkeypatch) -> Path:
+def tiny_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect the harness extraction cache into tmp_path.
 
     The cache-dir default is bound to ablations/cache at import time, so the
@@ -38,6 +38,6 @@ def tiny_cache(tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture()
-def tiny_split(tiny_ds, tiny_cache):
+def tiny_split(tiny_ds: harness.DatasetPaths, tiny_cache: Path) -> tuple[dict, dict]:
     """The synthetic dataset's cached (train, eval) reference-ordering split."""
     return harness.extract_split(tiny_ds)
